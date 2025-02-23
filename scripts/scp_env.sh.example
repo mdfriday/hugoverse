@@ -1,0 +1,30 @@
+#!/bin/bash
+
+# Enable integration tests
+export INTEGRATION_TEST=true
+
+# SCP connection details
+# Replace these values with your actual SCP server details
+export TEST_SCP_USERNAME="username"        # 你的SSH用户名
+export TEST_SCP_PASSWORD="password"        # 你的SSH密码
+export TEST_SCP_HOSTNAME="example.com"     # 你的服务器地址
+
+# Print current settings
+echo "SCP Test Environment Variables:"
+echo "=============================="
+echo "INTEGRATION_TEST: ${INTEGRATION_TEST}"
+echo "TEST_SCP_USERNAME: ${TEST_SCP_USERNAME}"
+echo "TEST_SCP_HOSTNAME: ${TEST_SCP_HOSTNAME}"
+echo "TEST_SCP_PASSWORD: ********"
+
+# Usage:
+# 1. Copy this file to scp_env.sh:
+#    cp scp_env.sh.example scp_env.sh
+#
+# 2. Edit scp_env.sh with your actual values
+#
+# 3. Source the environment variables:
+#    source scp_env.sh
+#
+# 4. Run the tests:
+#    go test -v ./internal/domain/host/entity/ 

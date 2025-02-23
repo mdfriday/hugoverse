@@ -34,3 +34,6 @@ hugov
 /public/
 tmp
 release-notes.md
+
+# SCP environment variables
+scripts/scp_env.sh
