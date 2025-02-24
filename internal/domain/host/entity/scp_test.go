@@ -73,18 +73,18 @@ func TestSCPHost_Deploy(t *testing.T) {
 	// Check if files exist and have correct content
 	for path := range testFiles {
 		remotePath := filepath.Join("/tmp/scp-test", path)
-		
+
 		// Create new session for each file verification
 		session, err := host.sshClient.NewSession()
 		if err != nil {
 			t.Fatalf("Failed to create session for verification: %v", err)
 		}
-		
+
 		cmd := "test -f " + remotePath
 		if err := session.Run(cmd); err != nil {
 			t.Errorf("File %s not found on remote server: %v", remotePath, err)
 		}
-		
+
 		session.Close()
 	}
 }
@@ -198,7 +198,7 @@ func TestSCPHost_UploadDirectory(t *testing.T) {
 	// Verify uploaded files
 	for path := range testFiles {
 		remotePath := filepath.Join("/tmp/scp-test-upload", path)
-		
+
 		// Create new session for each file verification
 		session, err := host.sshClient.NewSession()
 		if err != nil {
@@ -208,7 +208,7 @@ func TestSCPHost_UploadDirectory(t *testing.T) {
 		// Use cat to verify file content
 		output, err := session.Output(fmt.Sprintf("cat %s", remotePath))
 		session.Close()
-		
+
 		if err != nil {
 			t.Errorf("Failed to read file %s: %v", remotePath, err)
 			continue
@@ -271,7 +271,6 @@ func TestSCPHost_DeployWithTar(t *testing.T) {
 		22,
 		"/tmp/scp-test-tar",
 	)
-	host.SetLogger(loggers.NewDefault())
 
 	// Test deployment with tar
 	if err := host.DeployWithTar(tempDir); err != nil {
@@ -287,7 +286,7 @@ func TestSCPHost_DeployWithTar(t *testing.T) {
 	// Check if files exist and have correct content
 	for path, expectedContent := range testFiles {
 		remotePath := filepath.Join("/tmp/scp-test-tar", path)
-		
+
 		// Create new session for each file verification
 		session, err := host.sshClient.NewSession()
 		if err != nil {
@@ -302,7 +301,82 @@ func TestSCPHost_DeployWithTar(t *testing.T) {
 		} else if string(output) != expectedContent {
 			t.Errorf("File %s content mismatch. Expected: %s, Got: %s", remotePath, expectedContent, string(output))
 		}
-		
+
 		session.Close()
 	}
-} 
+}
+
+func TestSCPFields_RequiredFields(t *testing.T) {
+	host := NewSCPHost("testuser", "testpass", "localhost", 22, "/tmp")
+	fields := host.newSCPFields("test_operation")
+
+	// Check required fields
+	requiredFields := map[string]bool{
+		"timestamp": false,
+		"level":     false,
+		"user_id":   false,
+		"sessionID": false,
+		"host":      false,
+		"operation": false,
+	}
+
+	for _, field := range fields.Fields() {
+		requiredFields[field.Name] = true
+	}
+
+	for fieldName, found := range requiredFields {
+		if !found {
+			t.Errorf("Required field %s not found in SCPFields", fieldName)
+		}
+	}
+}
+
+func TestSCPHost_SensitiveDataMasking(t *testing.T) {
+	tests := []struct {
+		username string
+		want     string
+	}{
+		{"admin", "ad***"},
+		{"a", "***"},
+		{"root", "ro***"},
+		{"", "***"},
+	}
+
+	host := NewSCPHost("testuser", "testpass", "localhost", 22, "/tmp")
+
+	for _, tt := range tests {
+		got := host.maskUsername(tt.username)
+		if got != tt.want {
+			t.Errorf("maskUsername(%q) = %q, want %q", tt.username, got, tt.want)
+		}
+	}
+}
+
+func TestSCPHost_SafeLogPath(t *testing.T) {
+	// Save original HOME env
+	originalHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", originalHome)
+
+	// Set test HOME
+	testHome := "/home/testuser"
+	os.Setenv("HOME", testHome)
+
+	host := NewSCPHost("testuser", "testpass", "localhost", 22, "/tmp")
+
+	tests := []struct {
+		path string
+		want string
+	}{
+		{"/home/testuser/secret/file.txt", "~/secret/file.txt"},
+		{"/var/log/file.txt", "/var/log/file.txt"},
+		{"/home/testuser", "~"},
+		{"/home/otheruser/file.txt", "/home/otheruser/file.txt"},
+	}
+
+	for _, tt := range tests {
+		got := host.safeLogPath(tt.path)
+		if got != tt.want {
+			t.Errorf("safeLogPath(%q) = %q, want %q", tt.path, got, tt.want)
+		}
+	}
+}

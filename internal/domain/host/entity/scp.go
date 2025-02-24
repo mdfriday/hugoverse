@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/mdfriday/hugoverse/pkg/loggers"
@@ -18,6 +19,11 @@ import (
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
+)
+
+const (
+	// reservedFieldNamePrefix is used to identify internal fields that should not be logged
+	reservedFieldNamePrefix = "__h_field_"
 )
 
 // generateSessionID generates a unique session ID
@@ -95,9 +101,12 @@ func (f *SCPFields) Fields() logg.Fields {
 func (h *SCPHost) newSCPFields(operation string) *SCPFields {
 	return &SCPFields{
 		fields: logg.Fields{
+			{Name: "timestamp", Value: time.Now().UTC()},
+			{Name: "level", Value: "info"}, // default level, can be overridden
 			{Name: "sessionID", Value: h.sessionID},
 			{Name: "host", Value: h.Hostname},
 			{Name: "operation", Value: operation},
+			{Name: "user_id", Value: h.Username}, // using SSH username as user_id
 		},
 	}
 }
@@ -112,15 +121,56 @@ func (f *SCPFields) addFields(fields ...logg.Field) {
 	f.fields = append(f.fields, fields...)
 }
 
+// setupLogger configures the logger to output to .mdfriday directory
+func setupLogger() (loggers.Logger, error) {
+	// Get project root directory (assuming we're in internal/domain/host/entity)
+	projectRoot, err := filepath.Abs("../../../../")
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get project root directory")
+	}
+
+	// Create .mdfriday directory in project root if it doesn't exist
+	logDir := filepath.Join(projectRoot, ".mdfriday")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		return nil, errors.Wrap(err, "failed to create log directory")
+	}
+
+	// Create log file with timestamp
+	logFile := filepath.Join(logDir, fmt.Sprintf("scp_%s.log", time.Now().Format("20060102_150405")))
+	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create log file")
+	}
+
+	// Create logger options
+	opts := loggers.Options{
+		Level:         logg.LevelDebug,
+		Stdout:        f, // 只输出到文件
+		Stderr:        f, // 错误也输出到文件
+		StoreErrors:   true,
+		DistinctLevel: logg.LevelWarn, // Drop duplicate warnings and errors
+	}
+
+	fmt.Printf("Log file %p created at: %s\n", f, logFile)
+	return loggers.New(opts), nil
+}
+
 // NewSCPHost creates a new SCPHost instance with password authentication
 func NewSCPHost(username, password, hostname string, port int, remotePath string) *SCPHost {
+	logger, err := setupLogger()
+	if err != nil {
+		// If we can't set up the file logger, fall back to default logger
+		logger = loggers.NewDefault()
+		logger.Error().Logf("Failed to setup file logger: %v", err)
+	}
+
 	return &SCPHost{
 		Username:    username,
 		Auth:        PasswordAuth{Password: password},
 		Hostname:    hostname,
 		Port:        port,
 		RemotePath:  remotePath,
-		logger:      loggers.NewDefault(),
+		logger:      logger,
 		sessionID:   generateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 	}
@@ -128,13 +178,20 @@ func NewSCPHost(username, password, hostname string, port int, remotePath string
 
 // NewSCPHostWithKey creates a new SCPHost instance with key authentication
 func NewSCPHostWithKey(username, privateKeyPath, hostname string, port int, remotePath string, passphrase string) *SCPHost {
+	logger, err := setupLogger()
+	if err != nil {
+		// If we can't set up the file logger, fall back to default logger
+		logger = loggers.NewDefault()
+		logger.Error().Logf("Failed to setup file logger: %v", err)
+	}
+
 	return &SCPHost{
 		Username:    username,
 		Auth:        KeyAuth{PrivateKeyPath: privateKeyPath, Passphrase: passphrase},
 		Hostname:    hostname,
 		Port:        port,
 		RemotePath:  remotePath,
-		logger:      loggers.NewDefault(),
+		logger:      logger,
 		sessionID:   generateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 	}
@@ -146,10 +203,15 @@ func (h *SCPHost) Connect() error {
 	defer loggers.TimeTrackf(connLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("connect")
+	// Mask sensitive information in logs
+	authType := "key"
+	if _, ok := h.Auth.(PasswordAuth); ok {
+		authType = "password"
+	}
 	fields.addFields(
 		logg.Field{Name: "port", Value: h.Port},
-		logg.Field{Name: "user", Value: h.Username},
-		logg.Field{Name: "authType", Value: fmt.Sprintf("%T", h.Auth)},
+		logg.Field{Name: "user", Value: h.maskUsername(h.Username)},
+		logg.Field{Name: "authType", Value: authType},
 	)
 
 	connLog.WithFields(fields).Logf("Establishing SSH connection")
@@ -179,6 +241,14 @@ func (h *SCPHost) Connect() error {
 	connLog.WithFields(fields).Logf("Successfully connected to remote host")
 	h.sshClient = client
 	return nil
+}
+
+// maskUsername masks the username for privacy
+func (h *SCPHost) maskUsername(username string) string {
+	if len(username) <= 2 {
+		return "***"
+	}
+	return username[:2] + "***"
 }
 
 // getHostKeyCallback returns a callback for host key verification
@@ -315,6 +385,23 @@ func (h *SCPHost) UploadDirectory(localPath string) error {
 	})
 }
 
+// safeLogPath returns a path safe for logging by removing potential sensitive information
+func (h *SCPHost) safeLogPath(path string) string {
+	// Remove home directory path if present
+	home := os.Getenv("HOME")
+	if home != "" && strings.HasPrefix(path, home) {
+		// Replace home directory with ~
+		path = "~" + strings.TrimPrefix(path, home)
+		// Clean the path to remove any double slashes
+		path = filepath.Clean(path)
+		// If the path was exactly $HOME, restore the ~
+		if path == "." {
+			path = "~"
+		}
+	}
+	return path
+}
+
 // uploadFileWithPath uploads a single file to the specified remote path
 func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 	if h.sshClient == nil {
@@ -326,8 +413,8 @@ func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 
 	fields := h.newSCPFields("file_upload")
 	fields.addFields(
-		logg.Field{Name: "localPath", Value: localPath},
-		logg.Field{Name: "remotePath", Value: remotePath},
+		logg.Field{Name: "localPath", Value: h.safeLogPath(localPath)},
+		logg.Field{Name: "remotePath", Value: h.safeLogPath(remotePath)},
 	)
 	uploadLog.WithFields(fields).Logf("Starting file upload")
 
