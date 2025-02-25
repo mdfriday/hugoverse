@@ -87,38 +87,13 @@ type SCPHost struct {
 	HostKeyFile string // Path to known_hosts file
 }
 
-// SCPFields implements the logg.Fielder interface for structured logging
-type SCPFields struct {
-	fields logg.Fields
-}
-
-// Fields implements the logg.Fielder interface
-func (f *SCPFields) Fields() logg.Fields {
-	return f.fields
-}
-
-// newSCPFields creates a new SCPFields instance with common fields
-func (h *SCPHost) newSCPFields(operation string) *SCPFields {
-	return &SCPFields{
-		fields: logg.Fields{
-			{Name: "timestamp", Value: time.Now().UTC()},
-			{Name: "level", Value: "info"}, // default level, can be overridden
-			{Name: "sessionID", Value: h.sessionID},
-			{Name: "host", Value: h.Hostname},
-			{Name: "operation", Value: operation},
-			{Name: "user_id", Value: h.Username}, // using SSH username as user_id
-		},
-	}
-}
-
-// addField adds a new field to the SCPFields
-func (f *SCPFields) addField(name string, value interface{}) {
-	f.fields = append(f.fields, logg.Field{Name: name, Value: value})
-}
-
-// addFields adds multiple fields to the SCPFields
-func (f *SCPFields) addFields(fields ...logg.Field) {
-	f.fields = append(f.fields, fields...)
+// newSCPFields creates a new LogFields instance with common fields
+func (h *SCPHost) newSCPFields(operation string) *loggers.LogFields {
+	return loggers.NewLogFieldsWithCommon(operation, h.sessionID).
+		AddFields(
+			logg.Field{Name: "host", Value: h.Hostname},
+			logg.Field{Name: "user_id", Value: h.Username},
+		)
 }
 
 // setupLogger configures the logger to output to .mdfriday directory
@@ -208,7 +183,7 @@ func (h *SCPHost) Connect() error {
 	if _, ok := h.Auth.(PasswordAuth); ok {
 		authType = "password"
 	}
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "port", Value: h.Port},
 		logg.Field{Name: "user", Value: h.maskUsername(h.Username)},
 		logg.Field{Name: "authType", Value: authType},
@@ -254,7 +229,7 @@ func (h *SCPHost) maskUsername(username string) string {
 // getHostKeyCallback returns a callback for host key verification
 func (h *SCPHost) getHostKeyCallback() (ssh.HostKeyCallback, error) {
 	fields := h.newSCPFields("host_key_verification")
-	fields.addField("hostKeyFile", h.HostKeyFile)
+	fields.AddField("hostKeyFile", h.HostKeyFile)
 
 	if h.HostKeyFile == "" {
 		h.logger.Warn().WithFields(fields).Logf("No host key file specified, using insecure host key verification")
@@ -298,7 +273,7 @@ func (h *SCPHost) CreateRemoteDirectory(path string) error {
 	defer loggers.TimeTrackf(dirLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("create_directory")
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "path", Value: path},
 	)
 	dirLog.WithFields(fields).Logf("Creating remote directory")
@@ -311,7 +286,7 @@ func (h *SCPHost) CreateRemoteDirectory(path string) error {
 	defer session.Close()
 
 	cmd := fmt.Sprintf("mkdir -p %s", path)
-	fields.addField("command", cmd)
+	fields.AddField("command", cmd)
 	dirLog.WithFields(fields).Logf("Executing mkdir command")
 
 	if err := session.Run(cmd); err != nil {
@@ -333,7 +308,7 @@ func (h *SCPHost) UploadDirectory(localPath string) error {
 	defer loggers.TimeTrackf(uploadLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("upload_directory")
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "localPath", Value: localPath},
 		logg.Field{Name: "remotePath", Value: h.RemotePath},
 	)
@@ -368,7 +343,7 @@ func (h *SCPHost) UploadDirectory(localPath string) error {
 		remotePath := filepath.Join(h.RemotePath, relPath)
 
 		fileFields := h.newSCPFields("process_file")
-		fileFields.addFields(
+		fileFields.AddFields(
 			logg.Field{Name: "path", Value: path},
 			logg.Field{Name: "relPath", Value: relPath},
 			logg.Field{Name: "size", Value: info.Size()},
@@ -412,7 +387,7 @@ func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 	defer loggers.TimeTrackf(uploadLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("file_upload")
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "localPath", Value: h.safeLogPath(localPath)},
 		logg.Field{Name: "remotePath", Value: h.safeLogPath(remotePath)},
 	)
@@ -438,7 +413,7 @@ func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 		return errors.Wrapf(err, "failed to get file info: %s", localPath)
 	}
 
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "fileSize", Value: fileInfo.Size()},
 		logg.Field{Name: "fileMode", Value: fileInfo.Mode().String()},
 	)
@@ -470,7 +445,7 @@ func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 		return errors.Wrapf(err, "failed to copy file (wrote %d bytes)", written)
 	}
 
-	fields.addField("bytesWritten", written)
+	fields.AddField("bytesWritten", written)
 	uploadLog.WithFields(fields).Logf("File content copied")
 
 	// Send transfer end signal
@@ -498,7 +473,7 @@ func (h *SCPHost) Deploy(localPath string) error {
 	defer loggers.TimeTrackf(deployLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("deploy")
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "localPath", Value: localPath},
 		logg.Field{Name: "remotePath", Value: h.RemotePath},
 	)
@@ -516,7 +491,7 @@ func (h *SCPHost) Deploy(localPath string) error {
 		return errors.Wrapf(err, "failed to get file info for %s", localPath)
 	}
 
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "isDirectory", Value: fileInfo.IsDir()},
 		logg.Field{Name: "fileSize", Value: fileInfo.Size()},
 	)
@@ -545,7 +520,7 @@ func (h *SCPHost) createTarball(sourceDir string) (string, error) {
 	defer loggers.TimeTrackf(tarLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("create_tarball")
-	fields.addField("sourceDir", sourceDir)
+	fields.AddField("sourceDir", sourceDir)
 
 	tmpFile, err := os.CreateTemp("", "scp-*.tar.gz")
 	if err != nil {
@@ -579,7 +554,7 @@ func (h *SCPHost) createTarball(sourceDir string) (string, error) {
 		}
 
 		fileFields := h.newSCPFields("process_file_for_tar")
-		fileFields.addFields(
+		fileFields.AddFields(
 			logg.Field{Name: "path", Value: relPath},
 			logg.Field{Name: "size", Value: info.Size()},
 			logg.Field{Name: "mode", Value: info.Mode().String()},
@@ -612,7 +587,7 @@ func (h *SCPHost) createTarball(sourceDir string) (string, error) {
 				return errors.Wrapf(err, "failed to write file content for %s", path)
 			}
 
-			fileFields.addField("bytesWritten", written)
+			fileFields.AddField("bytesWritten", written)
 			tarLog.WithFields(fileFields).Logf("File added to tarball")
 		}
 
@@ -624,7 +599,7 @@ func (h *SCPHost) createTarball(sourceDir string) (string, error) {
 		return "", errors.Wrap(err, "failed to create tarball")
 	}
 
-	fields.addField("tarballPath", tmpFile.Name())
+	fields.AddField("tarballPath", tmpFile.Name())
 	tarLog.WithFields(fields).Logf("Tarball created successfully")
 	return tmpFile.Name(), nil
 }
@@ -635,7 +610,7 @@ func (h *SCPHost) extractTarball(remoteTarPath string) error {
 	defer loggers.TimeTrackf(extractLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("extract_tarball")
-	fields.addField("remotePath", remoteTarPath)
+	fields.AddField("remotePath", remoteTarPath)
 
 	extractLog.WithFields(fields).Logf("Extracting tarball on remote server")
 
@@ -647,7 +622,7 @@ func (h *SCPHost) extractTarball(remoteTarPath string) error {
 	defer session.Close()
 
 	cmd := fmt.Sprintf("cd %s && tar xzf %s && rm %s", h.RemotePath, filepath.Base(remoteTarPath), filepath.Base(remoteTarPath))
-	fields.addField("command", cmd)
+	fields.AddField("command", cmd)
 	extractLog.WithFields(fields).Logf("Executing extraction command")
 
 	if err := session.Run(cmd); err != nil {
@@ -665,7 +640,7 @@ func (h *SCPHost) DeployWithTar(localPath string) error {
 	defer loggers.TimeTrackf(deployLog, time.Now(), nil, "")
 
 	fields := h.newSCPFields("deploy_with_tar")
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "localPath", Value: localPath},
 		logg.Field{Name: "remotePath", Value: h.RemotePath},
 	)
@@ -683,7 +658,7 @@ func (h *SCPHost) DeployWithTar(localPath string) error {
 		return errors.Wrapf(err, "failed to get file info for %s", localPath)
 	}
 
-	fields.addFields(
+	fields.AddFields(
 		logg.Field{Name: "isDirectory", Value: fileInfo.IsDir()},
 		logg.Field{Name: "fileSize", Value: fileInfo.Size()},
 	)
@@ -705,7 +680,7 @@ func (h *SCPHost) DeployWithTar(localPath string) error {
 	}
 	defer os.Remove(tarPath)
 
-	fields.addField("tarPath", tarPath)
+	fields.AddField("tarPath", tarPath)
 	deployLog.WithFields(fields).Logf("Uploading tarball")
 
 	remoteTarPath := filepath.Join(h.RemotePath, filepath.Base(tarPath))

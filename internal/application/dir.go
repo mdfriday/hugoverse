@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -15,6 +16,11 @@ func init() {
 	cachedHugoverseDir = hugoverseDir()
 
 	err := ensureDirExists(cachedHugoverseDir)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = ensureDirExists(LogDir())
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -38,6 +44,10 @@ func PreviewFolder() string {
 
 func DataDir() string {
 	return cachedHugoverseDir
+}
+
+func LogDir() string {
+	return path.Join(cachedHugoverseDir, "logs")
 }
 
 func hugoverseDir() string {

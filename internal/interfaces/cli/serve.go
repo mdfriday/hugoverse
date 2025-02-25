@@ -3,9 +3,14 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"github.com/bep/logg"
+	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
+	"os"
+	"path/filepath"
 	"strconv"
+	"time"
 )
 
 type serverCmd struct {
@@ -46,7 +51,7 @@ func (c *serverCmd) Run() error {
 	if *c.env == "prod" {
 		env = api.PROD
 	}
-	s, err := api.NewServer(setupLogger(), setupPort(*c.port))
+	s, err := api.NewServer(setupLogger(env), setupPort(*c.port))
 	if err != nil {
 		s.Log.Errorf("Error creating server: %v", err)
 	}
@@ -57,9 +62,41 @@ func (c *serverCmd) Run() error {
 	return nil
 }
 
-func setupLogger() func(s *api.Server) error {
+func setupLogger(env api.ENV) func(s *api.Server) error {
 	return func(s *api.Server) error {
-		s.Log = loggers.NewDefault()
+		switch env {
+		case api.DEV:
+			// Create log file with timestamp
+			logFile := filepath.Join(application.LogDir(), fmt.Sprintf("hv_dev_%s.log", time.Now().Format("20060102_150405")))
+			f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to create log file: %w", err)
+			}
+			s.Log = loggers.New(loggers.Options{
+				Level:         logg.LevelInfo,
+				DistinctLevel: logg.LevelWarn,
+				Stdout:        f,
+				Stderr:        f,
+				WithColor:     false,
+			})
+			s.LogFile = f
+
+		case api.PROD:
+			// Create log file with timestamp
+			logFile := filepath.Join(application.LogDir(), fmt.Sprintf("hv_prod_%s.log", time.Now().Format("20060102_150405")))
+			f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to create log file: %w", err)
+			}
+			s.Log = loggers.New(loggers.Options{
+				Level:         logg.LevelError,
+				DistinctLevel: logg.LevelError,
+				Stdout:        f,
+				Stderr:        f,
+				WithColor:     false,
+			})
+			s.LogFile = f
+		}
 
 		return nil
 	}

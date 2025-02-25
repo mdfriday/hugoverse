@@ -79,9 +79,9 @@ var endAdminHTML = `
                 <p class="center-align">
 					Powered by &copy;<a target="_blank" href="https://gohugo.net">Hugoverse</a>
 					&nbsp;&vert;&nbsp; 
-					open-sourced by <a target="_blank" href="https://mdfriday.com">MDFriday</a>
+					open-sourced by <a target="_blank" href="https://.mdfriday.com">MDFriday</a>
 					&nbsp;&vert;&nbsp; 
-					<a target="_blank" href="https://github.com/mdfriday/hugoverse">GitHub</a>
+					<a target="_blank" href="https://github.com/.mdfriday/hugoverse">GitHub</a>
 				</p>
             </div>     
         </footer>

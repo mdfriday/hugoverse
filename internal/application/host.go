@@ -12,7 +12,7 @@ import (
 )
 
 func DeployToNetlify(target string, deployment *valueobject.Deployment, domain *valueobject.Domain, token string) error {
-	host, err := factory.NewHost(logger)
+	host, err := factory.NewHost(logger, nil)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func DeployToNetlify(target string, deployment *valueobject.Deployment, domain *
 }
 
 func PreviewSiteRecycle(cs *contentEntity.Content, token string) {
-	host, err := factory.NewHost(logger)
+	host, err := factory.NewHost(logger, nil)
 	if err != nil {
 		logger.Errorf("Failed to create host when recycle preview sites: %v", err)
 		return

@@ -44,6 +44,7 @@ type Options struct {
 	StoreErrors        bool
 	HandlerPost        func(e *logg.Entry) error
 	SuppressStatements map[string]bool
+	WithColor          bool
 }
 
 // New creates a new logger with the given options.
@@ -59,8 +60,10 @@ func New(opts Options) Logger {
 	}
 
 	var logHandler logg.Handler
-	if terminal.PrintANSIColors(os.Stdout) {
-		logHandler = newDefaultHandler(opts.Stdout, opts.Stderr)
+	if opts.WithColor {
+		if terminal.PrintANSIColors(os.Stdout) {
+			logHandler = newDefaultHandler(opts.Stdout, opts.Stderr)
+		}
 	} else {
 		logHandler = newNoColoursHandler(opts.Stdout, opts.Stderr, false, nil)
 	}

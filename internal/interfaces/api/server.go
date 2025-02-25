@@ -16,6 +16,7 @@ import (
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/tls"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"net/http"
+	"os"
 )
 
 type PORT string
@@ -36,8 +37,9 @@ const (
 )
 
 type Server struct {
-	mux *http.ServeMux
-	Log loggers.Logger
+	mux     *http.ServeMux
+	Log     loggers.Logger
+	LogFile *os.File
 
 	Bind         string
 	HttpsPort    int
@@ -118,6 +120,10 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 func (s *Server) Close() {
 	s.db.Close()
 	s.record.Close()
+
+	if s.LogFile != nil {
+		s.LogFile.Close()
+	}
 }
 
 func (s *Server) registerHandler() {

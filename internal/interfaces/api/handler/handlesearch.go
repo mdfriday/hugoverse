@@ -40,7 +40,7 @@ func ExampleNew() {
 	//// 将文档映射添加到索引映射
 	//indexMapping.AddDocumentMapping("document", docMapping)
 
-	exampleIndex, err = bleve.New("/Users/sunwei/github/mdfriday/hugoverse/tmp", indexMapping)
+	exampleIndex, err = bleve.New("/Users/sunwei/github/.mdfriday/hugoverse/tmp", indexMapping)
 	if err != nil {
 		panic(err)
 	}
@@ -75,8 +75,8 @@ func newDodo(name, code string) *dodo {
 	return d
 }
 
-var data = newDodo("app.mdfriday.com", "Untitled Friday Site 299")
-var data2 = newDodo("app.mdfriday.com", "Untitled Friday Site 199")
+var data = newDodo("app..mdfriday.com", "Untitled Friday Site 299")
+var data2 = newDodo("app..mdfriday.com", "Untitled Friday Site 199")
 
 func ExampleIndex_indexing() {
 	// index some data
@@ -101,7 +101,7 @@ func ExampleIndex_indexing() {
 }
 
 func (s *Handler) SearchContentHandler2(res http.ResponseWriter, req *http.Request) {
-	err = os.RemoveAll("/Users/sunwei/github/mdfriday/hugoverse/tmp")
+	err = os.RemoveAll("/Users/sunwei/github/.mdfriday/hugoverse/tmp")
 	if err != nil {
 		panic(err)
 	}

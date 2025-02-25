@@ -1,2 +1,4 @@
 github.com/mdfriday/prompt v0.0.0-20250222120908-bfca903b7b61 h1:Us9vzuzSqLvVN5aAlBda//BDf7wOd5qkw13Tm5jHMTo=
 github.com/mdfriday/prompt v0.0.0-20250222120908-bfca903b7b61/go.mod h1:of6lpCMS2JFvAJackzopquxvnEgGrd2ggaRm4SgdtHw=
+github.com/waydesun/prompt-module-example v0.0.0-20250224092800-e64738d8938e h1:uVZsnmqWYiaSGlGLeFmKUPVuHKDA2F7UZBDatyytqko=
+github.com/waydesun/prompt-module-example v0.0.0-20250224092800-e64738d8938e/go.mod h1:zV7meOXSRp4/VpAFg6WwZk20ca4pp5b/33iZ8Nn8X2Y=

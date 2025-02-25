@@ -36,7 +36,7 @@ func (h *Hugo) goModFile(dir string) *valueobject.File {
 	return &valueobject.File{
 		Fs:      h.Fs,
 		Path:    path.Join(dir, "go.mod"),
-		Content: []byte("module github.com/mdfriday/temp-build\n\ngo 1.18"),
+		Content: []byte("module github.com/.mdfriday/temp-build\n\ngo 1.18"),
 	}
 }
 

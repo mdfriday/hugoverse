@@ -39,7 +39,7 @@ func (c *Content) BuildTarget(contentType, id, status string) (string, error) {
 		writer.files <- &valueobject.File{
 			Fs:      c.Hugo.Fs,
 			Path:    path.Join(dir, "go.mod"),
-			Content: []byte("module github.com/mdfriday/temp-build\n\ngo 1.18"),
+			Content: []byte("module github.com/.mdfriday/temp-build\n\ngo 1.18"),
 		}
 
 		confFile, err := c.Hugo.siteConfigFile(site, dir)
