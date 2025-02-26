@@ -64,7 +64,7 @@ func (s *Handler) PreviewContentHandler(res http.ResponseWriter, req *http.Reque
 	}
 
 	d := &valueobject.Domain{
-		Root:  "app..mdfriday.com",
+		Root:  "app.mdfriday.com",
 		Sub:   fmt.Sprintf("%s-%s", "mdf", rand.ShortString(6)),
 		Owner: "MDFriday",
 	}
