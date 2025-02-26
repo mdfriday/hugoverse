@@ -1,10 +1,9 @@
 package database
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/token"
 	"github.com/mdfriday/hugoverse/pkg/db"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
 )
 
@@ -32,7 +31,7 @@ func (d *Database) StartUserDatabase(email string) error {
 	buckets = append(buckets, d.contentBuckets...)
 	buckets = append(buckets, userBuckets...)
 
-	ud := hashEmailMD5(email)
+	ud := hash.MD5(email)
 	s, err := db.OpenUserStore(ud, d.dataDir, buckets)
 	if err != nil {
 		return err
@@ -44,11 +43,4 @@ func (d *Database) StartUserDatabase(email string) error {
 	d.log.Debugf("Started user database: %s", ud)
 
 	return nil
-}
-
-func hashEmailMD5(email string) string {
-	hash := md5.New()
-	hash.Write([]byte(email))
-
-	return hex.EncodeToString(hash.Sum(nil))
 }

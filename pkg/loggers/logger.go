@@ -158,6 +158,7 @@ func NewDefault() Logger {
 		Level:         logg.LevelDebug,
 		Stdout:        os.Stdout,
 		Stderr:        os.Stdout,
+		WithColor:     false,
 	}
 	return New(opts)
 }

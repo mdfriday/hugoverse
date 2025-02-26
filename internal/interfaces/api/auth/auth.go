@@ -2,10 +2,14 @@ package auth
 
 import (
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/token"
+	"github.com/mdfriday/hugoverse/pkg/hash"
+	"github.com/mdfriday/hugoverse/pkg/identity"
 	"net/http"
 )
 
 type Auth struct {
+	Session string
+	UserId  string
 }
 
 // Check is HTTP middleware to ensure the request has proper token credentials
@@ -34,7 +38,12 @@ func (a *Auth) CheckWithRedirect(next http.HandlerFunc) http.HandlerFunc {
 
 // IsValid checks if the user request is authenticated
 func (a *Auth) IsValid(req *http.Request) bool {
-	_, err := token.GetToken(req)
+	id, err := token.GetToken(req)
+	if err != nil {
+		return false
+	}
 
-	return err == nil
+	a.Session = identity.GenerateSessionID()
+	a.UserId = hash.MD5(id)
+	return true
 }

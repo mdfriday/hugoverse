@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/token"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"log"
 	"net/http"
 	"strings"
@@ -194,4 +195,14 @@ func (s *Handler) UserConfigHandler(res http.ResponseWriter, req *http.Request) 
 	default:
 		res.WriteHeader(http.StatusMethodNotAllowed)
 	}
+}
+
+func (s *Handler) getUserHash(req *http.Request) (string, error) {
+	email, err := token.GetEmail(req)
+	if err != nil {
+		s.log.Errorf("Error getting email: %v", err)
+		return "", err
+	}
+
+	return hash.MD5(email), nil
 }

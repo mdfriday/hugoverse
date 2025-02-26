@@ -3,9 +3,8 @@ package entity
 import (
 	"archive/tar"
 	"compress/gzip"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
+	"github.com/mdfriday/hugoverse/pkg/identity"
 	"io"
 	"os"
 	"path/filepath"
@@ -25,16 +24,6 @@ const (
 	// reservedFieldNamePrefix is used to identify internal fields that should not be logged
 	reservedFieldNamePrefix = "__h_field_"
 )
-
-// generateSessionID generates a unique session ID
-func generateSessionID() string {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		// If we can't generate random bytes, use timestamp
-		return fmt.Sprintf("sess-%d", time.Now().UnixNano())
-	}
-	return fmt.Sprintf("sess-%s", hex.EncodeToString(b))
-}
 
 // AuthMethod represents different authentication methods
 type AuthMethod interface {
@@ -146,7 +135,7 @@ func NewSCPHost(username, password, hostname string, port int, remotePath string
 		Port:        port,
 		RemotePath:  remotePath,
 		logger:      logger,
-		sessionID:   generateSessionID(),
+		sessionID:   identity.GenerateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 	}
 }
@@ -167,7 +156,7 @@ func NewSCPHostWithKey(username, privateKeyPath, hostname string, port int, remo
 		Port:        port,
 		RemotePath:  remotePath,
 		logger:      logger,
-		sessionID:   generateSessionID(),
+		sessionID:   identity.GenerateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 	}
 }

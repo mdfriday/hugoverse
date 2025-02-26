@@ -4,15 +4,23 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/mdfriday/hugoverse/pkg/herrors"
+	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"net/http"
+	"strings"
 )
+
+func (s *Handler) handlerErrorWithLog(fields *loggers.LogFields, res http.ResponseWriter, req *http.Request, err error) {
+	s.log.Error().WithFields(fields).WithError(err).Logf("req: %s", req.URL.String())
+
+	s.handlerError(res, req, err)
+}
 
 func (s *Handler) handlerError(res http.ResponseWriter, req *http.Request, err error) {
 	var fe herrors.FileError
 	if errors.As(err, &fe) {
 		res.WriteHeader(http.StatusBadRequest)
 
-		jsonBytes, err := json.Marshal(fe.Error())
+		jsonBytes, err := json.Marshal(extractErrorMessage(fe.Error()))
 		if err != nil {
 			s.log.Errorf("Error marshalling token when handling error: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)
@@ -38,4 +46,12 @@ func (s *Handler) handlerError(res http.ResponseWriter, req *http.Request, err e
 	}
 
 	return
+}
+
+func extractErrorMessage(errMsg string) string {
+	// 查找 "content" 的位置
+	if idx := strings.Index(errMsg, "content"); idx != -1 {
+		return errMsg[idx:]
+	}
+	return errMsg
 }

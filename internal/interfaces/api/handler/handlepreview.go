@@ -9,8 +9,8 @@ import (
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/form"
 	"github.com/mdfriday/hugoverse/pkg/fs/static"
 	"github.com/mdfriday/hugoverse/pkg/rand"
+	"github.com/pkg/errors"
 	"github.com/spf13/afero"
-	"log"
 	"net/http"
 	"path"
 )
@@ -21,20 +21,24 @@ func (s *Handler) PreviewContentHandler(res http.ResponseWriter, req *http.Reque
 	t := q.Get("type")
 	status := q.Get("status")
 
+	logFields := s.newLogFields("preview")
+
 	if t == "" || id == "" {
+		s.log.Error().WithFields(logFields).WithError(fmt.Errorf("missing type or id")).Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	err := req.ParseMultipartForm(form.MaxMemory)
 	if err != nil {
-		s.log.Errorf("Error parsing deploy form: %v", err)
+		s.log.Error().WithFields(logFields).WithError(err).Logf("error parsing preview form with t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	pt, ok := s.contentApp.GetContentCreator(t)
 	if !ok {
+		s.log.Error().WithFields(logFields).WithError(fmt.Errorf("unknown type: %s", t)).Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -42,22 +46,20 @@ func (s *Handler) PreviewContentHandler(res http.ResponseWriter, req *http.Reque
 	p := pt()
 	_, ok = p.(content.Deployable)
 	if !ok {
-		log.Println("[Response] error: Type", t, "does not implement item.Deployable or embed item.Item.")
+		s.log.Error().WithFields(logFields).WithError(fmt.Errorf("not implement item.Deployable: %s", t)).Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	t, err = s.contentApp.BuildTarget(t, id, status)
 	if err != nil {
-		s.log.Errorf("Error building: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error building target"))
 		return
 	}
 
 	err = application.GenerateStaticSiteWithTarget(t)
 	if err != nil {
-		s.log.Errorf("Error preview site %s for deployment with error : %v", id, err)
-		s.handlerError(res, req, err)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error generating static site"))
 		return
 	}
 
@@ -69,8 +71,7 @@ func (s *Handler) PreviewContentHandler(res http.ResponseWriter, req *http.Reque
 
 	preview, err := s.contentApp.NewPreview(d)
 	if err != nil {
-		s.log.Errorf("Error new preview: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error new preview"))
 		return
 	}
 
@@ -82,28 +83,25 @@ func (s *Handler) PreviewContentHandler(res http.ResponseWriter, req *http.Reque
 
 	err = application.DeployToNetlify(t, sd, d, s.adminApp.Netlify.Token())
 	if err != nil {
-		s.log.Errorf("Error building: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error deploying to netlify"))
 		return
 	}
 
 	preview.SiteID = sd.SiteID
 	if err := s.contentApp.UpdateContentObject(preview); err != nil {
-		s.log.Errorf("Error updating preview: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error updating preview"))
 		return
 	}
 
 	jsonBytes, err := json.Marshal("https://" + d.FullDomain())
 	if err != nil {
-		s.log.Errorf("Error marshalling token: %v", err)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error marshalling token"))
 		return
 	}
 
 	j, err := s.res.FmtJSON(jsonBytes)
 	if err != nil {
-		s.log.Errorf("Error formatting JSON: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
+		s.handlerErrorWithLog(logFields, res, req, errors.Wrap(err, "error formatting JSON"))
 		return
 	}
 

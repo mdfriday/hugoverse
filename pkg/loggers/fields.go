@@ -48,7 +48,6 @@ func (f *LogFields) AddFields(fields ...logg.Field) *LogFields {
 	return f
 }
 
-// WithCommonFields creates a new LogFields instance with common fields like timestamp and level
 func NewLogFieldsWithCommon(operation string, sessionID string) *LogFields {
 	return &LogFields{
 		fields: logg.Fields{
