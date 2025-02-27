@@ -153,6 +153,10 @@ func New(opts Options) Logger {
 
 // NewDefault creates a new logger with the default options.
 func NewDefault() Logger {
+	if global != nil {
+		return global
+	}
+
 	opts := Options{
 		DistinctLevel: logg.LevelDebug,
 		Level:         logg.LevelDebug,

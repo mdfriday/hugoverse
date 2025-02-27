@@ -23,7 +23,7 @@ type Netlify struct {
 	log loggers.Logger
 }
 
-func NewNetlify(log loggers.Logger) (*Netlify, error) {
+func NewNetlify() (*Netlify, error) {
 	formats := strfmt.NewFormats()
 	client := netlify.NewHTTPClient(formats)
 
@@ -37,7 +37,7 @@ func NewNetlify(log loggers.Logger) (*Netlify, error) {
 		client:       client,
 		clientLogger: logger,
 
-		log: log,
+		log: loggers.NewDefault(),
 	}, nil
 }
 

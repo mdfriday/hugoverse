@@ -98,6 +98,7 @@ func setupLogger(env api.ENV) func(s *api.Server) error {
 			s.LogFile = f
 		}
 
+		loggers.SetGlobal(s.Log)
 		return nil
 	}
 }

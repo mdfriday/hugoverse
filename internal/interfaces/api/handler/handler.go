@@ -26,7 +26,7 @@ type Handler struct {
 }
 
 func New(log loggers.Logger, db *database.Database,
-	contentApp *contentEntity.Content, adminApp *adminEntity.Admin) *Handler {
+	contentApp *contentEntity.Content, adminApp *adminEntity.Admin, auth *auth.Auth) *Handler {
 
 	adminView := &admin.View{
 		Logo:       adminApp.Name(),
@@ -47,6 +47,6 @@ func New(log loggers.Logger, db *database.Database,
 		adminApp:   adminApp,
 		adminView:  adminView,
 
-		auth: &auth.Auth{},
+		auth: auth,
 	}
 }

@@ -7,12 +7,11 @@ import (
 	hostEntity "github.com/mdfriday/hugoverse/internal/domain/host/entity"
 	"github.com/mdfriday/hugoverse/internal/domain/host/factory"
 	"github.com/mdfriday/hugoverse/pkg/timestamp"
-	"strconv"
 	"time"
 )
 
 func DeployToNetlify(target string, deployment *valueobject.Deployment, domain *valueobject.Domain, token string) error {
-	host, err := factory.NewHost(logger, nil)
+	host, err := factory.NewHost(nil)
 	if err != nil {
 		return err
 	}
@@ -36,7 +35,7 @@ func DeployToNetlify(target string, deployment *valueobject.Deployment, domain *
 }
 
 func PreviewSiteRecycle(cs *contentEntity.Content, token string) {
-	host, err := factory.NewHost(logger, nil)
+	host, err := factory.NewHost(nil)
 	if err != nil {
 		logger.Errorf("Failed to create host when recycle preview sites: %v", err)
 		return
@@ -63,7 +62,7 @@ func recyclePreviewSites(cs *contentEntity.Content, host *hostEntity.Host, token
 	all := cs.Repo.AllContent(ns)
 	p, ok := cs.AllAdminTypes()[ns]
 	if !ok {
-		logger.Printf("Type %s not supported", ns)
+		logger.Errorf("Type %s not supported", ns)
 		return
 	}
 
@@ -71,29 +70,28 @@ func recyclePreviewSites(cs *contentEntity.Content, host *hostEntity.Host, token
 		post := p()
 		err := json.Unmarshal(v, post)
 		if err != nil {
-			logger.Println("Error unmarshalling when recycling ", ns, err)
+			logger.Errorln("Error unmarshalling when recycling ", ns, err)
 		}
 
 		if preview, ok := post.(*valueobject.Preview); ok {
 			t, err := timestamp.ConvertInt64ToTime(preview.Time())
 			if err != nil {
-				logger.Println("Error converting time when recycling ", ns, err)
+				logger.Errorln("Error converting time when recycling ", ns, err)
 			}
 			if timestamp.IsOneHourPassed(t) {
-				err := host.Netlify.DeleteNetlifySite(token, preview.SiteID)
-				if err != nil {
-					logger.Println("Error deleting from Netlify when recycling ", ns, err)
-					continue
+				if preview.SiteID != "" {
+					err := host.Netlify.DeleteNetlifySite(token, preview.SiteID)
+					if err != nil {
+						logger.Errorln("Error deleting from Netlify when recycling ", ns, err)
+						continue
+					}
+					logger.Println("Preview site deleted: ", preview.SiteID, preview.SiteName)
 				}
 
-				logger.Println("Preview site deleted: ", preview.SiteID, preview.SiteName)
-
-				idStr := strconv.Itoa(preview.ItemID())
-				if err := cs.DeleteContent(ns, idStr, ""); err != nil {
-					logger.Println("Error deleting content when recycling ", ns, err)
+				if err := cs.DeleteContentObject(preview); err != nil {
+					logger.Errorln("Error deleting content when recycling ", ns, err)
 				}
-
-				logger.Println("Preview content deleted: ", idStr)
+				logger.Println("Preview content deleted: ", preview.SiteID)
 			}
 		}
 	}

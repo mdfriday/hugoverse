@@ -108,7 +108,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 
 	s.tls = tls.NewTls(s, s.adminApp, application.TLSDir())
 
-	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp)
+	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp, s.auth)
 
 	s.registerHandler()
 

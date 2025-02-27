@@ -78,63 +78,21 @@ type SCPHost struct {
 
 // newSCPFields creates a new LogFields instance with common fields
 func (h *SCPHost) newSCPFields(operation string) *loggers.LogFields {
-	return loggers.NewLogFieldsWithCommon(operation, h.sessionID).
+	return loggers.GetGlobalFields().
 		AddFields(
-			logg.Field{Name: "host", Value: h.Hostname},
-			logg.Field{Name: "user_id", Value: h.Username},
+			logg.Field{Name: "operation", Value: operation},
 		)
-}
-
-// setupLogger configures the logger to output to .mdfriday directory
-func setupLogger() (loggers.Logger, error) {
-	// Get project root directory (assuming we're in internal/domain/host/entity)
-	projectRoot, err := filepath.Abs("../../../../")
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get project root directory")
-	}
-
-	// Create .mdfriday directory in project root if it doesn't exist
-	logDir := filepath.Join(projectRoot, ".mdfriday")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
-		return nil, errors.Wrap(err, "failed to create log directory")
-	}
-
-	// Create log file with timestamp
-	logFile := filepath.Join(logDir, fmt.Sprintf("scp_%s.log", time.Now().Format("20060102_150405")))
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create log file")
-	}
-
-	// Create logger options
-	opts := loggers.Options{
-		Level:         logg.LevelDebug,
-		Stdout:        f, // 只输出到文件
-		Stderr:        f, // 错误也输出到文件
-		StoreErrors:   true,
-		DistinctLevel: logg.LevelWarn, // Drop duplicate warnings and errors
-	}
-
-	fmt.Printf("Log file %p created at: %s\n", f, logFile)
-	return loggers.New(opts), nil
 }
 
 // NewSCPHost creates a new SCPHost instance with password authentication
 func NewSCPHost(username, password, hostname string, port int, remotePath string) *SCPHost {
-	logger, err := setupLogger()
-	if err != nil {
-		// If we can't set up the file logger, fall back to default logger
-		logger = loggers.NewDefault()
-		logger.Error().Logf("Failed to setup file logger: %v", err)
-	}
-
 	return &SCPHost{
 		Username:    username,
 		Auth:        PasswordAuth{Password: password},
 		Hostname:    hostname,
 		Port:        port,
 		RemotePath:  remotePath,
-		logger:      logger,
+		logger:      loggers.NewDefault(),
 		sessionID:   identity.GenerateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 	}
@@ -142,20 +100,13 @@ func NewSCPHost(username, password, hostname string, port int, remotePath string
 
 // NewSCPHostWithKey creates a new SCPHost instance with key authentication
 func NewSCPHostWithKey(username, privateKeyPath, hostname string, port int, remotePath string, passphrase string) *SCPHost {
-	logger, err := setupLogger()
-	if err != nil {
-		// If we can't set up the file logger, fall back to default logger
-		logger = loggers.NewDefault()
-		logger.Error().Logf("Failed to setup file logger: %v", err)
-	}
-
 	return &SCPHost{
 		Username:    username,
 		Auth:        KeyAuth{PrivateKeyPath: privateKeyPath, Passphrase: passphrase},
 		Hostname:    hostname,
 		Port:        port,
 		RemotePath:  remotePath,
-		logger:      logger,
+		logger:      loggers.NewDefault(),
 		sessionID:   identity.GenerateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
 	}

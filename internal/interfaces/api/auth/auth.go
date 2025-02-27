@@ -38,12 +38,13 @@ func (a *Auth) CheckWithRedirect(next http.HandlerFunc) http.HandlerFunc {
 
 // IsValid checks if the user request is authenticated
 func (a *Auth) IsValid(req *http.Request) bool {
-	id, err := token.GetToken(req)
+	_, err := token.GetToken(req)
 	if err != nil {
 		return false
 	}
 
+	email, _ := token.GetEmail(req)
 	a.Session = identity.GenerateSessionID()
-	a.UserId = hash.MD5(id)
+	a.UserId = hash.MD5(email)
 	return true
 }

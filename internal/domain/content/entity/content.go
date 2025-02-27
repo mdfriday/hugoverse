@@ -97,6 +97,40 @@ func (c *Content) DeleteContent(contentType, id, status string) error {
 	return nil
 }
 
+func (c *Content) DeleteContentObject(ci any) error {
+	cis, ok := ci.(content.Statusable)
+	if !ok {
+		return errors.New("invalid content type")
+	}
+
+	cii, ok := ci.(content.Identifiable)
+	ns := GetNamespace(cii.ItemName(), string(cis.ItemStatus()))
+
+	hash := ""
+	if ctiHash, ok := ci.(content.Hashable); ok {
+		hash = ctiHash.ItemHash()
+	}
+	if err := c.Repo.DeleteContent(ns, fmt.Sprintf("%d", cii.ItemID()), ci.(content.Sluggable).ItemSlug(), hash); err != nil {
+		return err
+	}
+
+	go func() {
+		// delete indexed data from search index
+		if isPublicNamespace(ns) {
+			err := c.Search.DeleteIndex(ns)
+			if err != nil {
+				log.Println("[search] DeleteIndex Error:", err)
+			}
+		}
+	}()
+
+	if err := c.SortContent(cii.ItemName()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Content) UpdateContent(contentType string, data url.Values) error {
 	t, ok := c.GetContentCreator(contentType)
 	if !ok {

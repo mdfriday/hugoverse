@@ -2,11 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/domain/content"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/form"
-	"log"
+	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"net/http"
 )
 
@@ -16,14 +17,23 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 	t := q.Get("type")
 	status := q.Get("status")
 
+	loggers.SetGlobalFields(s.newLogFields("deploy"))
+
 	if t == "" || id == "" {
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(fmt.Errorf("missing type or id")).
+			Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	err := req.ParseMultipartForm(form.MaxMemory)
 	if err != nil {
-		s.log.Errorf("Error parsing deploy form: %v", err)
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(err).
+			Logf("error parsing deploy form with t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -33,18 +43,26 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 	root := req.FormValue("domain")
 
 	if hostToken == "" || root == "" {
-		s.log.Errorf("Both host_token and domain must be set")
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(fmt.Errorf("host_token: %s, domain: %s must be set", hostToken, root)).
+			Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	d, isTaken, err := s.contentApp.ApplyDomain(id, root)
 	if !isTaken && err != nil {
-		s.log.Errorf("Error applying domain: %v", err)
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(err).
+			Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	} else if isTaken {
-		s.log.Errorf("Domain already taken: %s", err.Error())
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			Logf("domain already taken: %s", err.Error())
 		res.WriteHeader(http.StatusConflict)
 		return
 	}
@@ -58,7 +76,10 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 	p := pt()
 	_, ok = p.(content.Deployable)
 	if !ok {
-		log.Println("[Response] error: Type", t, "does not implement item.Deployable or embed item.Item.")
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(fmt.Errorf("not implement item.Deployable: %s", t)).
+			Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -67,7 +88,10 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 
 	sc, err := s.contentApp.GetContentObject(t, id)
 	if err != nil {
-		s.log.Errorf("Error getting deploy content: %v", err)
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(fmt.Errorf("error GetContentObject: %v", err)).
+			Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -79,14 +103,20 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 	if target == "" {
 		target, err = s.contentApp.BuildTarget(t, id, status)
 		if err != nil {
-			s.log.Errorf("Error building: %v", err)
+			s.log.Error().
+				WithFields(loggers.GetGlobalFields()).
+				WithError(err).
+				Logf("BulidTarget t: %s, id: %s", t, id)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 
 		err = application.GenerateStaticSiteWithTarget(target)
 		if err != nil {
-			s.log.Errorf("Error building site %s for deployment with error : %v", id, err)
+			s.log.Error().
+				WithFields(loggers.GetGlobalFields()).
+				WithError(err).
+				Logf("GenerateStaticSiteWithTarget t: %s, id: %s", t, id)
 			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -95,6 +125,10 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 	sd, err := s.contentApp.GetDeployment(d, hostName)
 	if err != nil {
 		s.log.Errorf("Error getting deployment: %v", err)
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(err).
+			Logf("GetDeployment d: %s, hostName: %s", d.FullDomain(), hostName)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -106,7 +140,10 @@ func (s *Handler) DeployContentHandler(res http.ResponseWriter, req *http.Reques
 	}
 	err = application.DeployToNetlify(target, sd, d, hostToken)
 	if err != nil {
-		s.log.Errorf("Error building: %v", err)
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(err).
+			Logf("DeployToNetlify with target: %s, d: %s, hostName: %s", target, d.FullDomain(), hostName)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}

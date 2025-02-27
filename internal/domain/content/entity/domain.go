@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
+	"github.com/mdfriday/hugoverse/pkg/loggers"
 )
 
 func (c *Content) ApplyDomain(siteId string, domain string) (*valueobject.Domain, bool, error) {
 	site, err := c.getContent("Site", siteId)
 	if err != nil {
-		c.Log.Errorf("Applying domain get content error : %v, site id: %s, domain : %s", err, siteId, domain)
+		c.Log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(err).
+			Logf("site id: %s, domain : %s", siteId, domain)
 		return nil, false, err
 	}
 
@@ -19,20 +23,29 @@ func (c *Content) ApplyDomain(siteId string, domain string) (*valueobject.Domain
 		if site.SubDomain == "" {
 			slug, err = valueobject.Slug(site) // Title
 			if err != nil {
-				c.Log.Println("Applying empty domain slug : ", slug, site.String())
+				c.Log.Error().
+					WithFields(loggers.GetGlobalFields()).
+					WithError(err).
+					Logf("Applying empty domain slug : %v, site : %s", err, site.String())
 				return nil, false, err
 			}
 		} else {
 			slug, err = valueobject.StringToSlug(site.SubDomain)
 			if err != nil {
-				c.Log.Errorf("Applying with sub domain : %v, slug : %s, sub domain : %s ", err, slug, site.SubDomain)
+				c.Log.Error().
+					WithFields(loggers.GetGlobalFields()).
+					WithError(err).
+					Logf("Applying with sub domain : %v, slug : %s, sub domain : %s ", err, slug, site.SubDomain)
 				return nil, false, err
 			}
 		}
 
 		sd, err := c.searchDomain(domain, slug)
 		if err != nil {
-			c.Log.Errorf("Applying domain search domain error : %v, domain : %s, slug : %s", err, domain, slug)
+			c.Log.Error().
+				WithFields(loggers.GetGlobalFields()).
+				WithError(err).
+				Logf("Applying domain search domain error : %v, domain : %s, slug : %s", err, domain, slug)
 			return nil, false, err
 		}
 
@@ -86,11 +99,17 @@ func (c *Content) searchDomain(root string, sub string) (*valueobject.Domain, er
 	for _, data := range domains {
 		if string(data) == "[]" {
 			c.Log.Println("Empty array received for domain search")
+			c.Log.Debug().
+				WithFields(loggers.GetGlobalFields()).
+				Logf("Empty array received for domain search - continue")
 			continue
 		}
 		var domain valueobject.Domain
 		if err := json.Unmarshal(data, &domain); err != nil {
-			c.Log.Println("search domain result:", string(data))
+			c.Log.Error().
+				WithFields(loggers.GetGlobalFields()).
+				WithError(err).
+				Logf("search domain json.Unmarshal error: %s", string(data))
 			continue
 		}
 
