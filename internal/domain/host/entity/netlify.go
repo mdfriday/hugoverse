@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+
+	"github.com/mdfriday/hugoverse/internal/domain/host"
+
 	oapiclient "github.com/go-openapi/runtime/client"
 	"github.com/go-openapi/strfmt"
 	"github.com/mdfriday/hugoverse/internal/domain/host/valueobject"
@@ -12,15 +18,13 @@ import (
 	netlify "github.com/netlify/open-api/v2/go/porcelain"
 	ooapicontext "github.com/netlify/open-api/v2/go/porcelain/context"
 	"github.com/sirupsen/logrus"
-	"os"
-	"path"
 )
 
 type Netlify struct {
 	client       *netlify.Netlify
 	clientLogger *logrus.Logger
-
-	log loggers.Logger
+	config       *valueobject.NetlifyConfig
+	log          loggers.Logger
 }
 
 func NewNetlify() (*Netlify, error) {
@@ -36,12 +40,34 @@ func NewNetlify() (*Netlify, error) {
 	return &Netlify{
 		client:       client,
 		clientLogger: logger,
-
-		log: loggers.NewDefault(),
+		log:          loggers.NewDefault(),
 	}, nil
 }
 
-func (a *Netlify) DeployNewNetlifySite(token string, target string, siteName string, domain string) (string, error) {
+// NewNetlifyWithConfig creates a new Netlify instance with the provided configuration
+func NewNetlifyWithConfig(config *valueobject.NetlifyConfig) (*Netlify, error) {
+	if err := config.Validate(); err != nil {
+		return nil, err
+	}
+
+	formats := strfmt.NewFormats()
+	client := netlify.NewHTTPClient(formats)
+
+	logger := logrus.New()
+	if err := setupLogging(logger); err != nil {
+		logger.Fatal(err)
+		return nil, err
+	}
+
+	return &Netlify{
+		client:       client,
+		clientLogger: logger,
+		config:       config,
+		log:          loggers.NewDefault(),
+	}, nil
+}
+
+func (a *Netlify) DeployNewNetlifySite(token string, target string, siteName string, domain string) (valueobject.DeployResult, error) {
 	c := &valueobject.NetlifyConfig{
 		AuthToken:     token,
 		SiteID:        "",
@@ -55,7 +81,7 @@ func (a *Netlify) DeployNewNetlifySite(token string, target string, siteName str
 	return a.deploy(c)
 }
 
-func (a *Netlify) DeployExistingNetlifySite(token string, target string, siteID string) (string, error) {
+func (a *Netlify) DeployExistingNetlifySite(token string, target string, siteID string) (valueobject.DeployResult, error) {
 	c := &valueobject.NetlifyConfig{
 		AuthToken:     token,
 		SiteID:        siteID,
@@ -67,15 +93,55 @@ func (a *Netlify) DeployExistingNetlifySite(token string, target string, siteID 
 	return a.deploy(c)
 }
 
-func (a *Netlify) deploy(c *valueobject.NetlifyConfig) (string, error) {
-	info, err := os.Stat(c.Directory)
+// Deploy implements the Deployer interface
+func (a *Netlify) Deploy(localPath string) (host.Result, error) {
+	result := valueobject.DeployResult{}
 
-	if os.IsNotExist(err) {
-		return "", errors.New("file not exist")
+	if a.config == nil {
+		return result, errors.New("netlify configuration is not set")
+	}
+
+	// Check if the directory exists
+	info, err := os.Stat(localPath)
+	if err != nil {
+		return result, fmt.Errorf("failed to access local path: %w", err)
 	}
 
 	if !info.IsDir() {
-		return "", errors.New("target is not a directory")
+		return result, errors.New("local path must be a directory")
+	}
+
+	// If directory is not set in config, use the provided localPath
+	// Otherwise, use the configured directory
+	deployDir := a.config.Directory
+	if deployDir == "" {
+		// By default, Netlify expects the "public" directory
+		deployDir = filepath.Join(localPath, "public")
+
+		// Check if public directory exists
+		if _, err := os.Stat(deployDir); os.IsNotExist(err) {
+			// If public directory doesn't exist, use the provided path directly
+			deployDir = localPath
+		}
+	}
+
+	// Create a copy of the config with the updated directory
+	deployConfig := *a.config
+	deployConfig.Directory = deployDir
+
+	return a.deploy(&deployConfig)
+}
+
+func (a *Netlify) deploy(c *valueobject.NetlifyConfig) (valueobject.DeployResult, error) {
+	result := valueobject.DeployResult{}
+	info, err := os.Stat(c.Directory)
+
+	if os.IsNotExist(err) {
+		return result, errors.New("file not exist")
+	}
+
+	if !info.IsDir() {
+		return result, errors.New("target is not a directory")
 	}
 
 	ctx := setupContext(c, a.clientLogger)
@@ -91,15 +157,15 @@ func (a *Netlify) deploy(c *valueobject.NetlifyConfig) (string, error) {
 				Ssl:          true,
 			},
 			SiteSetupAllOf1: models.SiteSetupAllOf1{},
-		}, true) // 设置 configureDNS 为 true
+		}, true)
 		if err != nil {
 			a.log.Errorf("failed to create Netlify site: %s", err)
-			return "", err
+			return result, err
 		}
 
 		// 更新 SiteID
 		siteID = newSite.ID
-		a.log.Println("Created new site with ID: " + c.SiteID)
+		a.log.Println("Created new site with ID: " + siteID)
 	}
 
 	// Deploy site
@@ -111,17 +177,24 @@ func (a *Netlify) deploy(c *valueobject.NetlifyConfig) (string, error) {
 	}, nil)
 	if err != nil {
 		a.log.Errorf("failed to deploy site: %s", err)
-		return "", err
+		return result, err
 	}
 
-	// Print the site URL
+	result.SiteID = siteID
+
+	// Set the deployment URL
 	if resp.DeploySslURL != "" {
-		a.log.Println("Deployed site: " + resp.DeploySslURL)
-	} else if resp.DeployURL != "" {
-		a.log.Println("Deployed site: " + resp.DeployURL)
+		result.URL = resp.DeploySslURL
+	} else {
+		result.URL = resp.DeployURL
 	}
 
-	return siteID, nil
+	result.Message = "Successfully deployed to Netlify"
+
+	// Log the deployment URL
+	a.log.Println("Deployed site: " + result.URL)
+
+	return result, nil
 }
 
 func (a *Netlify) DeleteNetlifySite(token string, siteID string) error {

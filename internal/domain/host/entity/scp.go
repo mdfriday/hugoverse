@@ -4,12 +4,15 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
-	"github.com/mdfriday/hugoverse/pkg/identity"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mdfriday/hugoverse/internal/domain/host"
+	"github.com/mdfriday/hugoverse/internal/domain/host/valueobject"
+	"github.com/mdfriday/hugoverse/pkg/identity"
 
 	"github.com/mdfriday/hugoverse/pkg/loggers"
 
@@ -20,56 +23,11 @@ import (
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
-const (
-	// reservedFieldNamePrefix is used to identify internal fields that should not be logged
-	reservedFieldNamePrefix = "__h_field_"
-)
-
-// AuthMethod represents different authentication methods
-type AuthMethod interface {
-	SSHAuthMethod() ssh.AuthMethod
-}
-
-// PasswordAuth implements password-based authentication
-type PasswordAuth struct {
-	Password string
-}
-
-func (p PasswordAuth) SSHAuthMethod() ssh.AuthMethod {
-	return ssh.Password(p.Password)
-}
-
-// KeyAuth implements key-based authentication
-type KeyAuth struct {
-	PrivateKeyPath string
-	Passphrase     string
-}
-
-func (k KeyAuth) SSHAuthMethod() ssh.AuthMethod {
-	key, err := os.ReadFile(k.PrivateKeyPath)
-	if err != nil {
-		return nil
-	}
-
-	var signer ssh.Signer
-	if k.Passphrase != "" {
-		signer, err = ssh.ParsePrivateKeyWithPassphrase(key, []byte(k.Passphrase))
-	} else {
-		signer, err = ssh.ParsePrivateKey(key)
-	}
-	if err != nil {
-		return nil
-	}
-	return ssh.PublicKeys(signer)
-}
-
 // SCPHost represents a remote host that supports SCP file transfer
 type SCPHost struct {
-	Username    string
-	Auth        AuthMethod
-	Hostname    string
-	Port        int
-	RemotePath  string
+	conf *valueobject.SCPConfig
+	auth host.AuthMethod
+
 	sshClient   *ssh.Client
 	logger      loggers.Logger
 	sessionID   string
@@ -85,27 +43,11 @@ func (h *SCPHost) newSCPFields(operation string) *loggers.LogFields {
 }
 
 // NewSCPHost creates a new SCPHost instance with password authentication
-func NewSCPHost(username, password, hostname string, port int, remotePath string) *SCPHost {
+func NewSCPHost(config *valueobject.SCPConfig, auth host.AuthMethod) *SCPHost {
 	return &SCPHost{
-		Username:    username,
-		Auth:        PasswordAuth{Password: password},
-		Hostname:    hostname,
-		Port:        port,
-		RemotePath:  remotePath,
-		logger:      loggers.NewDefault(),
-		sessionID:   identity.GenerateSessionID(),
-		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
-	}
-}
+		conf: config,
+		auth: auth,
 
-// NewSCPHostWithKey creates a new SCPHost instance with key authentication
-func NewSCPHostWithKey(username, privateKeyPath, hostname string, port int, remotePath string, passphrase string) *SCPHost {
-	return &SCPHost{
-		Username:    username,
-		Auth:        KeyAuth{PrivateKeyPath: privateKeyPath, Passphrase: passphrase},
-		Hostname:    hostname,
-		Port:        port,
-		RemotePath:  remotePath,
 		logger:      loggers.NewDefault(),
 		sessionID:   identity.GenerateSessionID(),
 		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
@@ -120,12 +62,12 @@ func (h *SCPHost) Connect() error {
 	fields := h.newSCPFields("connect")
 	// Mask sensitive information in logs
 	authType := "key"
-	if _, ok := h.Auth.(PasswordAuth); ok {
+	if _, ok := h.auth.(*valueobject.PasswordAuth); ok {
 		authType = "password"
 	}
 	fields.AddFields(
-		logg.Field{Name: "port", Value: h.Port},
-		logg.Field{Name: "user", Value: h.maskUsername(h.Username)},
+		logg.Field{Name: "port", Value: h.conf.Port},
+		logg.Field{Name: "user", Value: h.maskUsername(h.conf.Username)},
 		logg.Field{Name: "authType", Value: authType},
 	)
 
@@ -138,15 +80,15 @@ func (h *SCPHost) Connect() error {
 	}
 
 	config := &ssh.ClientConfig{
-		User: h.Username,
+		User: h.conf.Username,
 		Auth: []ssh.AuthMethod{
-			h.Auth.SSHAuthMethod(),
+			h.auth.SSHAuthMethod(),
 		},
 		HostKeyCallback: hostKeyCallback,
 		Timeout:         30 * time.Second,
 	}
 
-	addr := fmt.Sprintf("%s:%d", h.Hostname, h.Port)
+	addr := fmt.Sprintf("%s:%d", h.conf.Hostname, h.conf.Port)
 	client, err := ssh.Dial("tcp", addr, config)
 	if err != nil {
 		connLog.WithFields(fields).WithError(err).Logf("Failed to establish SSH connection")
@@ -250,12 +192,12 @@ func (h *SCPHost) UploadDirectory(localPath string) error {
 	fields := h.newSCPFields("upload_directory")
 	fields.AddFields(
 		logg.Field{Name: "localPath", Value: localPath},
-		logg.Field{Name: "remotePath", Value: h.RemotePath},
+		logg.Field{Name: "remotePath", Value: h.conf.RemotePath},
 	)
 	uploadLog.WithFields(fields).Logf("Starting directory upload")
 
 	// Create base remote directory
-	if err := h.CreateRemoteDirectory(h.RemotePath); err != nil {
+	if err := h.CreateRemoteDirectory(h.conf.RemotePath); err != nil {
 		uploadLog.WithFields(fields).WithError(err).Logf("Failed to create base remote directory")
 		return errors.Wrap(err, "failed to create base remote directory")
 	}
@@ -280,7 +222,7 @@ func (h *SCPHost) UploadDirectory(localPath string) error {
 		}
 
 		// Construct remote path
-		remotePath := filepath.Join(h.RemotePath, relPath)
+		remotePath := filepath.Join(h.conf.RemotePath, relPath)
 
 		fileFields := h.newSCPFields("process_file")
 		fileFields.AddFields(
@@ -408,27 +350,32 @@ func (h *SCPHost) SetLogger(logger loggers.Logger) {
 }
 
 // Deploy implements the Deployer interface
-func (h *SCPHost) Deploy(localPath string) error {
+func (h *SCPHost) Deploy(localPath string) (host.Result, error) {
 	deployLog := h.logger.Info()
 	defer loggers.TimeTrackf(deployLog, time.Now(), nil, "")
+
+	result := valueobject.SCPResult{
+		ServerPath: h.conf.RemotePath,
+		HostName:   h.conf.Hostname,
+	}
 
 	fields := h.newSCPFields("deploy")
 	fields.AddFields(
 		logg.Field{Name: "localPath", Value: localPath},
-		logg.Field{Name: "remotePath", Value: h.RemotePath},
+		logg.Field{Name: "remotePath", Value: h.conf.RemotePath},
 	)
 	deployLog.WithFields(fields).Logf("Starting SCP deployment")
 
 	if err := h.Connect(); err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to establish connection")
-		return errors.Wrap(err, "deployment failed")
+		return result, errors.Wrap(err, "deployment failed")
 	}
 	defer h.Close()
 
 	fileInfo, err := os.Stat(localPath)
 	if err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to get file info")
-		return errors.Wrapf(err, "failed to get file info for %s", localPath)
+		return result, errors.Wrapf(err, "failed to get file info for %s", localPath)
 	}
 
 	fields.AddFields(
@@ -440,18 +387,19 @@ func (h *SCPHost) Deploy(localPath string) error {
 		deployLog.WithFields(fields).Logf("Uploading directory")
 		if err := h.UploadDirectory(localPath); err != nil {
 			deployLog.WithFields(fields).WithError(err).Logf("Failed to upload directory")
-			return errors.Wrap(err, "failed to upload directory")
+			return result, errors.Wrap(err, "failed to upload directory")
 		}
 	} else {
 		deployLog.WithFields(fields).Logf("Uploading single file")
-		if err := h.uploadFileWithPath(localPath, filepath.Join(h.RemotePath, filepath.Base(localPath))); err != nil {
+		if err := h.uploadFileWithPath(localPath, filepath.Join(h.conf.RemotePath, filepath.Base(localPath))); err != nil {
 			deployLog.WithFields(fields).WithError(err).Logf("Failed to upload file")
-			return errors.Wrap(err, "failed to upload file")
+			return result, errors.Wrap(err, "failed to upload file")
 		}
 	}
 
+	result.Message = "Successfully deployed via SCP"
 	deployLog.WithFields(fields).Logf("SCP deployment completed successfully")
-	return nil
+	return result, nil
 }
 
 // createTarball creates a compressed tar archive of the source directory
@@ -561,7 +509,7 @@ func (h *SCPHost) extractTarball(remoteTarPath string) error {
 	}
 	defer session.Close()
 
-	cmd := fmt.Sprintf("cd %s && tar xzf %s && rm %s", h.RemotePath, filepath.Base(remoteTarPath), filepath.Base(remoteTarPath))
+	cmd := fmt.Sprintf("cd %s && tar xzf %s && rm %s", h.conf.RemotePath, filepath.Base(remoteTarPath), filepath.Base(remoteTarPath))
 	fields.AddField("command", cmd)
 	extractLog.WithFields(fields).Logf("Executing extraction command")
 
@@ -575,27 +523,32 @@ func (h *SCPHost) extractTarball(remoteTarPath string) error {
 }
 
 // DeployWithTar implements the Deployer interface using tar compression
-func (h *SCPHost) DeployWithTar(localPath string) error {
+func (h *SCPHost) DeployWithTar(localPath string) (host.Result, error) {
 	deployLog := h.logger.Info()
 	defer loggers.TimeTrackf(deployLog, time.Now(), nil, "")
+
+	result := valueobject.SCPResult{
+		ServerPath: h.conf.RemotePath,
+		HostName:   h.conf.Hostname,
+	}
 
 	fields := h.newSCPFields("deploy_with_tar")
 	fields.AddFields(
 		logg.Field{Name: "localPath", Value: localPath},
-		logg.Field{Name: "remotePath", Value: h.RemotePath},
+		logg.Field{Name: "remotePath", Value: h.conf.RemotePath},
 	)
 	deployLog.WithFields(fields).Logf("Starting SCP deployment with tar")
 
 	if err := h.Connect(); err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to establish connection")
-		return errors.Wrap(err, "deployment failed")
+		return result, errors.Wrap(err, "deployment failed")
 	}
 	defer h.Close()
 
 	fileInfo, err := os.Stat(localPath)
 	if err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to get file info")
-		return errors.Wrapf(err, "failed to get file info for %s", localPath)
+		return result, errors.Wrapf(err, "failed to get file info for %s", localPath)
 	}
 
 	fields.AddFields(
@@ -608,32 +561,33 @@ func (h *SCPHost) DeployWithTar(localPath string) error {
 		return h.Deploy(localPath)
 	}
 
-	if err := h.CreateRemoteDirectory(h.RemotePath); err != nil {
+	if err := h.CreateRemoteDirectory(h.conf.RemotePath); err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to create remote directory")
-		return errors.Wrap(err, "failed to create remote directory")
+		return result, errors.Wrap(err, "failed to create remote directory")
 	}
 
 	tarPath, err := h.createTarball(localPath)
 	if err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to create tarball")
-		return errors.Wrap(err, "failed to create tarball")
+		return result, errors.Wrap(err, "failed to create tarball")
 	}
 	defer os.Remove(tarPath)
 
 	fields.AddField("tarPath", tarPath)
 	deployLog.WithFields(fields).Logf("Uploading tarball")
 
-	remoteTarPath := filepath.Join(h.RemotePath, filepath.Base(tarPath))
+	remoteTarPath := filepath.Join(h.conf.RemotePath, filepath.Base(tarPath))
 	if err := h.uploadFileWithPath(tarPath, remoteTarPath); err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to upload tarball")
-		return errors.Wrap(err, "failed to upload tarball")
+		return result, errors.Wrap(err, "failed to upload tarball")
 	}
 
 	if err := h.extractTarball(remoteTarPath); err != nil {
 		deployLog.WithFields(fields).WithError(err).Logf("Failed to extract tarball")
-		return errors.Wrap(err, "failed to extract tarball")
+		return result, errors.Wrap(err, "failed to extract tarball")
 	}
 
+	result.Message = "Successfully deployed via SCP with tar compression"
 	deployLog.WithFields(fields).Logf("SCP deployment with tar completed successfully")
-	return nil
+	return result, nil
 }

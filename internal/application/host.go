@@ -11,31 +11,30 @@ import (
 )
 
 func DeployToNetlify(target string, deployment *valueobject.Deployment, domain *valueobject.Domain, token string) error {
-	host, err := factory.NewHost(nil)
-	if err != nil {
-		return err
-	}
+	var host *hostEntity.Host
+	var err error
 
 	if deployment.IsNewDeployment() {
-		siteID, err := host.Netlify.DeployNewNetlifySite(token, target, deployment.SiteName, domain.FullDomain())
-		if err != nil {
-			return err
-		}
-		deployment.SiteID = siteID
-
-		return nil
+		host, err = factory.NewNetlifyHostForNewSite(token, deployment.SiteName, domain.FullDomain())
+	} else {
+		host, err = factory.NewNetlifyHostForExistingSite(token, deployment.SiteID)
 	}
 
-	_, err = host.Netlify.DeployExistingNetlifySite(token, target, deployment.SiteID)
 	if err != nil {
 		return err
 	}
+
+	result, err := host.Deploy(target)
+	if err != nil {
+		return err
+	}
+	deployment.SiteID = result.GetID()
 
 	return nil
 }
 
 func PreviewSiteRecycle(cs *contentEntity.Content, token string) {
-	host, err := factory.NewHost(nil)
+	host, err := factory.NewNetlifyHost()
 	if err != nil {
 		logger.Errorf("Failed to create host when recycle preview sites: %v", err)
 		return

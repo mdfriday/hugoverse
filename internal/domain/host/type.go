@@ -1,18 +1,26 @@
 package host
 
-// Deployer defines the interface for deploying files
-type Deployer interface {
-	Deploy(localPath string) error
+import "golang.org/x/crypto/ssh"
+
+// Result is the interface that wraps the basic deployment result methods
+type Result interface {
+	// GetID returns the unique identifier of the deployment
+	GetID() string
+	// GetURL returns the URL where the deployment can be accessed
+	GetURL() string
+	// GetMessage returns any additional information about the deployment
+	GetMessage() string
 }
 
-// SCPConfig defines the configuration for SCP deployment
-type SCPConfig struct {
-	Username     string
-	Password     string
-	PrivateKey   string // SSH private key content
-	Hostname     string
-	Port         int
-	RemotePath   string
+// Deployer is the interface that wraps the basic Deploy method
+type Deployer interface {
+	// Deploy deploys the content from localPath and returns a Result
+	Deploy(localPath string) (Result, error)
+}
+
+// AuthMethod represents different authentication methods
+type AuthMethod interface {
+	SSHAuthMethod() ssh.AuthMethod
 }
 
 // SCPDeployer defines the interface for SCP deployment
