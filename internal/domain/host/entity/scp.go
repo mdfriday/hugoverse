@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
+	"github.com/mdfriday/hugoverse/pkg/fs"
 	"io"
 	"os"
 	"path/filepath"
@@ -411,7 +412,7 @@ func (h *SCPHost) Deploy(localPath string) (host.Result, error) {
 			deployLog.WithFields(fields).WithError(err).Logf("Failed to upload directory")
 			return result, errors.Wrap(err, "failed to upload directory")
 		}
-		result.Size = h.getTotalSize(localPath)
+		result.Size = fs.GetTotalSize(localPath)
 	} else {
 		deployLog.WithFields(fields).Logf("Uploading single file")
 		if err := h.uploadFileWithPath(localPath, filepath.Join(h.conf.RemotePath, filepath.Base(localPath))); err != nil {
@@ -424,21 +425,6 @@ func (h *SCPHost) Deploy(localPath string) (host.Result, error) {
 	result.Message = "Successfully deployed via SCP"
 	deployLog.WithFields(fields).Logf("SCP deployment completed successfully")
 	return result, nil
-}
-
-// getTotalSize calculates the total size of a directory
-func (h *SCPHost) getTotalSize(path string) int64 {
-	var totalSize int64
-	filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if !info.IsDir() {
-			totalSize += info.Size()
-		}
-		return nil
-	})
-	return totalSize
 }
 
 // createTarball creates a compressed tar archive of the source directory

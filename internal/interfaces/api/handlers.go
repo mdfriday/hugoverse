@@ -21,7 +21,7 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/preview", s.wrapContentHandler(s.handler.PreviewContentHandler))
 	s.mux.HandleFunc("/api/build", s.wrapContentHandler(s.handler.BuildContentHandler))
 	s.mux.HandleFunc("/api/deploy", s.wrapContentHandler(s.handler.DeployContentHandler))
-	s.mux.HandleFunc("/api/deploy/progress", s.wrapContentHandler(s.handler.DeployProgressHandler))
+	s.mux.HandleFunc("/api/deploy/progress", s.handler.DeployProgressHandler)
 }
 
 func (s *Server) wrapContentHandler(handler http.HandlerFunc) http.HandlerFunc {

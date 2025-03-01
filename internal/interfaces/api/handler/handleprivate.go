@@ -3,10 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
-	"github.com/mdfriday/hugoverse/internal/domain/host"
+	"github.com/mdfriday/hugoverse/pkg/fs"
 	"net/http"
 	"time"
+
+	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
+	"github.com/mdfriday/hugoverse/internal/domain/host"
 
 	"github.com/mdfriday/hugoverse/internal/domain/host/factory"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
@@ -40,6 +42,7 @@ type DeploymentInfo struct {
 	Password   string
 	Host       string
 	Port       string
+	LocalPath  string
 	RemotePath string
 	Status     string
 }
@@ -102,6 +105,26 @@ func (s *Handler) deployPrivateHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
+	sc, err := s.contentApp.GetContentObject(t, id)
+	if err != nil {
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(fmt.Errorf("error GetContentObject: %v", err)).
+			Logf("t: %s, id: %s", t, id)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	site, ok := sc.(*valueobject.Site)
+	if !ok {
+		s.log.Error().
+			WithFields(loggers.GetGlobalFields()).
+			WithError(fmt.Errorf("error GetContentObject: %v", err)).
+			Logf("t: %s, id: %s", t, id)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
 	// Generate a unique session ID for this deployment
 	sessionID := fmt.Sprintf("deploy-%d", time.Now().UnixNano())
 
@@ -111,6 +134,7 @@ func (s *Handler) deployPrivateHandler(res http.ResponseWriter, req *http.Reques
 		Password:   password,
 		Host:       address,
 		Port:       port,
+		LocalPath:  site.WorkingDir,
 		RemotePath: remotePath,
 		Status:     "pending",
 	})
@@ -119,6 +143,7 @@ func (s *Handler) deployPrivateHandler(res http.ResponseWriter, req *http.Reques
 	response := map[string]string{
 		"session_id": sessionID,
 		"status":     "initialized",
+		"size":       fmt.Sprintf("%d", fs.GetTotalSize(site.WorkingDir)),
 	}
 
 	jsonResponse, err := json.Marshal(response)
@@ -144,14 +169,10 @@ func (s *Handler) deployPrivateHandler(res http.ResponseWriter, req *http.Reques
 
 // DeployProgressHandler handles SSE connection for deployment progress
 func (s *Handler) DeployProgressHandler(res http.ResponseWriter, req *http.Request) {
-	q := req.URL.Query()
-	id := q.Get("id")
-	t := q.Get("type")
-
 	loggers.SetGlobalFields(s.newLogFields("deploy progress"))
 
 	// Get session ID from query parameters
-	sessionID := q.Get("session_id")
+	sessionID := req.URL.Query().Get("session_id")
 	if sessionID == "" {
 		s.log.Error().
 			WithFields(loggers.GetGlobalFields()).
@@ -182,21 +203,6 @@ func (s *Handler) DeployProgressHandler(res http.ResponseWriter, req *http.Reque
 		return
 	}
 
-	sc, err := s.contentApp.GetContentObject(t, id)
-	if err != nil {
-		s.log.Error().
-			WithFields(loggers.GetGlobalFields()).
-			WithError(fmt.Errorf("error GetContentObject: %v", err)).
-			Logf("t: %s, id: %s", t, id)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	var target string
-	if site, ok := sc.(*valueobject.Site); ok {
-		target = site.WorkingDir
-	}
-
 	scpHost, err := factory.NewPasswordScpHost(
 		deployInfo.Username, deployInfo.Password,
 		deployInfo.Host, deployInfo.Port,
@@ -213,18 +219,21 @@ func (s *Handler) DeployProgressHandler(res http.ResponseWriter, req *http.Reque
 
 	sseWriter := NewSSEWriter(res)
 
-	// Create a channel for progress updates
+	// Create channels for communication
 	progressChan := make(chan *Progress)
-	defer close(progressChan)
+	doneChan := make(chan struct{})
 
 	// Create a channel to detect client disconnection
 	closeNotify := req.Context().Done()
 
-	// Start a goroutine to send progress updates
+	// Start a goroutine to handle SSE events
 	go func() {
 		for {
 			select {
-			case progress := <-progressChan:
+			case progress, ok := <-progressChan:
+				if !ok {
+					return
+				}
 				event := &ProgressEvent{
 					Event: "progress",
 					Data:  progress,
@@ -232,28 +241,35 @@ func (s *Handler) DeployProgressHandler(res http.ResponseWriter, req *http.Reque
 				sseWriter.SendEvent(event)
 			case <-closeNotify:
 				return
+			case <-doneChan:
+				return
 			}
 		}
 	}()
 
+	// Set up progress callback
 	scpHost.SetProgress(func(current, total int64) {
-		progress := &Progress{
+		// Try to send progress update, but don't block if channels are closed
+		select {
+		case progressChan <- &Progress{
 			Current: current,
 			Total:   total,
 			Status:  "uploading",
+		}:
+		case <-doneChan:
+		case <-closeNotify:
 		}
-		progressChan <- progress
 	})
 
 	// Start deployment in a goroutine
+	deployDone := make(chan struct{})
 	go func() {
-		defer func() {
-			s.deployments.Delete(sessionID)
-			close(progressChan)
-		}()
+		defer close(deployDone)
+		defer close(progressChan)
 
 		deployInfo.Status = "in_progress"
-		result, err := scpHost.Deploy(target)
+		result, err := scpHost.Deploy(deployInfo.LocalPath)
+
 		if err != nil {
 			s.log.Error().
 				WithFields(loggers.GetGlobalFields()).
@@ -285,6 +301,17 @@ func (s *Handler) DeployProgressHandler(res http.ResponseWriter, req *http.Reque
 		deployInfo.Status = "completed"
 	}()
 
-	// Keep the connection alive until client disconnects
-	<-closeNotify
+	// Wait for either deployment completion or client disconnection
+	select {
+	case <-closeNotify:
+		// Client disconnected, clean up
+		close(doneChan)
+		<-deployDone // Wait for deployment goroutine to finish
+	case <-deployDone:
+		// Deployment completed, clean up
+		close(doneChan)
+	}
+
+	// Clean up deployment info
+	s.deployments.Delete(sessionID)
 }

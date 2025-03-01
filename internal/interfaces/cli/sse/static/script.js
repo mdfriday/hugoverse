@@ -59,10 +59,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return isValid;
     }
 
-    function startProgressMonitoring(sessionId) {
+    function startProgressMonitoring(sessionId, totalSize) {
         if (eventSource) {
             eventSource.close();
         }
+
+        let accumulatedBytes = 0;  // Track total bytes transferred
+        let lastFileProgress = 0;   // Track last progress of current file
 
         // Create SSE connection with session ID
         eventSource = new EventSource(`http://localhost:1314/api/deploy/progress?session_id=${sessionId}`, {
@@ -78,19 +81,39 @@ document.addEventListener('DOMContentLoaded', () => {
             switch (data.event) {
                 case 'progress':
                     statusText.textContent = 'Uploading...';
-                    updateProgress(data.data.current, data.data.total);
+                    // Calculate incremental progress
+                    const currentFileProgress = data.data.current;
+                    const increment = currentFileProgress - lastFileProgress;
+                    
+                    if (increment > 0) {
+                        accumulatedBytes += increment;
+                        lastFileProgress = currentFileProgress;
+                    }
+
+                    // If file is complete, reset lastFileProgress for next file
+                    if (data.data.current === data.data.total) {
+                        lastFileProgress = 0;
+                    }
+
+                    // Update progress with accumulated bytes against total size
+                    updateProgress(accumulatedBytes, totalSize);
                     break;
 
                 case 'complete':
-                    statusText.textContent = 'Deployment completed!';
-                    updateProgress(data.data.current, data.data.total);
+                    const message = data.data.message || 'Deployment completed!';
+                    statusText.textContent = message;
+                    if (data.data.url) {
+                        statusText.textContent += ` URL: ${data.data.url}`;
+                    }
+                    // Ensure progress shows 100% on completion
+                    updateProgress(totalSize, totalSize);
                     eventSource.close();
                     startButton.disabled = false;
                     currentSessionId = null;
                     break;
 
                 case 'error':
-                    statusText.textContent = 'Deployment failed!';
+                    statusText.textContent = data.data.message || 'Deployment failed!';
                     eventSource.close();
                     startButton.disabled = false;
                     currentSessionId = null;
@@ -126,7 +149,9 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             // Create FormData
             const formData = new FormData();
-            formData.append('host_name', hostInput.value);
+            formData.append('host_name', 'Private'); // 固定为 Private 类型
+            formData.append('host', hostInput.value);
+            formData.append('port', '22');
             formData.append('host_token', tokenInput.value);
             formData.append('username', usernameInput.value);
             formData.append('local_path', localPathInput.value);
@@ -142,7 +167,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const arrayBufferBody = await formDataToArrayBuffer(formData, boundary);
 
             // Send POST request to initialize deployment
-            const response = await fetch('http://localhost:1314/api/deploy', {
+            const response = await fetch('http://localhost:1314/api/deploy?type=Site&id=26', {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${tokenInput.value}`,
@@ -157,15 +182,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Get session ID from response
             const result = await response.json();
-            if (!result.session_id) {
+            if (!result.data[0].session_id) {
                 throw new Error('No session ID received from server');
             }
 
-            currentSessionId = result.session_id;
+            currentSessionId = result.data[0].session_id
             statusText.textContent = 'Deployment initialized, starting file transfer...';
 
             // Start monitoring progress with the received session ID
-            startProgressMonitoring(currentSessionId);
+            startProgressMonitoring(currentSessionId, result.data[0].size);
 
         } catch (error) {
             console.error('Deploy Error:', error);
