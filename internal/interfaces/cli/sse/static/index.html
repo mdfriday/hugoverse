@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE Test Page</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <h1>SSE Deploy Progress Test</h1>
+        <div class="form-container">
+            <div class="form-group">
+                <label for="token">Authorization Token:</label>
+                <input type="password" id="token" class="form-input" placeholder="Enter your token">
+            </div>
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" class="form-input" placeholder="Enter username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" class="form-input" placeholder="Enter password">
+            </div>
+            <div class="form-group">
+                <label for="host">Remote Host:</label>
+                <input type="text" id="host" class="form-input" placeholder="Enter remote host">
+            </div>
+            <div class="form-group">
+                <label for="localPath">Local Path:</label>
+                <input type="text" id="localPath" class="form-input" placeholder="Enter local folder path">
+            </div>
+            <div class="form-group">
+                <label for="remotePath">Remote Path:</label>
+                <input type="text" id="remotePath" class="form-input" placeholder="Enter remote path">
+            </div>
+        </div>
+        <div class="progress-container">
+            <div class="progress-bar">
+                <div class="progress" id="progress"></div>
+            </div>
+            <div class="status" id="status">Ready to deploy</div>
+            <div class="details" id="details"></div>
+        </div>
+        <button id="startBtn" class="button">Start Deploy Test</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html> 

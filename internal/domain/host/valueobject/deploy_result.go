@@ -24,11 +24,16 @@ func (r DeployResult) GetMessage() string {
 	return r.Message
 }
 
+func (r DeployResult) GetSize() int64 {
+	return 0
+}
+
 // SCPResult represents the result of an SCP deployment
 type SCPResult struct {
 	ServerPath string
 	HostName   string
 	Message    string
+	Size       int64
 }
 
 // GetID implements Result interface
@@ -44,4 +49,8 @@ func (r SCPResult) GetURL() string {
 // GetMessage implements Result interface
 func (r SCPResult) GetMessage() string {
 	return r.Message
+}
+
+func (r SCPResult) GetSize() int64 {
+	return r.Size
 }

@@ -10,6 +10,7 @@ type Result interface {
 	GetURL() string
 	// GetMessage returns any additional information about the deployment
 	GetMessage() string
+	GetSize() int64
 }
 
 // Deployer is the interface that wraps the basic Deploy method

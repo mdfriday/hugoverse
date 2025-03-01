@@ -32,6 +32,7 @@ type SCPHost struct {
 	logger      loggers.Logger
 	sessionID   string
 	HostKeyFile string // Path to known_hosts file
+	onProgress  func(current, total int64)
 }
 
 // newSCPFields creates a new LogFields instance with common fields
@@ -259,6 +260,18 @@ func (h *SCPHost) safeLogPath(path string) string {
 	return path
 }
 
+// SetProgress sets the progress callback function
+func (h *SCPHost) SetProgress(callback func(current, total int64)) {
+	h.onProgress = callback
+}
+
+// OnProgress implements the ProgressTracker interface
+func (h *SCPHost) OnProgress(current, total int64) {
+	if h.onProgress != nil {
+		h.onProgress(current, total)
+	}
+}
+
 // uploadFileWithPath uploads a single file to the specified remote path
 func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 	if h.sshClient == nil {
@@ -320,8 +333,17 @@ func (h *SCPHost) uploadFileWithPath(localPath, remotePath string) error {
 	// Send file metadata
 	fmt.Fprintf(w, "C%04o %d %s\n", fileInfo.Mode().Perm(), fileInfo.Size(), fileName)
 
+	// Create progress reader
+	reader := &valueobject.ProgressReader{
+		Reader: file,
+		Total:  fileInfo.Size(),
+		OnProgress: func(current, total int64) {
+			h.OnProgress(current, total)
+		},
+	}
+
 	// Copy file content
-	written, err := io.Copy(w, file)
+	written, err := io.Copy(w, reader)
 	if err != nil {
 		uploadLog.WithFields(fields).WithError(err).Logf("Failed to copy file content")
 		return errors.Wrapf(err, "failed to copy file (wrote %d bytes)", written)
@@ -389,17 +411,34 @@ func (h *SCPHost) Deploy(localPath string) (host.Result, error) {
 			deployLog.WithFields(fields).WithError(err).Logf("Failed to upload directory")
 			return result, errors.Wrap(err, "failed to upload directory")
 		}
+		result.Size = h.getTotalSize(localPath)
 	} else {
 		deployLog.WithFields(fields).Logf("Uploading single file")
 		if err := h.uploadFileWithPath(localPath, filepath.Join(h.conf.RemotePath, filepath.Base(localPath))); err != nil {
 			deployLog.WithFields(fields).WithError(err).Logf("Failed to upload file")
 			return result, errors.Wrap(err, "failed to upload file")
 		}
+		result.Size = fileInfo.Size()
 	}
 
 	result.Message = "Successfully deployed via SCP"
 	deployLog.WithFields(fields).Logf("SCP deployment completed successfully")
 	return result, nil
+}
+
+// getTotalSize calculates the total size of a directory
+func (h *SCPHost) getTotalSize(path string) int64 {
+	var totalSize int64
+	filepath.Walk(path, func(filePath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+	return totalSize
 }
 
 // createTarball creates a compressed tar archive of the source directory

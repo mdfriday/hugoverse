@@ -9,6 +9,7 @@ import (
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/database"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"html/template"
+	"sync"
 )
 
 type Handler struct {
@@ -23,6 +24,8 @@ type Handler struct {
 	adminView  *admin.View
 
 	auth *auth.Auth
+
+	deployments sync.Map // stores deployment sessions
 }
 
 func New(log loggers.Logger, db *database.Database,
