@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/mdfriday/hugoverse/pkg/fs"
 	"net/http"
+	"path"
 	"time"
 
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
@@ -134,7 +135,7 @@ func (s *Handler) deployPrivateHandler(res http.ResponseWriter, req *http.Reques
 		Password:   password,
 		Host:       address,
 		Port:       port,
-		LocalPath:  site.WorkingDir,
+		LocalPath:  path.Join(site.WorkingDir, "public"),
 		RemotePath: remotePath,
 		Status:     "pending",
 	})
