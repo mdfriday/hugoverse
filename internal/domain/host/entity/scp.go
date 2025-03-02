@@ -4,12 +4,13 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"fmt"
-	"github.com/mdfriday/hugoverse/pkg/fs"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mdfriday/hugoverse/pkg/fs"
 
 	"github.com/mdfriday/hugoverse/internal/domain/host"
 	"github.com/mdfriday/hugoverse/internal/domain/host/valueobject"
@@ -34,6 +35,8 @@ type SCPHost struct {
 	sessionID   string
 	HostKeyFile string // Path to known_hosts file
 	onProgress  func(current, total int64)
+	// StrictHostKeyChecking controls whether to strictly verify host keys
+	StrictHostKeyChecking bool
 }
 
 // newSCPFields creates a new LogFields instance with common fields
@@ -50,9 +53,10 @@ func NewSCPHost(config *valueobject.SCPConfig, auth host.AuthMethod) *SCPHost {
 		conf: config,
 		auth: auth,
 
-		logger:      loggers.NewDefault(),
-		sessionID:   identity.GenerateSessionID(),
-		HostKeyFile: filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
+		logger:                loggers.NewDefault(),
+		sessionID:             identity.GenerateSessionID(),
+		HostKeyFile:           filepath.Join(os.Getenv("HOME"), ".ssh", "known_hosts"),
+		StrictHostKeyChecking: false, // Default to false for easier deployment to various servers
 	}
 }
 
@@ -110,18 +114,48 @@ func (h *SCPHost) maskUsername(username string) string {
 	return username[:2] + "***"
 }
 
+// SetStrictHostKeyChecking enables or disables strict host key checking
+func (h *SCPHost) SetStrictHostKeyChecking(strict bool) {
+	h.StrictHostKeyChecking = strict
+}
+
 // getHostKeyCallback returns a callback for host key verification
 func (h *SCPHost) getHostKeyCallback() (ssh.HostKeyCallback, error) {
 	fields := h.newSCPFields("host_key_verification")
 	fields.AddField("hostKeyFile", h.HostKeyFile)
+	fields.AddField("strictHostKeyChecking", h.StrictHostKeyChecking)
+
+	// By default we use insecure host key verification for easier deployment
+	if !h.StrictHostKeyChecking {
+		h.logger.Info().WithFields(fields).Logf("Strict host key checking disabled for easier deployment")
+		return ssh.InsecureIgnoreHostKey(), nil
+	}
 
 	if h.HostKeyFile == "" {
 		h.logger.Warn().WithFields(fields).Logf("No host key file specified, using insecure host key verification")
 		return ssh.InsecureIgnoreHostKey(), nil
 	}
 
+	// Ensure the .ssh directory exists
+	sshDir := filepath.Dir(h.HostKeyFile)
+	if err := os.MkdirAll(sshDir, 0700); err != nil {
+		h.logger.Error().WithFields(fields).WithError(err).Logf("Failed to create .ssh directory")
+		return nil, errors.Wrap(err, "failed to create .ssh directory")
+	}
+
+	// Try to load the known_hosts file
 	hostKeyCallback, err := knownhosts.New(h.HostKeyFile)
 	if err != nil {
+		// If the file doesn't exist and strict checking is enabled, create an empty one
+		if os.IsNotExist(err) {
+			h.logger.Info().WithFields(fields).Logf("known_hosts file not found, creating empty file")
+			if _, err := os.Create(h.HostKeyFile); err != nil {
+				h.logger.Error().WithFields(fields).WithError(err).Logf("Failed to create known_hosts file")
+				return nil, errors.Wrap(err, "failed to create known_hosts file")
+			}
+			// Return InsecureIgnoreHostKey since the file is empty anyway
+			return ssh.InsecureIgnoreHostKey(), nil
+		}
 		h.logger.Error().WithFields(fields).WithError(err).Logf("Failed to load known_hosts file")
 		return nil, errors.Wrap(err, "failed to load known_hosts file")
 	}
