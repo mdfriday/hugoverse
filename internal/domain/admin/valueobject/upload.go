@@ -47,7 +47,7 @@ func (f *FileUpload) MarshalEditor() ([]byte, error) {
 			}(),
 		},
 		editor.Field{
-			View: editor.File("RelPath", f, map[string]string{
+			View: editor.File("Path", f, map[string]string{
 				"label":       "File Upload",
 				"placeholder": "Upload the file here",
 			}),

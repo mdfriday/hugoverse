@@ -32,7 +32,7 @@ func (s *Resource) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
-			View: editor.File("Size", s, map[string]string{
+			View: editor.Input("Size", s, map[string]string{
 				"label":       "Size",
 				"placeholder": "Upload the size here",
 			}),
