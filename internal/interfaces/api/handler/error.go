@@ -55,3 +55,25 @@ func extractErrorMessage(errMsg string) string {
 	}
 	return errMsg
 }
+
+// Error is the message and http status code to return
+type Error struct {
+	Message string
+	Code    int
+}
+
+// BadRequest is a convenience function for returning a bad request error
+func BadRequest(message string) *Error {
+	return &Error{
+		Message: message,
+		Code:    http.StatusBadRequest,
+	}
+}
+
+// InternalServerError is a convenience function for returning an internal server error
+func InternalServerError() *Error {
+	return &Error{
+		Message: "Something went wrong",
+		Code:    http.StatusInternalServerError,
+	}
+}

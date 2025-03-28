@@ -15,6 +15,15 @@ func (s *Server) registerContentHandler() {
 
 	s.mux.HandleFunc("/api/hash", s.wrapContentHandler(s.handler.HashHandler))
 
+	s.mux.HandleFunc("/api/images", s.wrapImageHandler(s.handler.ImagesHandler))
+	s.mux.HandleFunc("/api/image", s.wrapImageHandler(s.handler.ImageHandler))
+	s.mux.HandleFunc("/image/{size:[0-9]+}{extension:(?:\\..*)?}",
+		s.wrapImageHandler(s.handler.ImageRandomHandler))
+	s.mux.HandleFunc("/image/{width:[0-9]+}/{height:[0-9]+}{extension:(?:\\..*)?}",
+		s.wrapImageHandler(s.handler.ImageRandomHandler))
+	s.mux.HandleFunc("/image/id/{id}/{width:[0-9]+}/{height:[0-9]+}{extension:(?:\\..*)?}",
+		s.wrapImageHandler(s.handler.ImageDummyHandler))
+
 	s.mux.HandleFunc("/api/search", s.wrapContentHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/search2", s.wrapContentHandler(s.handler.SearchContentHandler2))
 
@@ -30,6 +39,10 @@ func (s *Server) wrapContentHandler(handler http.HandlerFunc) http.HandlerFunc {
 			s.comp.Gzip(
 				s.db.Open(
 					s.auth.Check(handler)))))
+}
+
+func (s *Server) wrapImageHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(s.comp.Gzip(handler))))
 }
 
 func (s *Server) registerUserHandler() {

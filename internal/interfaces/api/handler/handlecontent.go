@@ -24,7 +24,7 @@ func (s *Handler) ApiContentsHandler(res http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	it, ok := s.contentApp.AllContentTypes()[t]
+	it, ok := s.contentApp.AllTypes()[t]
 	if !ok {
 		res.WriteHeader(http.StatusNotFound)
 		return

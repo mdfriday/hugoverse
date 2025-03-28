@@ -173,14 +173,14 @@ func (s *Handler) SearchContentHandler(res http.ResponseWriter, req *http.Reques
 	qs := req.URL.Query()
 	t := qs.Get("type")
 	if t == "" {
-		s.log.Printf("Type must be set")
+		s.log.Errorf("Type must be set")
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	it, ok := s.contentApp.AllContentTypes()[t]
+	it, ok := s.contentApp.AllTypes()[t]
 	if !ok {
-		s.log.Printf("Type %s not found", t)
+		s.log.Errorf("Type %s not found", t)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -190,7 +190,7 @@ func (s *Handler) SearchContentHandler(res http.ResponseWriter, req *http.Reques
 	}
 
 	q, err := url.QueryUnescape(qs.Get("q"))
-	s.log.Println("Query: " + q)
+	s.log.Debugln("Query: " + q)
 	if err != nil {
 		s.log.Errorf("Error unescaping query: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)

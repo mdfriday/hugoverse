@@ -58,6 +58,7 @@ func prepareUserTypes(c *entity.Content) {
 func prepareAdminTypes(c *entity.Content) {
 	c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
 	c.AdminTypes["Preview"] = func() interface{} { return new(valueobject.Preview) }
+	c.AdminTypes["Image"] = func() interface{} { return new(valueobject.Image) }
 }
 
 func NewContentWithServices(repo repository.Repository, services content.Services, dirService content.DirService) *entity.Content {

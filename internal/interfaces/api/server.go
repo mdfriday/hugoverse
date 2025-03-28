@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"github.com/gorilla/mux"
 	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/factory"
@@ -37,7 +38,7 @@ const (
 )
 
 type Server struct {
-	mux     *http.ServeMux
+	mux     *mux.Router
 	Log     loggers.Logger
 	LogFile *os.File
 
@@ -68,7 +69,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 	}
 
 	s := &Server{
-		mux:          http.NewServeMux(),
+		mux:          mux.NewRouter(),
 		Bind:         "localhost",
 		HttpPort:     80,
 		HttpsPort:    443,

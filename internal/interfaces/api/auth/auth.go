@@ -12,6 +12,22 @@ type Auth struct {
 	UserId  string
 }
 
+func (a *Auth) CheckGetMethod(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodGet:
+			next.ServeHTTP(res, req)
+			return
+		case http.MethodPost:
+			res.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		default:
+			res.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	})
+}
+
 // Check is HTTP middleware to ensure the request has proper token credentials
 func (a *Auth) Check(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {

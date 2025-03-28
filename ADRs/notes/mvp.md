@@ -19,6 +19,10 @@ curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
 -d "email=me@sunwei.xyz&password=123456"
 
+curl -X POST http://127.0.0.1:1314/api/login \
+-H "Content-Type: application/x-www-form-urlencoded" \
+-d "email=user_625216@mdfriday.com&password=123456"
+
 ### 创建站点
 
 curl -X POST "http://127.0.0.1:1314/api/content?type=Site" \
@@ -103,8 +107,15 @@ curl -X POST "http://127.0.0.1:1314/api/deploy?type=Site&id=2" \
 
 #### Search
 
-curl -X GET "http://127.0.0.1:1314/api/search?type=SiteDeployment&q=slug:site2" \
--H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjQtMTItMDRUMDg6MTQ6NTIuNTk2MDI5KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.foManZwcdG0h52dCxeKY6jE6iTkdSZFcEbnGFanLZU0"
+curl -X GET "http://127.0.0.1:1314/api/search?type=Site&q=title:Dooring" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTA6NDg6MzYuMTQ0MTUyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.cDTG9kJQoXcM00YdwuEXDqfPuH2XQNXvzS86WN7Gc-w"
 
 curl -X GET "http://127.0.0.1:1314/api/search2?type=Language" \
--H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDEtMDZUMDc6MTk6MzcuNDI2ODU4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.wVsqhQc2G1n2berEIovbitzxftYWLPdq7x6rSwgCZ5c"
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTA6MTY6MDAuMTY5NjQ2KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.p9puX1tjZ5WpaUKtCclzkB9W6qCWVbFmmKJtAlBRV6Y"
+
+curl -X GET "http://127.0.0.1:1314/api/content?type=Image&id=2" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTA6NDg6MzYuMTQ0MTUyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.cDTG9kJQoXcM00YdwuEXDqfPuH2XQNXvzS86WN7Gc-w"
+
+
+curl -X GET "http://127.0.0.1:1314/api/content?type=Image&id=2" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTM6MzM6MjkuMzU4OTQrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6ImFiY0BzdW53ZWkueHl6In0.-33W-Z0Epz9Ve8d0n_oLtOW9dw5FzBHZqzAQE2y6EkQ"
