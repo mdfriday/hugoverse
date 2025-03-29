@@ -17,7 +17,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y libvips-dev git gcc musl-dev pkg-config
+          sudo apt install -y libvips-dev libvips-tools git gcc musl-dev pkg-config
+          echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
 
       - name: Generate Release Notes
         id: generate_release_notes
