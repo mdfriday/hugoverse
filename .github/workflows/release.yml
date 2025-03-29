@@ -53,8 +53,8 @@ jobs:
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
           extra_files: LICENSE README.md manifest.json
-          pre_command: >
-            bash -c '
+          pre_command: |
+            bash -c "
             if command -v apt-get > /dev/null; then
               export DEBIAN_FRONTEND=noninteractive
               apt-get update
@@ -64,12 +64,13 @@ jobs:
             elif command -v yum > /dev/null; then
               yum install -y curl wget git gcc gcc-c++ make zip xz jq ca-certificates libvips-devel
             else
-              echo "Unsupported package manager" >&2
+              echo 'Unsupported package manager' >&2
               exit 1
             fi
-            echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/share/pkgconfig" >> /etc/environment
-            echo "PATH=$PATH:/usr/bin:/usr/local/bin" >> /etc/environment
+            echo 'PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/share/pkgconfig' >> /etc/environment
+            echo 'PATH=$PATH:/usr/bin:/usr/local/bin' >> /etc/environment
             which pkg-config
             pkg-config --version
-            '
+            "
+          
           
