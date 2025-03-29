@@ -128,7 +128,7 @@ func (s *Handler) ImageRandomHandler(res http.ResponseWriter, req *http.Request)
 	}
 }
 
-func (s *Handler) ImageDummyHandler(res http.ResponseWriter, req *http.Request) {
+func (s *Handler) ImageResizeHandler(res http.ResponseWriter, req *http.Request) {
 	// Get the path and query parameters
 	p, err := getParams(req)
 	if err != nil {
@@ -136,7 +136,89 @@ func (s *Handler) ImageDummyHandler(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	fmt.Printf("p: %+v", p)
+	// Get the image from the database
+	vars := mux.Vars(req)
+	imageID := vars["id"]
+
+	t := "Image"
+	status := ""
+	post, err := s.contentApp.GetContent(t, imageID, status)
+	if err != nil {
+		s.log.Errorf("Error getting content: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if post == nil {
+		res.WriteHeader(http.StatusNotFound)
+		s.log.Printf("Content not found: %s %s", t, status)
+		return
+	}
+
+	var image valueobject.Image
+	if err := json.Unmarshal(post, &image); err != nil {
+		s.log.Errorf("Error unmarshalling image: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	absPath, err := s.getUploadAbsPath(image.Asset)
+	if err != nil {
+		s.log.Errorf("Error getting absolute path: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Build the image task
+	task := images.NewTask(absPath, p.Width, p.Height,
+		fmt.Sprintf("MDFriday Image ID: %s", imageID),
+		images.GetOutputFormat(p.Extension))
+	if p.Blur {
+		task.Blur(p.BlurAmount)
+	}
+
+	if p.Grayscale {
+		task.Grayscale()
+	}
+
+	// Process the image
+	processedImage, err := s.imageProcessor.ProcessImage(req.Context(), task)
+	if err != nil {
+		s.log.Errorf("Error processing image: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// Set the headers
+	res.Header().Set("Content-Disposition",
+		fmt.Sprintf("inline; filename=\"%s\"", buildFilename(imageID, p)))
+	res.Header().Set("Content-Type", images.GetContentType(p.Extension))
+	res.Header().Set("Content-Length", strconv.Itoa(len(processedImage)))
+	res.Header().Set("Cache-Control",
+		"public, max-age=2592000, stale-while-revalidate=60, stale-if-error=43200, immutable") // Cache for a month
+	res.Header().Set("MDFriday-Image-ID", imageID)
+	res.Header().Set("Timing-Allow-Origin", "*") // Allow all origins to see timing resources
+
+	// Return the image
+	res.Write(processedImage)
+
+	return
+}
+
+func buildFilename(imageID string, p *Params) string {
+	filename := fmt.Sprintf("%s-%dx%d", imageID, p.Width, p.Height)
+
+	if p.Blur {
+		filename += fmt.Sprintf("-blur_%d", p.BlurAmount)
+	}
+
+	if p.Grayscale {
+		filename += "-grayscale"
+	}
+
+	filename += p.Extension
+
+	return filename
 }
 
 func (s *Handler) validateAndRedirect(w http.ResponseWriter, r *http.Request, p *Params, image *valueobject.Image) *Error {

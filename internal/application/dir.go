@@ -24,6 +24,11 @@ func init() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	err = ensureDirExists(ImageStorageDir())
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
 
 func TLSDir() string {
@@ -32,6 +37,10 @@ func TLSDir() string {
 
 func UploadDir() string {
 	return filepath.Join(DataDir(), "uploads")
+}
+
+func ImageStorageDir() string {
+	return filepath.Join(DataDir(), "images")
 }
 
 func PreviewDir() string {

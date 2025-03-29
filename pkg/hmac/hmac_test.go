@@ -1,9 +1,8 @@
 package hmac_test
 
 import (
+	"github.com/mdfriday/hugoverse/pkg/hmac"
 	"testing"
-
-	"github.com/DMarby/picsum-photos/internal/hmac"
 )
 
 var key = []byte("foobar")
