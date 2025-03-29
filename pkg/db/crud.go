@@ -2,7 +2,9 @@ package db
 
 import (
 	"bytes"
+	"fmt"
 	bolt "go.etcd.io/bbolt"
+	"math/rand"
 )
 
 func All(item Item) ([][]byte, error) {
@@ -37,6 +39,48 @@ func (s *Store) Get(item Item) ([]byte, error) {
 		}
 
 		obj := b.Get([]byte(item.Key()))
+
+		_, err := val.Write(obj)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if val.Bytes() == nil {
+		return nil, nil
+	}
+
+	return val.Bytes(), nil
+}
+
+func (s *Store) GetRandom(item Item) ([]byte, error) {
+	val := &bytes.Buffer{}
+	err := s.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(item.Bucket()))
+		if b == nil {
+			return bolt.ErrBucketNotFound
+		}
+
+		// 使用 Cursor 遍历所有 key
+		var keys [][]byte
+		c := b.Cursor()
+
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			keys = append(keys, k)
+		}
+
+		if len(keys) == 0 {
+			return fmt.Errorf("no images found in bucket %s", item.Bucket())
+		}
+
+		// 直接用 rand.Intn 选一个 key（不需要 Seed）
+		randomKey := keys[rand.Intn(len(keys))]
+		obj := b.Get(randomKey)
 
 		_, err := val.Write(obj)
 		if err != nil {

@@ -13,10 +13,8 @@ type Image struct {
 	Asset string   `json:"asset"`
 	Tags  []string `json:"tags"`
 
-	Width         int    `json:"width"`
-	Height        int    `json:"height"`
-	ContentLength int64  `json:"content_length"`
-	ContentType   string `json:"content_type"`
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
 }
 
 // MarshalEditor writes a buffer of html to edit a Song within the CMS

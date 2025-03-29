@@ -15,6 +15,14 @@ import (
 	"time"
 )
 
+func (s *Handler) getUploadAbsPath(apiPath string) (string, error) {
+	if !strings.HasPrefix(apiPath, apiUploadPrefix) {
+		return "", fmt.Errorf("path not contain %s", apiUploadPrefix)
+	}
+
+	return filepath.Join(s.uploadDir, apiPath[len(apiUploadPrefix):]), nil
+}
+
 // StoreFiles stores file uploads at paths like /YYYY/MM/filename.ext
 func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
 	err := req.ParseMultipartForm(1024 * 1024 * 4) // maxMemory 4MB

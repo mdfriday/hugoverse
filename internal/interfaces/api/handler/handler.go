@@ -12,6 +12,8 @@ import (
 	"sync"
 )
 
+const apiUploadPrefix = "/api/uploads/"
+
 type Handler struct {
 	res *Response
 	log loggers.Logger

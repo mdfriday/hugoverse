@@ -99,6 +99,13 @@ func (d *Database) GetContent(namespace string, id string) ([]byte, error) {
 		})
 }
 
+func (d *Database) GetRandomContent(namespace string) ([]byte, error) {
+	return d.getStore(namespace).GetRandom(
+		&item{
+			bucket: namespace,
+		})
+}
+
 func (d *Database) DeleteContent(namespace string, id string, slug string, hash string) error {
 	if err := d.getStore(namespace).Delete(&item{bucket: namespace, key: id}); err != nil {
 		return err

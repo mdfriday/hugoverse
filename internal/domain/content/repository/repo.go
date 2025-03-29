@@ -7,6 +7,7 @@ type Repository interface {
 	AllContent(namespace string) [][]byte
 	ContentByPrefix(namespace, prefix string) ([][]byte, error)
 	GetContent(namespace string, id string) ([]byte, error)
+	GetRandomContent(namespace string) ([]byte, error)
 	DeleteContent(namespace string, id string, slug string, hash string) error
 
 	NextContentId(ns string) (uint64, error)

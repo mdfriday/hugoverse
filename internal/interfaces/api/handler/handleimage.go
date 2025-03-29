@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"github.com/mdfriday/hugoverse/pkg/hmac"
+	"github.com/mdfriday/hugoverse/pkg/images"
 	"math"
 	"net/http"
 	"net/url"
@@ -61,26 +62,53 @@ func (s *Handler) ImageHandler(res http.ResponseWriter, req *http.Request) {
 
 func (s *Handler) ImageRandomHandler(res http.ResponseWriter, req *http.Request) {
 	// Get the path and query parameters
-	p, err := getParams(req)
+	params, err := getParams(req)
 	if err != nil {
+		s.log.Errorf("Error getting params: %v", err)
 		res.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	image := &valueobject.Image{
-		Item: valueobject.Item{
-			ID: 1,
-		},
-		Name:          "",
-		Asset:         "",
-		Tags:          nil,
-		Width:         0,
-		Height:        0,
-		ContentLength: 0,
-		ContentType:   "",
+	t := "Image"
+	status := ""
+
+	post, err := s.contentApp.GetRandomContent(t, status)
+	if err != nil {
+		s.log.Errorf("Error getting content: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
-	if vErr := s.validateAndRedirect(res, req, p, image); vErr != nil {
+	if post == nil {
+		res.WriteHeader(http.StatusNotFound)
+		s.log.Printf("Content not found: %s %s", t, status)
+		return
+	}
+
+	var image valueobject.Image
+	if err := json.Unmarshal(post, &image); err != nil {
+		s.log.Errorf("Error unmarshalling image: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	absPath, err := s.getUploadAbsPath(image.Asset)
+	if err != nil {
+		s.log.Errorf("Error getting absolute path: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	width, height, err := images.GetImageDimensions(absPath)
+	if err != nil {
+		s.log.Errorf("Error getting image dimensions: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	image.Width = width
+	image.Height = height
+
+	if vErr := s.validateAndRedirect(res, req, params, &image); vErr != nil {
 		msgJSON, err := json.Marshal(vErr.Message)
 		if err != nil {
 			s.log.Errorf("Error marshalling token: %v", err)

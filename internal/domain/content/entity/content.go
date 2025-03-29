@@ -47,6 +47,10 @@ func (c *Content) GetContent(contentType, id, status string) ([]byte, error) {
 	return c.Repo.GetContent(GetNamespace(contentType, status), id)
 }
 
+func (c *Content) GetRandomContent(contentType, status string) ([]byte, error) {
+	return c.Repo.GetRandomContent(GetNamespace(contentType, status))
+}
+
 func (c *Content) GetContentByHash(contentType, hash, status string) ([]byte, error) {
 	idb, err := c.Repo.GetIdByHash(GetNamespace(contentType, status), hash)
 	if err != nil {
