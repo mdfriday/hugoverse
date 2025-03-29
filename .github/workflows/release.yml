@@ -54,9 +54,8 @@ jobs:
           goarch: ${{ matrix.goarch }}
           extra_files: LICENSE README.md manifest.json
           pre_command: |
-            sudo apt update
-            sudo apt install -y libvips-dev libvips-tools git gcc musl-dev pkg-config
-            echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
-            echo "PATH=$PATH:/usr/bin:/usr/local/bin" >> $GITHUB_ENV
+            apt update && apt install -y libvips-dev libvips-tools git gcc musl-dev pkg-config
+            echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/share/pkgconfig" >> /etc/environment
+            echo "PATH=$PATH:/usr/bin:/usr/local/bin" >> /etc/environment
             which pkg-config
             pkg-config --version
