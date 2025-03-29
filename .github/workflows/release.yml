@@ -17,7 +17,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt update
-          sudo apt install -y libvips-dev
+          sudo apt install -y libvips-dev git gcc musl-dev
 
       - name: Generate Release Notes
         id: generate_release_notes
