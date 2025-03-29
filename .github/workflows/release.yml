@@ -53,6 +53,16 @@ jobs:
             goos: windows
     steps:
       - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y libvips-dev libvips-tools git gcc musl-dev pkg-config
+          echo "PKG_CONFIG_PATH=/usr/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/share/pkgconfig" >> $GITHUB_ENV
+          echo "PATH=$PATH:/usr/bin:/usr/local/bin" >> $GITHUB_ENV
+          which pkg-config
+          pkg-config --version
+
       - uses: wangyoucao577/go-release-action@v1
         with:
           github_token: ${{ secrets.HUGOVERSE_RELEASE }}
