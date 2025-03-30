@@ -47,7 +47,7 @@ jobs:
             goos: windows
     steps:
       - uses: actions/checkout@v3
-      - uses: mdfriday/hugoverse-release@v0.6
+      - uses: mdfriday/hugoverse-release@v0.7
         with:
           github_token: ${{ secrets.HUGOVERSE_RELEASE }}
           goos: ${{ matrix.goos }}
