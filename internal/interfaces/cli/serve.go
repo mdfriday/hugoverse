@@ -3,14 +3,15 @@ package cli
 import (
 	"flag"
 	"fmt"
-	"github.com/bep/logg"
-	"github.com/mdfriday/hugoverse/internal/application"
-	"github.com/mdfriday/hugoverse/internal/interfaces/api"
-	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"os"
 	"path/filepath"
 	"strconv"
 	"time"
+
+	"github.com/bep/logg"
+	"github.com/mdfriday/hugoverse/internal/application"
+	"github.com/mdfriday/hugoverse/internal/interfaces/api"
+	"github.com/mdfriday/hugoverse/pkg/loggers"
 )
 
 type serverCmd struct {
@@ -53,11 +54,16 @@ func (c *serverCmd) Run() error {
 	}
 	s, err := api.NewServer(setupLogger(env), setupPort(*c.port))
 	if err != nil {
-		s.Log.Errorf("Error creating server: %v", err)
+		return fmt.Errorf("error creating server: %v", err)
 	}
 	defer s.Close()
 
-	s.Log.Errorf("Error listening on :%v: %v", *c.port, s.ListenAndServe(env, *c.https))
+	// 启动服务器并等待它完成（现在ListenAndServe会阻塞直到收到终止信号）
+	err = s.ListenAndServe(env, *c.https)
+	if err != nil {
+		s.Log.Errorf("Error with server: %v", err)
+		return err
+	}
 
 	return nil
 }

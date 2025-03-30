@@ -18,6 +18,8 @@ import (
 type Processor struct {
 	queue  *queue.Queue
 	tracer *tracing.Tracer
+
+	log *logger.Logger
 }
 
 var (
@@ -36,6 +38,8 @@ func New(ctx context.Context, log *logger.Logger, tracer *tracing.Tracer, worker
 	instance := &Processor{
 		queue:  workerQueue,
 		tracer: tracer,
+
+		log: log,
 	}
 
 	go workerQueue.Run()
@@ -86,7 +90,8 @@ func taskProcessor(cache *Cache, tracer *tracing.Tracer) func(ctx context.Contex
 		height := math.Ceil(float64(task.Height)/500) * 500
 		size := math.Max(width, height)
 		if size <= 4500 { // Files larger then 4500 doesn't have a suffix
-			imageKey = fmt.Sprintf("%s_%0.f", task.ImageID, size)
+			//imageKey = fmt.Sprintf("%s_%0.f", task.ImageID, size)
+			imageKey = task.ImageID
 		}
 
 		imageBuffer, err := cache.Get(ctx, imageKey)
@@ -144,4 +149,5 @@ func taskProcessor(cache *Cache, tracer *tracing.Tracer) func(ctx context.Contex
 // Shutdown shuts down the image processor and deinitialises vips
 func (p *Processor) Shutdown() {
 	vips.Shutdown()
+	_ = p.log.Sync()
 }

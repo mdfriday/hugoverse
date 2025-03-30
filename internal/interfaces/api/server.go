@@ -1,7 +1,14 @@
 package api
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
 	"github.com/gorilla/mux"
 	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/entity"
@@ -16,8 +23,6 @@ import (
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/record"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/tls"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
-	"net/http"
-	"os"
 )
 
 type PORT string
@@ -59,7 +64,8 @@ type Server struct {
 	cors    *cors.Cors
 	auth    *auth.Auth
 
-	handler *handler.Handler
+	handler    *handler.Handler
+	httpServer *http.Server
 }
 
 func NewServer(options ...func(s *Server) error) (*Server, error) {
@@ -119,6 +125,16 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 }
 
 func (s *Server) Close() {
+	if s.httpServer != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s.httpServer.Shutdown(ctx)
+	}
+
+	if s.handler != nil {
+		s.handler.Shutdown()
+	}
+
 	s.db.Close()
 	s.record.Close()
 
@@ -146,8 +162,37 @@ func (s *Server) ListenAndServe(env ENV, enableHttps bool) error {
 		}
 	}
 
-	s.Log.Printf("Listening on %s:%d", s.Bind, s.HttpPort)
-	return http.ListenAndServe(fmt.Sprintf("%s:%d", s.Bind, s.HttpPort), s)
+	s.httpServer = &http.Server{
+		Addr:    fmt.Sprintf("%s:%d", s.Bind, s.HttpPort),
+		Handler: s,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		s.Log.Printf("Listening on %s:%d", s.Bind, s.HttpPort)
+		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			s.Log.Errorf("ListenAndServe error: %v", err)
+		}
+	}()
+
+	<-quit
+	s.Log.Println("Server is shutting down...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := s.httpServer.Shutdown(ctx); err != nil {
+		s.Log.Errorf("Server shutdown error: %v", err)
+	}
+
+	if s.handler != nil {
+		s.handler.Shutdown()
+	}
+
+	s.Log.Println("Server exited properly")
+	return nil
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

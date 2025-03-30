@@ -2,6 +2,12 @@ package handler
 
 import (
 	"context"
+	"html/template"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+
 	"github.com/mdfriday/hugoverse/internal/application"
 	adminEntity "github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	contentEntity "github.com/mdfriday/hugoverse/internal/domain/content/entity"
@@ -15,11 +21,6 @@ import (
 	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"github.com/mdfriday/hugoverse/pkg/tracing/test"
 	"go.uber.org/zap"
-	"html/template"
-	"os"
-	"os/signal"
-	"sync"
-	"syscall"
 )
 
 const apiUploadPrefix = "/api/uploads/"
@@ -30,6 +31,7 @@ type Handler struct {
 
 	uploadDir      string
 	imageProcessor *images.Processor
+	shutdownFuncs  []func() // 存储各组件的shutdown函数
 
 	db         *database.Database
 	contentApp *contentEntity.Content
@@ -52,18 +54,13 @@ func New(log loggers.Logger, db *database.Database,
 		Subview:    template.HTML(""),
 	}
 
-	// Initialize the image processor
-	processor, err := newImageProcessor()
-	if err != nil {
-		log.Errorf("error initializing image processor: %s", err)
-	}
-
-	return &Handler{
+	// 创建基本Handler结构
+	h := &Handler{
 		res: NewResponse(adminView),
 		log: log,
 
-		uploadDir:      application.UploadDir(),
-		imageProcessor: processor,
+		uploadDir:     application.UploadDir(),
+		shutdownFuncs: make([]func(), 0),
 
 		db:         db,
 		contentApp: contentApp,
@@ -72,41 +69,70 @@ func New(log loggers.Logger, db *database.Database,
 
 		auth: auth,
 	}
+
+	// 初始化图像处理器
+	processor, shutdown, err := newImageProcessor()
+	if err != nil {
+		log.Errorf("error initializing image processor: %s", err)
+	} else {
+		h.imageProcessor = processor
+		// 注册shutdown函数以便后续清理
+		if shutdown != nil {
+			h.shutdownFuncs = append(h.shutdownFuncs, shutdown)
+		}
+		h.shutdownFuncs = append(h.shutdownFuncs, h.imageProcessor.Shutdown)
+	}
+
+	return h
 }
 
-func newImageProcessor() (*images.Processor, error) {
+// Shutdown gracefully shuts down all components in the handler
+func (s *Handler) Shutdown() {
+	// 按注册的相反顺序执行shutdown函数
+	for i := len(s.shutdownFuncs) - 1; i >= 0; i-- {
+		s.shutdownFuncs[i]()
+	}
+}
+
+// 修改newImageProcessor不再在内部defer shutdown()
+func newImageProcessor() (*images.Processor, func(), error) {
 	ctx := context.Background()
 
-	// Set up context for shutting down
+	// 设置用于关闭的context
 	shutdownCtx, shutdown := signal.NotifyContext(ctx, os.Interrupt, os.Kill, syscall.SIGTERM)
-	defer shutdown()
+	// 不在这里defer shutdown()，而是返回给调用者
 
-	// Initialize the logger
+	// 初始化日志记录器
 	log := logger.New(zap.InfoLevel)
-	defer log.Sync()
 
-	// Initialize tracing
-	// tracerCtx, tracerCancel := context.WithCancel(ctx)
-	// defer tracerCancel()
-
-	// tracer, err := tracing.New(tracerCtx, log, "image-service")
-	// if err != nil {
-	// 	log.Fatalf("error initializing tracing: %s", err)
-	// }
-	// defer tracer.Shutdown(tracerCtx)
+	// 初始化跟踪
 	tracer := test.Tracer(log)
 
-	// Initialize the storage
+	// 初始化存储
 	storage, err := file.New(application.UploadDir())
 	if err != nil {
 		log.Fatalf("error initializing storage: %s", err)
-		return nil, err
+		// 如果失败，需要调用shutdown以避免资源泄漏
+		shutdown()
+		return nil, nil, err
 	}
 
-	// Initialize the cache
+	// 初始化缓存
 	cache := memory.New()
-	defer cache.Shutdown()
 
-	// Initialize the image processor
-	return images.New(shutdownCtx, log, tracer, 3, images.NewCache(tracer, cache, storage))
+	// 创建组合的shutdown函数
+	combinedShutdown := func() {
+		shutdown()
+		cache.Shutdown()
+		// 可以在此添加其他需要在关闭时执行的操作
+	}
+
+	// 初始化图像处理器
+	processor, err := images.New(shutdownCtx, log, tracer, 3, images.NewCache(tracer, cache, storage))
+	if err != nil {
+		combinedShutdown()
+		return nil, nil, err
+	}
+
+	return processor, combinedShutdown, nil
 }
