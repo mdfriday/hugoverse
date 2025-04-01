@@ -2,6 +2,7 @@ package api
 
 import (
 	"embed"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -13,7 +14,11 @@ var staticFiles embed.FS
 func adminStaticDir() http.FileSystem {
 	staticDir := os.Getenv("HUGOVERSE_ADMIN_STATIC_DIR")
 	if staticDir == "" {
-		return http.FS(staticFiles)
+		fsys, err := fs.Sub(staticFiles, "admin/static")
+		if err != nil {
+			log.Fatal(err)
+		}
+		return http.FS(fsys)
 	}
 	return http.Dir(staticDir)
 }

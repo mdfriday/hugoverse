@@ -8,7 +8,6 @@ import (
 	"github.com/mdfriday/hugoverse/internal/domain/content"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"github.com/mdfriday/hugoverse/pkg/form"
-	"log"
 	"net/url"
 	"strconv"
 )
@@ -85,6 +84,13 @@ func (c *Content) newContent(contentType string, ci any) (string, error) {
 		cih.SetHash()
 	}
 
+	meta, ok := ci.(content.Metable)
+	if ok {
+		if err := meta.SetMeta(c.Hugo.DirService); err != nil {
+			c.Log.Errorf("failed to set %s meta: %v", contentType, err)
+		}
+	}
+
 	b, err := c.Marshal(ci)
 	if err != nil {
 		return "", err
@@ -97,7 +103,7 @@ func (c *Content) newContent(contentType string, ci any) (string, error) {
 	if cis.ItemStatus() == content.Public {
 		go func() {
 			if err := c.SortContent(contentType); err != nil {
-				log.Println("sort content err: ", err)
+				c.Log.Errorln("sort content err: ", err)
 			}
 		}()
 	}
@@ -110,7 +116,7 @@ func (c *Content) newContent(contentType string, ci any) (string, error) {
 			GetNamespace(contentType, string(cis.ItemStatus())),
 			fmt.Sprintf("%d", id), b); err != nil {
 
-			log.Println("[search] UpdateIndex Error:", err)
+			c.Log.Println("[search] UpdateIndex Error:", err)
 		}
 	}()
 

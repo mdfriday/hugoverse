@@ -92,22 +92,6 @@ func (s *Handler) ImageRandomHandler(res http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	absPath, err := s.getUploadAbsPath(image.Asset)
-	if err != nil {
-		s.log.Errorf("Error getting absolute path: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	width, height, err := images.GetImageDimensions(absPath)
-	if err != nil {
-		s.log.Errorf("Error getting image dimensions: %v", err)
-		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	image.Width = width
-	image.Height = height
-
 	if vErr := s.validateAndRedirect(res, req, params, &image); vErr != nil {
 		msgJSON, err := json.Marshal(vErr.Message)
 		if err != nil {

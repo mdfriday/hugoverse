@@ -2,7 +2,9 @@ package valueobject
 
 import (
 	"fmt"
+	"github.com/mdfriday/hugoverse/internal/domain/content"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/images"
 	"net/http"
 )
 
@@ -32,6 +34,20 @@ func (s *Image) MarshalEditor() ([]byte, error) {
 			View: editor.File("Asset", s, map[string]string{
 				"label":       "Asset",
 				"placeholder": "Upload the asset here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("Width", s, map[string]string{
+				"label":       "Width",
+				"type":        "text",
+				"placeholder": "Enter the width here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("Height", s, map[string]string{
+				"label":       "Height",
+				"type":        "text",
+				"placeholder": "Enter the height here",
 			}),
 		},
 		editor.Field{
@@ -152,3 +168,24 @@ func (s *Image) IndexContent() bool {
 //
 //	return indexMapping, nil
 //}
+
+func (s *Image) SetMeta(service content.DirService) error {
+	if s.Asset == "" {
+		return nil
+	}
+
+	absPath, err := getAssetAbsPath(s.Asset, service.UploadDir())
+	if err != nil {
+		return fmt.Errorf("error getting absolute path: %v", err)
+	}
+
+	width, height, err := images.GetImageDimensions(absPath)
+	if err != nil {
+		return fmt.Errorf("error getting image dimensions: %v", err)
+
+	}
+	s.Width = width
+	s.Height = height
+
+	return nil
+}

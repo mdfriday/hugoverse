@@ -134,6 +134,10 @@ type Hashable interface {
 	ItemHash() string
 }
 
+type Metable interface {
+	SetMeta(service DirService) error
+}
+
 // Searchable ...
 type Searchable interface {
 	SearchMapping() (*mapping.IndexMappingImpl, error)
