@@ -11,9 +11,10 @@ import (
 type Image struct {
 	Item
 
-	Name  string   `json:"name"`
-	Asset string   `json:"asset"`
-	Tags  []string `json:"tags"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Asset       string   `json:"asset"`
+	Tags        []string `json:"tags"`
 
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
@@ -28,6 +29,13 @@ func (s *Image) MarshalEditor() ([]byte, error) {
 				"label":       "Name",
 				"type":        "text",
 				"placeholder": "Enter the name here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("Description", s, map[string]string{
+				"label":       "Description",
+				"type":        "text",
+				"placeholder": "Enter the description here",
 			}),
 		},
 		editor.Field{
@@ -188,4 +196,8 @@ func (s *Image) SetMeta(service content.DirService) error {
 	s.Height = height
 
 	return nil
+}
+
+func (s *Image) ItemTags() []string {
+	return s.Tags
 }

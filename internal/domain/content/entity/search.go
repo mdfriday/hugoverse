@@ -165,11 +165,11 @@ func (s *Search) mapIndex(typeName string) (bleve.Index, error) {
 func (s *Search) TypeQuery(typeName, query string, count, offset int) ([]content.Identifier, error) {
 	idx, err := s.getSearchIndex(typeName)
 	if err != nil {
-		s.Log.Debugln("Index for type ", typeName, " not found", err.Error())
+		s.Log.Errorln("Index for type ", typeName, " not found", err.Error())
 		return nil, content.ErrNoIndex
 	}
 
-	s.Log.Debugln("TypeQuery: ", query)
+	s.Log.Infoln("TypeQuery: ", query)
 	q := bleve.NewQueryStringQuery(query)
 	req := bleve.NewSearchRequestOptions(q, count, offset, false)
 	res, err := idx.Search(req)

@@ -521,3 +521,115 @@ func (s *Handler) DeleteContentHandler(res http.ResponseWriter, req *http.Reques
 
 	res.WriteHeader(http.StatusOK)
 }
+
+func (s *Handler) ContentsTagsHandler(res http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodGet:
+		s.getContentsTags(res, req)
+	default:
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+}
+
+func (s *Handler) getContentsTags(res http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query()
+	t := q.Get("type")
+
+	if t == "" {
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	pt, ok := s.contentApp.GetContentCreator(t)
+	if !ok {
+		res.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	_, ok = pt().(content.Taggable)
+	if !ok {
+		res.WriteHeader(http.StatusUnprocessableEntity)
+		return
+	}
+
+	posts := s.contentApp.AllContents(t)
+
+	var tags []string
+	for _, post := range posts {
+		p := pt()
+		err = json.Unmarshal(post, p)
+		if err != nil {
+			s.log.Errorf("Error unmarshalling content: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		tag, ok := p.(content.Taggable)
+		if ok {
+			tags = append(tags, tag.ItemTags()...)
+		}
+	}
+
+	tags = removeDuplicates(tags)
+	tagsJSON, err := json.Marshal(tags)
+	if err != nil {
+		s.log.Errorf("Error marshalling tags: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	j, err := s.res.FmtJSON(tagsJSON)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	p := pt()
+	j, err = omit(res, req, p, j)
+	if err != nil {
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// assert hookable
+	get := p
+	hook, ok := get.(content.Hookable)
+	if !ok {
+		s.log.Errorln("[Response] error: Type", t, "does not implement item.Hookable or embed item.Item.")
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// hook before response
+	j, err = hook.BeforeAPIResponse(res, req, j)
+	if err != nil {
+		s.log.Errorln("[Response] error calling BeforeAPIResponse:", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	s.res.Json(res, j)
+
+	// hook after response
+	err = hook.AfterAPIResponse(res, req, j)
+	if err != nil {
+		s.log.Errorln("[Response] error calling AfterAPIResponse:", err)
+		return
+	}
+}
+
+// removeDuplicates 去重
+func removeDuplicates(tags []string) []string {
+	uniqueMap := make(map[string]struct{})
+	var uniqueTags []string
+
+	for _, tag := range tags {
+		if _, exists := uniqueMap[tag]; !exists {
+			uniqueMap[tag] = struct{}{}
+			uniqueTags = append(uniqueTags, tag)
+		}
+	}
+
+	return uniqueTags
+}

@@ -31,6 +31,10 @@ type Content struct {
 	Log loggers.Logger
 }
 
+func (c *Content) AllContents(contentType string) [][]byte {
+	return c.Repo.AllContent(contentType)
+}
+
 func (c *Content) GetContents(ids []content.Identifier) ([][]byte, error) {
 	var contents [][]byte
 	for _, id := range ids {

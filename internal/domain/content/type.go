@@ -129,6 +129,10 @@ type Sluggable interface {
 	ItemSlug() string
 }
 
+type Taggable interface {
+	ItemTags() []string
+}
+
 type Hashable interface {
 	SetHash()
 	ItemHash() string

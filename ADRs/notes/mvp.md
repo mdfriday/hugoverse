@@ -107,8 +107,8 @@ curl -X POST "http://127.0.0.1:1314/api/deploy?type=Site&id=2" \
 
 #### Search
 
-curl -X GET "http://127.0.0.1:1314/api/search?type=Site&q=title:Dooring" \
--H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTA6NDg6MzYuMTQ0MTUyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.cDTG9kJQoXcM00YdwuEXDqfPuH2XQNXvzS86WN7Gc-w"
+curl -X GET "http://127.0.0.1:1314/api/search?type=Image&q=tags:Test" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDUtMDJUMDg6NTk6NTkuNzM0MzE2KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.JlpCgsiRyLqqamxhmQOaCHL3vJP45bhqztTHnQBaWAk"
 
 curl -X GET "http://127.0.0.1:1314/api/search2?type=Language" \
 -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTA6MTY6MDAuMTY5NjQ2KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.p9puX1tjZ5WpaUKtCclzkB9W6qCWVbFmmKJtAlBRV6Y"
@@ -119,3 +119,24 @@ curl -X GET "http://127.0.0.1:1314/api/content?type=Image&id=2" \
 
 curl -X GET "http://127.0.0.1:1314/api/content?type=Image&id=2" \
 -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDQtMjdUMTM6MzM6MjkuMzU4OTQrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6ImFiY0BzdW53ZWkueHl6In0.-33W-Z0Epz9Ve8d0n_oLtOW9dw5FzBHZqzAQE2y6EkQ"
+
+
+#### Tags
+
+curl -X GET "http://127.0.0.1:1314/api/content/tags?type=Image" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDUtMDJUMDg6NTk6NTkuNzM0MzE2KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.JlpCgsiRyLqqamxhmQOaCHL3vJP45bhqztTHnQBaWAk"
+
+
+#### Image
+
+➜  mdfriday curl -X GET "http://127.0.0.1:1314/api/images?type=Image&count=10&offset=0&order=desc"
+{"data":[{"uuid":"efd6c43b-161d-4008-a9ab-cd7e22e4d66a","status":"public","namespace":"Image","id":1,"slug":"name","hash":"","timestamp":1743471048000,"updated":1743471048797,"name":"name","asset":"/api/uploads/d66e65ad754f15723096c1156d043cbe/2025/04/screencapture-notes-sunwei-xyz-zh-2025-03-24-081335.png","tags":["Test"],"width":1905,"height":1311}]}
+
+➜  mdfriday curl -X GET "http://127.0.0.1:1314/api/image/search?type=Image&count=10&offset=0&order=desc&q=name%3ATest%20OR%20tags%3ATest"
+{"data":[{"uuid":"efd6c43b-161d-4008-a9ab-cd7e22e4d66a","status":"public","namespace":"Image","id":1,"slug":"name","hash":"","timestamp":1743471048000,"updated":1743471048797,"name":"name","asset":"/api/uploads/d66e65ad754f15723096c1156d043cbe/2025/04/screencapture-notes-sunwei-xyz-zh-2025-03-24-081335.png","tags":["Test"],"width":1905,"height":1311}]}
+
+➜  mdfriday curl -X GET "http://127.0.0.1:1314/api/image/tags?type=Image"
+{"data":[["Test"]]}
+
+curl -X GET "http://127.0.0.1:1314/image/100/100"
+http://127.0.0.1:1314/image/id/1/100/100.jpg?hmac=jBxrm5Pz0xzYEY01kLEk9KsbVLvJX88tDtIpL0S8E9U

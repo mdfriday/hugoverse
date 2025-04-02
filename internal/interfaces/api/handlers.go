@@ -12,11 +12,15 @@ func (s *Server) registerContentHandler() {
 		s.content.Handle(s.handler.ContentHandler)))
 	s.mux.HandleFunc("/api/content/delete", s.wrapContentHandler(
 		s.content.Handle(s.handler.DeleteContentHandler)))
+	s.mux.HandleFunc("/api/content/tags", s.wrapContentHandler(
+		s.content.Handle(s.handler.ContentsTagsHandler)))
 
 	s.mux.HandleFunc("/api/hash", s.wrapContentHandler(s.handler.HashHandler))
 
 	s.mux.HandleFunc("/api/images", s.wrapImageHandler(s.handler.ImagesHandler))
 	s.mux.HandleFunc("/api/image", s.wrapImageHandler(s.handler.ImageHandler))
+	s.mux.HandleFunc("/api/image/search", s.wrapImageHandler(s.handler.SearchContentHandler))
+	s.mux.HandleFunc("/api/image/tags", s.wrapImageHandler(s.handler.ContentsTagsHandler))
 	s.mux.HandleFunc("/image/{size:[0-9]+}{extension:(?:\\..*)?}",
 		s.wrapImageHandler(s.handler.ImageRandomHandler))
 	s.mux.HandleFunc("/image/{width:[0-9]+}/{height:[0-9]+}{extension:(?:\\..*)?}",
