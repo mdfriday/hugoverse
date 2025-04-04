@@ -28,6 +28,11 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/image/id/{id}/{width:[0-9]+}/{height:[0-9]+}{extension:(?:\\..*)?}",
 		s.wrapImageHandler(s.handler.ImageResizeHandler))
 
+	s.mux.HandleFunc("/api/scs", s.wrapImageHandler(s.handler.ScsHandler))
+	s.mux.HandleFunc("/api/sc", s.wrapImageHandler(s.handler.ScHandler))
+	s.mux.HandleFunc("/api/sc/search", s.wrapImageHandler(s.handler.SearchContentHandler))
+	s.mux.HandleFunc("/api/sc/tags", s.wrapImageHandler(s.handler.ContentsTagsHandler))
+
 	s.mux.HandleFunc("/api/search", s.wrapContentHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/search2", s.wrapContentHandler(s.handler.SearchContentHandler2))
 
