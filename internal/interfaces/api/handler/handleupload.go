@@ -399,7 +399,7 @@ func (s *Handler) EditUploadHandler(res http.ResponseWriter, req *http.Request) 
 		}
 
 		// StoreFiles has the SetUpload call (which is equivalent of SetContent in other handlers)
-		urlPaths, err := s.StoreFiles(req)
+		urlPaths, _, err := s.StoreFiles(req)
 		if err != nil {
 			s.log.Errorf("Error storing files: %v", err)
 
@@ -442,7 +442,7 @@ func (s *Handler) EditUploadHandler(res http.ResponseWriter, req *http.Request) 
 		http.Redirect(res, req, redir, http.StatusFound)
 
 	case http.MethodPut:
-		urlPaths, err := s.StoreFiles(req)
+		urlPaths, _, err := s.StoreFiles(req)
 		if err != nil {
 			s.log.Errorf("Error storing files: %v", err)
 			res.WriteHeader(http.StatusInternalServerError)

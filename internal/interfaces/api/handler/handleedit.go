@@ -125,7 +125,7 @@ func (s *Handler) EditHandler(res http.ResponseWriter, req *http.Request) {
 			req.PostForm.Set("updated", ts)
 		}
 
-		urlPaths, err := s.StoreFiles(req)
+		urlPaths, _, err := s.StoreFiles(req)
 		if err != nil {
 			if err := s.res.err500(res); err != nil {
 				s.log.Errorf("Error response err 500: %s", err)

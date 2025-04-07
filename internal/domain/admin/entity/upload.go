@@ -30,38 +30,38 @@ func (a *Upload) AllUploads() ([][]byte, error) {
 	return a.Repo.AllUploads()
 }
 
-func (a *Upload) NewUpload(data url.Values) error {
+func (a *Upload) NewUpload(data url.Values) (int, error) {
 	var upload valueobject.FileUpload
 
 	decoder := schema.NewDecoder()
 	decoder.SetAliasTag("json")     // allows simpler struct tagging when creating a content type
 	decoder.IgnoreUnknownKeys(true) // will skip over form values submitted, but not in struct
 	if err := decoder.Decode(&upload, data); err != nil {
-		return err
+		return 0, err
 	}
 
 	item, err := factory.NewItem()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	upload.Item = *item
 
 	slug, err := a.Repo.CheckSlugForDuplicate("__uploads", upload.Name)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	upload.Slug = slug
 
 	nextId, err := a.Repo.NextUploadId()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	upload.ID = int(nextId)
 
 	uploadData, err := json.Marshal(upload)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	return a.Repo.NewUpload(fmt.Sprintf("%d", upload.ID), slug, uploadData)
+	return upload.ID, a.Repo.NewUpload(fmt.Sprintf("%d", upload.ID), slug, uploadData)
 }

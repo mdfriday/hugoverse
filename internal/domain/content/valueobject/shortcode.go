@@ -11,15 +11,16 @@ import (
 type ShortCode struct {
 	Item
 
-	Name        string   `json:"name"`
-	Template    string   `json:"template"`
-	Example     string   `json:"example"`
-	Description string   `json:"description,omitempty"`
-	Asset       string   `json:"asset"`
-	Tags        []string `json:"tags"`
+	Name     string   `json:"name"`
+	Desc     string   `json:"desc"`
+	Template string   `json:"template"`
+	Example  string   `json:"example"`
+	Tags     []string `json:"tags"`
 
-	Width  int `json:"width,omitempty"`
-	Height int `json:"height,omitempty"`
+	Asset   string `json:"asset"`
+	AssetID string `json:"asset_id"`
+	Width   int    `json:"width"`
+	Height  int    `json:"height"`
 }
 
 // MarshalEditor writes a buffer of html to edit a Song within the CMS
@@ -31,6 +32,13 @@ func (s *ShortCode) MarshalEditor() ([]byte, error) {
 				"label":       "Name",
 				"type":        "text",
 				"placeholder": "Enter the name here",
+			}),
+		},
+		editor.Field{
+			View: editor.Textarea("Desc", s, map[string]string{
+				"label":       "Description",
+				"type":        "textarea",
+				"placeholder": "Enter the description here",
 			}),
 		},
 		editor.Field{
@@ -48,16 +56,16 @@ func (s *ShortCode) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
-			View: editor.Input("Description", s, map[string]string{
-				"label":       "Description",
-				"type":        "text",
-				"placeholder": "Enter the description here",
-			}),
-		},
-		editor.Field{
 			View: editor.File("Asset", s, map[string]string{
 				"label":       "Asset",
 				"placeholder": "Upload the asset here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("AssetID", s, map[string]string{
+				"label":       "AssetID",
+				"type":        "text",
+				"placeholder": "Enter the asset id here",
 			}),
 		},
 		editor.Field{

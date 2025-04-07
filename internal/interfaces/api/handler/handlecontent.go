@@ -274,7 +274,7 @@ func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
 	}
 	req.PostForm.Set("updated", ts)
 
-	urlPaths, err := s.StoreFiles(req)
+	urlPaths, _, err := s.StoreFiles(req)
 	if err != nil {
 		s.log.Errorf("Error storing files: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)

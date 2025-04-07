@@ -24,10 +24,10 @@ func (s *Handler) getUploadAbsPath(apiPath string) (string, error) {
 }
 
 // StoreFiles stores file uploads at paths like /YYYY/MM/filename.ext
-func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
+func (s *Handler) StoreFiles(req *http.Request) (map[string]string, map[string]string, error) {
 	err := req.ParseMultipartForm(1024 * 1024 * 4) // maxMemory 4MB
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	ts := req.FormValue("timestamp") // timestamp in milliseconds since unix epoch
@@ -38,16 +38,17 @@ func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
 
 	// To use for FormValue name:urlPath
 	urlPaths := make(map[string]string)
+	urlIDs := make(map[string]string)
 
 	if len(req.MultipartForm.File) == 0 {
-		return urlPaths, nil
+		return urlPaths, urlIDs, nil
 	}
 
 	req.Form.Set("timestamp", ts)
 
 	tm, err := timestamp.ConvertToTime(ts)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	urlPathPrefix := "api"
@@ -55,21 +56,21 @@ func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
 	uploadDir := filepath.Join(s.uploadDir, s.db.UserDir(), fmt.Sprintf("%d", tm.Year()), fmt.Sprintf("%02d", tm.Month()))
 	err = os.MkdirAll(uploadDir, os.ModeDir|os.ModePerm)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// loop over all files and save them to disk
 	for name, fds := range req.MultipartForm.File {
 		filename, err := s.contentApp.NormalizeString(fds[0].Filename)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		src, err := fds[0].Open()
 		if err != nil {
 			err := fmt.Errorf("couldn't open uploaded file: %s", err)
 			s.log.Errorf("Error opening uploaded file: %s", err)
-			return nil, err
+			return nil, nil, err
 
 		}
 
@@ -88,7 +89,7 @@ func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
 		if err != nil {
 			err := fmt.Errorf("failed to create destination file for upload: %s", err)
 			s.log.Errorf("Error creating destination file for upload: %s", err)
-			return nil, err
+			return nil, nil, err
 		}
 
 		// copy file from src to dst on disk
@@ -98,7 +99,7 @@ func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
 			_ = dst.Close()
 			err := fmt.Errorf("failed to copy uploaded file to destination: %s", err)
 			s.log.Errorf("Error copying uploaded file to destination: %s", err)
-			return nil, err
+			return nil, nil, err
 		}
 
 		// Close the source and destination files explicitly
@@ -109,16 +110,17 @@ func (s *Handler) StoreFiles(req *http.Request) (map[string]string, error) {
 		urlPath := fmt.Sprintf("/%s/%s/%s/%d/%02d/%s", urlPathPrefix, uploadDirName, s.db.UserDir(), tm.Year(), tm.Month(), filename)
 		urlPaths[name] = urlPath
 
-		// add upload information to db
-		go func() {
-			s.storeFileInfo(size, filename, urlPath, fds)
-		}()
+		uid, err := s.storeFileInfo(size, filename, urlPath, fds)
+		if err != nil {
+			return nil, nil, err
+		}
+		urlIDs[name] = fmt.Sprintf("%d", uid)
 	}
 
-	return urlPaths, nil
+	return urlPaths, urlIDs, nil
 }
 
-func (s *Handler) storeFileInfo(size int64, filename, urlPath string, fds []*multipart.FileHeader) {
+func (s *Handler) storeFileInfo(size int64, filename, urlPath string, fds []*multipart.FileHeader) (int, error) {
 	data := url.Values{
 		"name":           []string{filename},
 		"path":           []string{urlPath},
@@ -128,9 +130,12 @@ func (s *Handler) storeFileInfo(size int64, filename, urlPath string, fds []*mul
 
 	s.log.Debugln("storeFileInfo: ", filename, urlPath, fmt.Sprintf("%d", size))
 
-	if err := s.adminApp.NewUpload(data); err != nil {
-		s.log.Errorf("Error saving file upload record to database: %v", err)
+	uid, err := s.adminApp.NewUpload(data)
+	if err != nil {
+		return 0, fmt.Errorf("error saving file upload record to database: %v", err)
 	}
+
+	return uid, nil
 }
 
 func (s *Handler) deleteUploadFromDisk(id string) error {
