@@ -11,8 +11,8 @@ import (
 	"github.com/blevesearch/bleve/mapping"
 	"github.com/blevesearch/bleve/search/query"
 	"github.com/mdfriday/hugoverse/internal/domain/content"
-	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
 	"net/url"
 	"os"
@@ -154,7 +154,7 @@ func (s *Handler) SearchContentHandler2(res http.ResponseWriter, req *http.Reque
 	//fmt.Println("Search Results for en-100:", len(searchResults2.Hits))
 
 	qr, err := s.contentApp.Search.TermQuery("Language",
-		map[string]string{"hash": valueobject.Hash([]string{"English888", "en888"})}, 10, 0)
+		map[string]string{"hash": hash.Fields([]string{"English888", "en888"})}, 10, 0)
 	if errors.Is(err, content.ErrNoIndex) {
 		res.WriteHeader(http.StatusNotFound)
 		return
@@ -163,8 +163,6 @@ func (s *Handler) SearchContentHandler2(res http.ResponseWriter, req *http.Reque
 	for _, index := range qr {
 		fmt.Println(index.ID(), index.ContentType())
 	}
-
-	fmt.Println("???---???", len(qr))
 
 	res.WriteHeader(http.StatusOK)
 }

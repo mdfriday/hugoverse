@@ -3,6 +3,7 @@ package valueobject
 import (
 	"fmt"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"log"
 	"net/http"
 	"strings"
@@ -96,7 +97,7 @@ func (s *Preview) String() string {
 }
 
 func (s *Preview) SetHash() {
-	s.Hash = Hash([]string{s.Domain, s.HostName})
+	s.Hash = hash.Fields([]string{s.Domain, s.HostName})
 }
 
 // Create implements api.Createable, and allows external POST requests from clients

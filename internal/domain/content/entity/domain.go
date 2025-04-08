@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
 )
 
@@ -81,7 +82,7 @@ func (c *Content) ApplyDomain(siteId string, domain string) (*valueobject.Domain
 func (c *Content) searchDomain(root string, sub string) (*valueobject.Domain, error) {
 	// 构建精确匹配的查询条件
 	conditions := map[string]string{
-		"hash": valueobject.Hash([]string{sub, root}),
+		"hash": hash.Fields([]string{sub, root}),
 	}
 
 	// 查询域名信息

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"time"
 )
 
@@ -38,7 +39,7 @@ func (c *Content) GetDeployment(domain *valueobject.Domain, hostName string) (*v
 
 func (c *Content) searchDeployment(domainQueryStr string, hostName string) (*valueobject.Deployment, error) {
 	conditions := map[string]string{
-		"hash": valueobject.Hash([]string{domainQueryStr, hostName}),
+		"hash": hash.Fields([]string{domainQueryStr, hostName}),
 	}
 
 	// 查询域名信息

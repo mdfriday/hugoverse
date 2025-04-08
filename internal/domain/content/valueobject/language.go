@@ -3,6 +3,7 @@ package valueobject
 import (
 	"fmt"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
 )
 
@@ -50,7 +51,7 @@ func (a *Language) String() string {
 }
 
 func (a *Language) SetHash() {
-	a.Hash = Hash([]string{a.Name, a.Code})
+	a.Hash = hash.Fields([]string{a.Name, a.Code})
 }
 
 func (a *Language) Create(res http.ResponseWriter, req *http.Request) error {

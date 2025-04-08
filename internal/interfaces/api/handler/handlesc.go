@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
 )
 
@@ -24,4 +25,20 @@ func (s *Handler) ScHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	s.ContentHandler(res, req)
+}
+
+func (s *Handler) ScHashHandler(res http.ResponseWriter, req *http.Request) {
+	q := req.URL.Query()
+	n := q.Get("name")
+	if n == "" {
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	q.Set("type", "ShortCode")
+	q.Set("status", "")
+	q.Set("hash", hash.Fields([]string{n}))
+	req.URL.RawQuery = q.Encode()
+
+	s.HashHandler(res, req)
 }

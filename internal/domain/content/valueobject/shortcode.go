@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/mdfriday/hugoverse/internal/domain/content"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"github.com/mdfriday/hugoverse/pkg/images"
 	"net/http"
 )
@@ -17,10 +18,9 @@ type ShortCode struct {
 	Example  string   `json:"example"`
 	Tags     []string `json:"tags"`
 
-	Asset   string `json:"asset"`
-	AssetID string `json:"asset_id"`
-	Width   int    `json:"width"`
-	Height  int    `json:"height"`
+	Asset  string `json:"asset"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 // MarshalEditor writes a buffer of html to edit a Song within the CMS
@@ -59,13 +59,6 @@ func (s *ShortCode) MarshalEditor() ([]byte, error) {
 			View: editor.File("Asset", s, map[string]string{
 				"label":       "Asset",
 				"placeholder": "Upload the asset here",
-			}),
-		},
-		editor.Field{
-			View: editor.Input("AssetID", s, map[string]string{
-				"label":       "AssetID",
-				"type":        "text",
-				"placeholder": "Enter the asset id here",
 			}),
 		},
 		editor.Field{
@@ -202,6 +195,10 @@ func (s *ShortCode) IndexContent() bool {
 //
 //	return indexMapping, nil
 //}
+
+func (s *ShortCode) SetHash() {
+	s.Hash = hash.Fields([]string{s.Name})
+}
 
 func (s *ShortCode) SetMeta(service content.DirService) error {
 	if s.Asset == "" {

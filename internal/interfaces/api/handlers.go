@@ -32,6 +32,7 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/sc", s.wrapImageHandler(s.handler.ScHandler))
 	s.mux.HandleFunc("/api/sc/search", s.wrapImageHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/sc/tags", s.wrapImageHandler(s.handler.ContentsTagsHandler))
+	s.mux.HandleFunc("/api/sc/hash", s.wrapImageHandler(s.handler.ScHashHandler))
 
 	s.mux.HandleFunc("/api/search", s.wrapContentHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/search2", s.wrapContentHandler(s.handler.SearchContentHandler2))

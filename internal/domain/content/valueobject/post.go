@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
 	"text/template"
 )
@@ -69,7 +70,7 @@ func (s *Post) MarshalEditor() ([]byte, error) {
 func (s *Post) String() string { return s.Title }
 
 func (s *Post) SetHash() {
-	s.Hash = Hash([]string{s.Content})
+	s.Hash = hash.Fields([]string{s.Content})
 }
 
 // Create implements api.Createable, and allows external POST requests from clients

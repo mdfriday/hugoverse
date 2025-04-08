@@ -54,28 +54,53 @@ func (s *Handler) getContentByHash(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	data := map[string]interface{}{
-		"id":   p.(content.Identifier).ID(),
-		"type": t,
+	if post == nil {
+		res.WriteHeader(http.StatusNotFound)
+		s.log.Printf("Content not found: %s %s %s", t, hash, status)
+		return
 	}
 
-	resp := map[string]interface{}{
-		"data": []map[string]interface{}{
-			data,
-		},
+	if hide(res, req, p) {
+		return
 	}
 
-	j, err := json.Marshal(resp)
+	push(res, req, p, post)
+
+	j, err := s.res.FmtJSON(json.RawMessage(post))
 	if err != nil {
-		s.log.Errorf("Error marshalling response to JSON: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	res.Header().Set("Content-Type", "application/json")
-	_, err = res.Write(j)
+	j, err = omit(res, req, p, j)
 	if err != nil {
-		s.log.Errorf("Error writing response: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	// assert hookable
+	get := p
+	hook, ok := get.(content.Hookable)
+	if !ok {
+		s.log.Errorln("[Response] error: Type", t, "does not implement item.Hookable or embed item.Item.")
+		res.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	// hook before response
+	j, err = hook.BeforeAPIResponse(res, req, j)
+	if err != nil {
+		s.log.Errorln("[Response] error calling BeforeAPIResponse:", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	s.res.Json(res, j)
+
+	// hook after response
+	err = hook.AfterAPIResponse(res, req, j)
+	if err != nil {
+		s.log.Errorln("[Response] error calling AfterAPIResponse:", err)
 		return
 	}
 }

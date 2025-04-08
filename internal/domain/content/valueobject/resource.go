@@ -3,6 +3,7 @@ package valueobject
 import (
 	"fmt"
 	"github.com/mdfriday/hugoverse/pkg/editor"
+	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
 )
 
@@ -50,7 +51,7 @@ func (s *Resource) MarshalEditor() ([]byte, error) {
 func (s *Resource) String() string { return s.Name }
 
 func (s *Resource) SetHash() {
-	s.Hash = Hash([]string{s.Name, s.Size})
+	s.Hash = hash.Fields([]string{s.Name, s.Size})
 }
 
 // Create implements api.Createable, and allows external POST requests from clients
