@@ -215,7 +215,7 @@ func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	p, found := s.contentApp.AllContentTypes()[t]
+	p, found := s.contentApp.AllTypes()[t]
 	if !found {
 		s.log.Printf("Attempt to submit unknown type: %s from %s", t, req.RemoteAddr)
 		res.WriteHeader(http.StatusNotFound)
@@ -234,12 +234,12 @@ func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
 		if err != nil {
 			s.log.Errorf("Error getting content: %v with id %s", err, cid)
 			res.WriteHeader(http.StatusNotFound)
+			return
 		}
 		err = json.Unmarshal(data, ep)
 		if err != nil {
-			if err := s.res.err500(res); err != nil {
-				s.log.Errorf("Error response err 500: %s", err)
-			}
+			s.log.Errorf("Error unmarshalling content: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		if sort, ok := ep.(content.Sortable); ok {
@@ -250,6 +250,10 @@ func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
 		}
 		if slug, ok := ep.(content.Sluggable); ok {
 			req.PostForm.Set("slug", slug.ItemSlug())
+		}
+		if dim, ok := ep.(content.Dimensional); ok {
+			req.PostForm.Set("width", fmt.Sprintf("%d", dim.GetWidth()))
+			req.PostForm.Set("height", fmt.Sprintf("%d", dim.GetHeight()))
 		}
 		if update, ok := ep.(content.Updateable); ok {
 			err = update.Update(res, req)

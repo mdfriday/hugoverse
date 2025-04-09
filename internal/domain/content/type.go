@@ -142,6 +142,11 @@ type Metable interface {
 	SetMeta(service DirService) error
 }
 
+type Dimensional interface {
+	GetWidth() int
+	GetHeight() int
+}
+
 // Searchable ...
 type Searchable interface {
 	SearchMapping() (*mapping.IndexMappingImpl, error)

@@ -198,6 +198,14 @@ func (s *Image) SetMeta(service content.DirService) error {
 	return nil
 }
 
+func (s *Image) GetWidth() int {
+	return s.Width
+}
+
+func (s *Image) GetHeight() int {
+	return s.Height
+}
+
 func (s *Image) ItemTags() []string {
 	return s.Tags
 }

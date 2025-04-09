@@ -221,6 +221,14 @@ func (s *ShortCode) SetMeta(service content.DirService) error {
 	return nil
 }
 
+func (s *ShortCode) GetWidth() int {
+	return s.Width
+}
+
+func (s *ShortCode) GetHeight() int {
+	return s.Height
+}
+
 func (s *ShortCode) ItemTags() []string {
 	return s.Tags
 }
