@@ -255,6 +255,9 @@ func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
 			req.PostForm.Set("width", fmt.Sprintf("%d", dim.GetWidth()))
 			req.PostForm.Set("height", fmt.Sprintf("%d", dim.GetHeight()))
 		}
+		if h, ok := ep.(content.Hashable); ok {
+			req.PostForm.Set("hash", h.ItemHash())
+		}
 		if update, ok := ep.(content.Updateable); ok {
 			err = update.Update(res, req)
 			if err != nil {
