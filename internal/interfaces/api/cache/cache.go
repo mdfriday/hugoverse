@@ -43,11 +43,14 @@ func (s *Cache) Control(next http.Handler) http.HandlerFunc {
 				age = DefaultMaxAge
 			}
 			policy := fmt.Sprintf("max-age=%d, public", age)
-			res.Header().Add("ETag", etag)
+			res.Header().Add("Etag", etag)
+			res.Header().Add("Access-Control-Expose-Headers", "Etag")
 			res.Header().Add("Cache-Control", policy)
 
 			if match := req.Header.Get("If-None-Match"); match != "" {
 				if strings.Contains(match, etag) {
+					res.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, If-None-Match ")
+					res.Header().Set("Access-Control-Allow-Origin", "*")
 					res.WriteHeader(http.StatusNotModified)
 					return
 				}

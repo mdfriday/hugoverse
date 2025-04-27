@@ -37,7 +37,12 @@ func (s *Response) Json(res http.ResponseWriter, data []byte) {
 func (s *Response) FmtJSON(data ...json.RawMessage) ([]byte, error) {
 	var resp map[string][]json.RawMessage
 
-	if len(data) == 1 {
+	if len(data) == 0 {
+		// Explicitly handle empty data case to ensure "data": [] in response
+		resp = map[string][]json.RawMessage{
+			"data": []json.RawMessage{},
+		}
+	} else if len(data) == 1 {
 		resp = map[string][]json.RawMessage{
 			"data": data,
 		}

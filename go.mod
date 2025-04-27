@@ -69,10 +69,10 @@ require (
 	go.uber.org/zap v1.26.0
 	golang.org/x/crypto v0.34.0
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
-	golang.org/x/image v0.22.0
+	golang.org/x/image v0.26.0
 	golang.org/x/mod v0.22.0
-	golang.org/x/sync v0.11.0
-	golang.org/x/text v0.22.0
+	golang.org/x/sync v0.13.0
+	golang.org/x/text v0.24.0
 	golang.org/x/tools v0.29.0
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1

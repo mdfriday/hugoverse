@@ -53,10 +53,12 @@ func (s *Store) Query(namespace string, opts QueryOptions) (int, [][]byte) {
 			end = start + opts.Count
 		}
 
-		// bounds check on posts given the start & end count
-		if start > n {
-			start = n - opts.Count
+		// When offset exceeds total items, return empty posts
+		if start >= n {
+			return nil
 		}
+
+		// bounds check for end
 		if end > n {
 			end = n
 		}
