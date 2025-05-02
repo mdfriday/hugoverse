@@ -185,9 +185,6 @@ func (s *Handler) ImageResizeHandler(res http.ResponseWriter, req *http.Request)
 
 	// Return the image
 	res.Write(processedImage)
-	if f, ok := res.(http.Flusher); ok {
-		f.Flush()
-	}
 
 	return
 }
