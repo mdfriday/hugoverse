@@ -52,7 +52,7 @@ func (s *Server) wrapContentHandler(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func (s *Server) wrapImageHandler(handler http.HandlerFunc) http.HandlerFunc {
-	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(s.comp.Gzip(handler))))
+	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(handler)))
 }
 
 func (s *Server) registerUserHandler() {
