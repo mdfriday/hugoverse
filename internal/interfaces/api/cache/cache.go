@@ -2,9 +2,10 @@ package cache
 
 import (
 	"fmt"
-	"github.com/mdfriday/hugoverse/pkg/loggers"
 	"net/http"
 	"strings"
+
+	"github.com/mdfriday/hugoverse/pkg/loggers"
 )
 
 type Controller interface {
@@ -26,8 +27,8 @@ func New(log loggers.Logger, adminApp Controller) *Cache {
 }
 
 const (
-	// DefaultMaxAge provides a 2592000 second (30-day) cache max-age setting
-	DefaultMaxAge = int64(60 * 60 * 24 * 30)
+	// DefaultMaxAge provides a default max age of 1 hour
+	DefaultMaxAge = int64(60 * 60)
 )
 
 // Control sets the default cache policy on static asset responses

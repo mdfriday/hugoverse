@@ -1,8 +1,9 @@
 package handler
 
 import (
-	"github.com/mdfriday/hugoverse/pkg/hash"
 	"net/http"
+
+	"github.com/mdfriday/hugoverse/pkg/hash"
 )
 
 func (s *Handler) ScsHandler(res http.ResponseWriter, req *http.Request) {

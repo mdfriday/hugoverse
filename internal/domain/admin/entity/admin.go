@@ -2,10 +2,11 @@ package entity
 
 import (
 	"encoding/json"
+	"net/url"
+
 	"github.com/mdfriday/hugoverse/internal/domain/admin/repository"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
-	"net/url"
 )
 
 type Admin struct {
@@ -92,6 +93,23 @@ func (a *Admin) PutConfig(key string, value any) error {
 
 	a.Conf = c
 
+	// Update Config reference in embedded structs
+	if a.Http != nil {
+		a.Http.Conf = a.Conf
+	}
+	if a.Cache != nil {
+		a.Cache.Conf = a.Conf
+	}
+	if a.Controller != nil {
+		a.Controller.Conf = a.Conf
+	}
+	if a.Client != nil {
+		a.Client.Conf = a.Conf
+	}
+	if a.Netlify != nil {
+		a.Netlify.Conf = a.Conf
+	}
+
 	return nil
 }
 
@@ -101,7 +119,9 @@ func (a *Admin) RefreshETage() {
 }
 
 func (a *Admin) InvalidateCache() error {
-	err := a.PutConfig("etag", valueobject.NewEtag())
+	a.RefreshETage()
+	err := a.PutConfig("etag", a.Conf.Etag)
+
 	if err != nil {
 		return err
 	}

@@ -372,6 +372,10 @@ func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
 		}
 	}
 
+	if err := s.adminApp.InvalidateCache(); err != nil {
+		s.log.Errorf("Error invalidating cache: %s", err)
+	}
+
 	// set the target in the context so user can get saved value from db in hook
 	ctx := context.WithValue(req.Context(), "target", fmt.Sprintf("%s:%s", t, cid))
 	req = req.WithContext(ctx)
