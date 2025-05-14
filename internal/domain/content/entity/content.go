@@ -42,6 +42,11 @@ func (c *Content) GetContents(ids []content.Identifier) ([][]byte, error) {
 		if err != nil {
 			return nil, err
 		}
+		if data == nil {
+			c.Log.Infof("Content not found: %s %s", id.ContentType(), id.ID())
+			continue
+		}
+
 		contents = append(contents, data)
 	}
 	return contents, nil
