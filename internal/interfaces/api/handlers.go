@@ -16,6 +16,8 @@ func (s *Server) registerContentHandler() {
 		s.content.Handle(s.handler.ContentsTagsHandler)))
 
 	s.mux.HandleFunc("/api/hash", s.wrapContentHandler(s.handler.HashHandler))
+	s.mux.HandleFunc("/api/signature", s.wrapContentHandler(s.handler.SignatureHandler))
+	s.mux.HandleFunc("/api/cta/submit", s.wrapContentHandler(s.handler.CTAHandler))
 
 	s.mux.HandleFunc("/api/images", s.wrapImageHandler(s.handler.ImagesHandler))
 	s.mux.HandleFunc("/api/image", s.wrapImageHandler(s.handler.ImageHandler))

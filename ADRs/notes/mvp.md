@@ -23,6 +23,17 @@ curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
 -d "email=user_625216@mdfriday.com&password=123456"
 
+### 创建 CTA
+
+curl -v -X POST "http://127.0.0.1:1314/api/content?type=CTA" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDYtMjVUMTM6NTY6NDkuMDEwNDYyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.Y-yMv7_sacxSAsYVBUriBOzMiBl72uSp-W3rA-50uy8" \
+-F "id=-1" \
+-F "name=test-cta" \
+-F "email=xxx@example.com"
+
+curl -X GET "http://127.0.0.1:1314/api/contents?type=CTA&count=10&offset=0&order=desc" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDYtMjVUMTM6NTY6NDkuMDEwNDYyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.Y-yMv7_sacxSAsYVBUriBOzMiBl72uSp-W3rA-50uy8" 
+
 ### 创建站点
 
 curl -X POST "http://127.0.0.1:1314/api/content?type=Site" \
@@ -103,7 +114,10 @@ curl -X POST "http://127.0.0.1:1314/api/preview?type=Site&id=2" \
 curl -X POST "http://127.0.0.1:1314/api/deploy?type=Site&id=2" \
 -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjQtMTItMDRUMDg6MTQ6NTIuNTk2MDI5KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.foManZwcdG0h52dCxeKY6jE6iTkdSZFcEbnGFanLZU0"
 
+### Sign
 
+curl -X GET "http://127.0.0.1:1314/api/signature" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDYtMjVUMTM6NTY6NDkuMDEwNDYyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.Y-yMv7_sacxSAsYVBUriBOzMiBl72uSp-W3rA-50uy8"\
 
 #### Search
 
