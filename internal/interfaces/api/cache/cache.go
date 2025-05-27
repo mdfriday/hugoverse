@@ -50,7 +50,7 @@ func (s *Cache) Control(next http.Handler) http.HandlerFunc {
 
 			if match := req.Header.Get("If-None-Match"); match != "" {
 				if strings.Contains(match, etag) {
-					res.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, If-None-Match ")
+					res.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, If-None-Match, X-Signature, X-Signer")
 					res.Header().Set("Access-Control-Allow-Origin", "*")
 					res.WriteHeader(http.StatusNotModified)
 					return

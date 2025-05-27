@@ -17,7 +17,7 @@ func (s *Server) registerContentHandler() {
 
 	s.mux.HandleFunc("/api/hash", s.wrapContentHandler(s.handler.HashHandler))
 	s.mux.HandleFunc("/api/signature", s.wrapContentHandler(s.handler.SignatureHandler))
-	s.mux.HandleFunc("/api/cta/submit", s.wrapContentHandler(s.handler.CTAHandler))
+	s.mux.HandleFunc("/api/cta/submit", s.wrapSignatureHandler(s.handler.CTAHandler))
 
 	s.mux.HandleFunc("/api/images", s.wrapImageHandler(s.handler.ImagesHandler))
 	s.mux.HandleFunc("/api/image", s.wrapImageHandler(s.handler.ImageHandler))
@@ -51,6 +51,14 @@ func (s *Server) wrapContentHandler(handler http.HandlerFunc) http.HandlerFunc {
 			s.comp.Gzip(
 				s.db.Open(
 					s.auth.Check(handler)))))
+}
+
+func (s *Server) wrapSignatureHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(
+		s.cors.Handle(
+			s.comp.Gzip(
+				s.db.OpenFromSignature(
+					s.auth.CheckSignature(handler)))))
 }
 
 func (s *Server) wrapImageHandler(handler http.HandlerFunc) http.HandlerFunc {

@@ -28,6 +28,18 @@ func (a *Auth) CheckGetMethod(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+func (a *Auth) CheckSignature(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		_, err := token.GetEmailFromSignature(req)
+		if err == nil {
+			next.ServeHTTP(res, req)
+			return
+		}
+
+		res.WriteHeader(http.StatusUnauthorized)
+	})
+}
+
 // Check is HTTP middleware to ensure the request has proper token credentials
 func (a *Auth) Check(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {

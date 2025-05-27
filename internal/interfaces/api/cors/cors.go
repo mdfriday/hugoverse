@@ -7,6 +7,10 @@ import (
 	"net/url"
 )
 
+const (
+	AllowHeader = "Accept, Authorization, Content-Type, If-None-Match, X-Signature, X-Signer"
+)
+
 type Controller interface {
 	CorsDisabled() bool
 	Domain() string
@@ -46,7 +50,7 @@ func (s *Cors) Handle(next http.HandlerFunc) http.HandlerFunc {
 
 // sendPreflight is used to respond to a cross-origin "OPTIONS" request
 func sendPreflight(res http.ResponseWriter) {
-	res.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, If-None-Match ")
+	res.Header().Set("Access-Control-Allow-Headers", AllowHeader)
 	res.Header().Set("Access-Control-Allow-Origin", "*")
 	res.WriteHeader(200)
 	return
@@ -75,7 +79,7 @@ func (s *Cors) responseWithCORS(res http.ResponseWriter, req *http.Request) (htt
 		// in config
 		if origin == domain {
 			// apply limited CORS headers and return
-			res.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, If-None-Match")
+			res.Header().Set("Access-Control-Allow-Headers", AllowHeader)
 			res.Header().Set("Access-Control-Allow-Origin", domain)
 			return res, true
 		}
@@ -86,7 +90,7 @@ func (s *Cors) responseWithCORS(res http.ResponseWriter, req *http.Request) (htt
 	}
 
 	// apply full CORS headers and return
-	res.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, If-None-Match")
+	res.Header().Set("Access-Control-Allow-Headers", AllowHeader)
 	res.Header().Set("Access-Control-Allow-Origin", "*")
 
 	return res, true

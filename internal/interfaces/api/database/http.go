@@ -7,6 +7,25 @@ import (
 	"net/http"
 )
 
+func (d *Database) OpenFromSignature(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		email, err := token.GetEmailFromSignature(req)
+		if err != nil {
+			d.log.Errorf("Error getting email: %v", err)
+			res.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+
+		if err := d.StartUserDatabase(email); err != nil {
+			d.log.Errorf("Error starting user database: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		next.ServeHTTP(res, req)
+	})
+}
+
 func (d *Database) Open(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		email, err := token.GetEmail(req)

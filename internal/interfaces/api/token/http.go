@@ -7,6 +7,28 @@ import (
 	"strings"
 )
 
+func GetEmailFromSignature(req *http.Request) (string, error) {
+	// Check if the signature is present in the request
+	signature := req.Header.Get("X-Signature")
+	signer := req.Header.Get("X-Signer")
+
+	if signature == "" || signer == "" {
+		return "", errors.New("signature or signer header is missing")
+	}
+
+	// Validate the signature
+	valid, err := SignatureHMAC.Validate(signer, signature)
+	if err != nil {
+		return "", err
+	}
+
+	if !valid {
+		return "", errors.New("invalid signature")
+	}
+
+	return signer, nil
+}
+
 func GetEmail(req *http.Request) (string, error) {
 	token, err := GetToken(req)
 	if err != nil {

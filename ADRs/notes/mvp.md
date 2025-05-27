@@ -119,6 +119,13 @@ curl -X POST "http://127.0.0.1:1314/api/deploy?type=Site&id=2" \
 curl -X GET "http://127.0.0.1:1314/api/signature" \
 -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjUtMDYtMjVUMTM6NTY6NDkuMDEwNDYyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJtZUBzdW53ZWkueHl6In0.Y-yMv7_sacxSAsYVBUriBOzMiBl72uSp-W3rA-50uy8"\
 
+curl -v -X POST "http://127.0.0.1:1314/api/cta/submit?type=CTA" \
+-H "X-Signature: bGRN2Mg7WPWIr87gzOyNHnHT1lZbGvaFru7WGY-fh_8" \
+-H "X-Signer: me@sunwei.xyz" \
+-F "id=-1" \
+-F "name=test-cta" \
+-F "email=xxx@example.com"
+
 #### Search
 
 curl -X GET "http://127.0.0.1:1314/api/search?type=Image&q=tags:Test" \
