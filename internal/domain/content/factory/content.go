@@ -45,7 +45,6 @@ func NewContent(repo repository.Repository, dir content.DirService) *entity.Cont
 func prepareUserTypes(c *entity.Content) {
 	//c.UserTypes["Author"] = func() interface{} { return new(valueobject.Author) }
 	//c.UserTypes["Language"] = func() interface{} { return new(valueobject.Language) }
-	//c.UserTypes["Theme"] = func() interface{} { return new(valueobject.Theme) }
 	c.UserTypes["Post"] = func() interface{} { return new(valueobject.Post) }
 	c.UserTypes["Resource"] = func() interface{} { return new(valueobject.Resource) }
 	c.UserTypes["Site"] = func() interface{} { return new(valueobject.Site) }
@@ -59,8 +58,10 @@ func prepareUserTypes(c *entity.Content) {
 func prepareAdminTypes(c *entity.Content) {
 	c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
 	c.AdminTypes["Preview"] = func() interface{} { return new(valueobject.Preview) }
+	c.AdminTypes["MDFPreview"] = func() interface{} { return new(valueobject.MDFPreview) }
 	c.AdminTypes["Image"] = func() interface{} { return new(valueobject.Image) }
 	c.AdminTypes["ShortCode"] = func() interface{} { return new(valueobject.ShortCode) }
+	c.AdminTypes["Theme"] = func() interface{} { return new(valueobject.Theme) }
 }
 
 func NewContentWithServices(repo repository.Repository, services content.Services, dirService content.DirService) *entity.Content {

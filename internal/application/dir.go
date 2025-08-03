@@ -15,17 +15,17 @@ const folderPreview = "preview"
 func init() {
 	cachedHugoverseDir = hugoverseDir()
 
-	err := ensureDirExists(cachedHugoverseDir)
+	err := EnsureDirExists(cachedHugoverseDir)
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	err = ensureDirExists(LogDir())
+	err = EnsureDirExists(LogDir())
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	err = ensureDirExists(ImageStorageDir())
+	err = EnsureDirExists(ImageStorageDir())
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -81,7 +81,7 @@ func getWd() string {
 	return wd
 }
 
-func ensureDirExists(dir string) error {
+func EnsureDirExists(dir string) error {
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		err := os.MkdirAll(dir, 0755)
 		if err != nil {

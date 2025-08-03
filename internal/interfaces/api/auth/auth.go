@@ -28,6 +28,22 @@ func (a *Auth) CheckGetMethod(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+func (a *Auth) CheckPostMethod(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		switch req.Method {
+		case http.MethodGet:
+			res.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		case http.MethodPost:
+			next.ServeHTTP(res, req)
+			return
+		default:
+			res.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	})
+}
+
 func (a *Auth) CheckSignature(next http.HandlerFunc) http.HandlerFunc {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		_, err := token.GetEmailFromSignature(req)

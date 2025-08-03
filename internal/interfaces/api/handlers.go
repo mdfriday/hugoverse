@@ -19,22 +19,31 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/signature", s.wrapContentHandler(s.handler.SignatureHandler))
 	s.mux.HandleFunc("/api/cta/submit", s.wrapSignatureHandler(s.handler.CTAHandler))
 
-	s.mux.HandleFunc("/api/images", s.wrapImageHandler(s.handler.ImagesHandler))
-	s.mux.HandleFunc("/api/image", s.wrapImageHandler(s.handler.ImageHandler))
-	s.mux.HandleFunc("/api/image/search", s.wrapImageHandler(s.handler.SearchContentHandler))
-	s.mux.HandleFunc("/api/image/tags", s.wrapImageHandler(s.handler.ContentsTagsHandler))
+	s.mux.HandleFunc("/api/images", s.wrapPublicHandler(s.handler.ImagesHandler))
+	s.mux.HandleFunc("/api/image", s.wrapPublicHandler(s.handler.ImageHandler))
+	s.mux.HandleFunc("/api/image/search", s.wrapPublicHandler(s.handler.SearchContentHandler))
+	s.mux.HandleFunc("/api/image/tags", s.wrapPublicHandler(s.handler.ContentsTagsHandler))
 	s.mux.HandleFunc("/image/{size:[0-9]+}{extension:(?:\\..*)?}",
-		s.wrapImageHandler(s.handler.ImageRandomHandler))
+		s.wrapPublicHandler(s.handler.ImageRandomHandler))
 	s.mux.HandleFunc("/image/{width:[0-9]+}/{height:[0-9]+}{extension:(?:\\..*)?}",
-		s.wrapImageHandler(s.handler.ImageRandomHandler))
+		s.wrapPublicHandler(s.handler.ImageRandomHandler))
 	s.mux.HandleFunc("/image/id/{id}/{width:[0-9]+}/{height:[0-9]+}{extension:(?:\\..*)?}",
-		s.wrapImageHandler(s.handler.ImageResizeHandler))
+		s.wrapPublicHandler(s.handler.ImageResizeHandler))
 
-	s.mux.HandleFunc("/api/scs", s.wrapImageHandler(s.handler.ScsHandler))
-	s.mux.HandleFunc("/api/sc", s.wrapImageHandler(s.handler.ScHandler))
-	s.mux.HandleFunc("/api/sc/search", s.wrapImageHandler(s.handler.SearchContentHandler))
-	s.mux.HandleFunc("/api/sc/tags", s.wrapImageHandler(s.handler.ContentsTagsHandler))
-	s.mux.HandleFunc("/api/sc/hash", s.wrapImageHandler(s.handler.ScHashHandler))
+	s.mux.HandleFunc("/api/scs", s.wrapPublicHandler(s.handler.ScsHandler))
+	s.mux.HandleFunc("/api/sc", s.wrapPublicHandler(s.handler.ScHandler))
+	s.mux.HandleFunc("/api/sc/search", s.wrapPublicHandler(s.handler.SearchContentHandler))
+	s.mux.HandleFunc("/api/sc/tags", s.wrapPublicHandler(s.handler.ContentsTagsHandler))
+	s.mux.HandleFunc("/api/sc/hash", s.wrapPublicHandler(s.handler.ScHashHandler))
+
+	s.mux.HandleFunc("/api/themes", s.wrapPublicHandler(s.handler.ThemesHandler))
+	s.mux.HandleFunc("/api/theme", s.wrapPublicHandler(s.handler.ThemeHandler))
+	s.mux.HandleFunc("/api/theme/search", s.wrapPublicHandler(s.handler.SearchContentHandler))
+	s.mux.HandleFunc("/api/theme/tags", s.wrapPublicHandler(s.handler.ContentsTagsHandler))
+	s.mux.HandleFunc("/api/theme/hash", s.wrapPublicHandler(s.handler.ThemeHashHandler))
+
+	s.mux.HandleFunc("/api/mdf/preview", s.wrapPreviewHandler(s.handler.MDFPreviewHandler))
+	s.mux.HandleFunc("/api/mdf/preview/deploy", s.wrapPreviewHandler(s.handler.DeployMDFridayPreviewHandler))
 
 	s.mux.HandleFunc("/api/search", s.wrapContentHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/search2", s.wrapContentHandler(s.handler.SearchContentHandler2))
@@ -43,6 +52,7 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/build", s.wrapContentHandler(s.handler.BuildContentHandler))
 	s.mux.HandleFunc("/api/deploy", s.wrapContentHandler(s.handler.DeployContentHandler))
 	s.mux.HandleFunc("/api/deploy/progress", s.handler.DeployProgressHandler)
+
 }
 
 func (s *Server) wrapContentHandler(handler http.HandlerFunc) http.HandlerFunc {
@@ -61,8 +71,12 @@ func (s *Server) wrapSignatureHandler(handler http.HandlerFunc) http.HandlerFunc
 					s.auth.CheckSignature(handler)))))
 }
 
-func (s *Server) wrapImageHandler(handler http.HandlerFunc) http.HandlerFunc {
+func (s *Server) wrapPublicHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(handler)))
+}
+
+func (s *Server) wrapPreviewHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(s.cors.Handle(s.db.OpenPublic(s.auth.CheckPostMethod(handler))))
 }
 
 func (s *Server) registerUserHandler() {

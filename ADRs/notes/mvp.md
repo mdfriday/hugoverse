@@ -13,7 +13,7 @@
 
 curl -X POST http://127.0.0.1:1314/api/user \
 -H "Content-Type: application/x-www-form-urlencoded" \
--d "email=abc@qq.com&password=123456"
+-d "email=mdf_public@mdfriday.com&password=987123"
 
 curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
@@ -176,5 +176,19 @@ http://127.0.0.1:1314/image/id/1/100/100.jpg?hmac=jBxrm5Pz0xzYEY01kLEk9KsbVLvJX8
 ➜  mdfriday curl -X GET "http://127.0.0.1:1314/api/sc?type=ShortCode&status=&id=1"
 {"data":[{"uuid":"98b64ab7-27a4-48d6-9083-da9ae9af093c","status":"public","namespace":"ShortCode","id":1,"slug":"cardbanner","hash":"","timestamp":1743726576000,"updated":1743726636122,"name":"cardBanner","template":"\u003cstyle\u003e\r\n.cardbanner {\r\n    font-family: Arial, sans-serif;\r\n            padding: 40px;\r\n            background-color: #f5f5f5;\r\n            max-width: 1080px;\r\n            margin: 0 auto;\r\n}\r\n\r\n.cardbanner .header {\r\n   display: flex;\r\n            justify-content: space-between;\r\n            align-items: flex-start;\r\n            margin-bottom: 100px;\r\n}\r\n\r\n.cardbanner .logo {\r\n    font-size: 24px;\r\n    font-weight: bold;\r\n}\r\n\r\n.cardbanner .avatar {\r\n    width: 60px;\r\n            height: 60px;\r\n            font-size: 40px;\r\n            border-radius: 50%; /* 让图片变成圆形 */\r\n            object-fit: cover; /* 确保图片填充整个圆形 */\r\n            display: block;\r\n}\r\n\r\n.cardbanner .main-title {\r\n    font-size: 52px;\r\n            font-weight: bold;\r\n            margin-bottom: 20px;\r\n            line-height: 1.2;\r\n}\r\n\r\n.cardbanner .subtitle {\r\n    font-size: 65px;\r\n            font-weight: bold;\r\n            background: linear-gradient(transparent 60%, #FFB6C1 40%);\r\n            display: inline-block;\r\n            margin-bottom: 15px;\r\n            letter-spacing: 15px;\r\n}\r\n\r\n.cardbanner .description {\r\n    font-size: 23px;\r\n            color: #666;\r\n            margin-bottom: 45px;\r\n}\r\n\r\n.cardbanner .new-label {\r\n    position: relative;\r\n            display: inline-block;\r\n            margin-top: 60px;\r\n            transform: rotate(-10deg);\r\n            width: 100%;\r\n}\r\n\r\n.cardbanner .new-tag {\r\n    background: #4169E1;\r\n            color: white;\r\n            padding: 10px 20px;\r\n            border-radius: 15px;\r\n            position: absolute;  /* 绝对定位 */\r\n            right: 0;  /* 让它紧贴 .new-label 右侧 */\r\n            top: 50%;  /* 垂直居中 */\r\n            transform: translateY(-50%) rotate(30deg);  /* 保持旋转但居中 */\r\n            display: inline-block;\r\n            font-weight: bold;\r\n            font-size: 28px;\r\n            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);\r\n}\r\n\r\n.cardbanner .new-tag::after {\r\n    content: \"!!\";\r\n    color: white;\r\n    margin-left: 5px;\r\n}\r\n\r\n.cardbanner .footer {\r\n     margin-top: 174px;\r\n            display: flex;\r\n            justify-content: space-between;\r\n            font-size: 20px;\r\n            color: #333;\r\n}\r\n\r\n.cardbanner .footer span {\r\n    margin: 0 10px;\r\n}\r\n\r\n.cardbanner .divider {\r\n    color: #999;\r\n}\r\n      \u003c/style\u003e\r\n      \u003cdiv class=\"cardbanner\"\u003e\r\n        \u003cdiv class=\"header\"\u003e\r\n          \u003cdiv class=\"logo\"\u003e{{ .Get \"logo\" }}\u003c/div\u003e\r\n          \u003cdiv class=\"avatar\"\u003e\r\n           \u003cimg class=\"avatar\" src='{{ .Get \"avatar\" }}' alt=\"头像\"\u003e\r\n          \u003c/div\u003e\r\n        \u003c/div\u003e\r\n\r\n        \u003cdiv class=\"main-title\"\u003e\r\n          {{ .Get \"mainTitle\" }}\r\n        \u003c/div\u003e\r\n\r\n        \u003cdiv class=\"subtitle\"\u003e\r\n          {{ .Get \"subtitle\" }}\r\n        \u003c/div\u003e\r\n\r\n        \u003cdiv class=\"description\"\u003e\r\n          {{ .Get \"description\" }}\r\n        \u003c/div\u003e\r\n\r\n        \u003cdiv class=\"new-label\"\u003e\r\n          \u003cdiv class=\"new-tag\"\u003e{{ .Get \"newTagText\" }}\u003c/div\u003e\r\n        \u003c/div\u003e\r\n\r\n        \u003cdiv class=\"footer\"\u003e\r\n        {{ $topics := split (.Get \"footerContent\") \",\" }}\r\n        {{ range $index, $topic := $topics }}\r\n            {{ if gt $index 0 }} \u003cspan class=\"divider\"\u003e|\u003c/span\u003e {{ end }}\r\n            {{ $topic }}\r\n        {{ end }}\r\n        \u003c/div\u003e\r\n      \u003c/div\u003e","example":"{{\u003c cardBanner\r\n    logo=\"不黑学长\"\r\n    avatar=\"/images/avatar.png\"\r\n    mainTitle=\"让完播率\u003e50% (3/3)\"\r\n    subtitle=\"6种文案公式\"\r\n    description=\"爆款拆解/爆款要素/文案结构\"\r\n    newTagText=\"全新整理\"\r\n    footerContent=\"运营技巧,爆款选题,文案写作,数据复盘\"\r\n/\u003e}}","asset":"/api/uploads/d66e65ad754f15723096c1156d043cbe/2025/04/1743726636150-1.jpg","tags":["xhs","小红书"],"width":1080,"height":1440}]}
 
-curl http://localhost:1314/api/sc/hash?name=Test2
+curl -X GET "http://localhost:1314/api/sc/hash?name=Test2"
 {"data":[{"uuid":"4eb05195-5fd6-4978-a6e1-6ba84d833f13","status":"public","namespace":"ShortCode","id":2,"slug":"test2","hash":"32e6e1e134f9cc8f14b05925667c118d19244aebce442d6fecd2ac38cdc97649","timestamp":1744113507000,"updated":1744113687007,"name":"Test2","desc":"Test2 SC","template":"Test2 SC template","example":"SC example","tags":["SC2"],"asset":"/api/uploads/d66e65ad754f15723096c1156d043cbe/2025/04/2.jpg","width":1080,"height":1440}]}
+
+
+#### 创建 MDFriday Preview
+
+curl -X POST "http://127.0.0.1:1314/api/mdf/preview?type=MDFPreview" \
+-F "type=MDFPreview" \
+-F "id=-1" \
+-F "name=abc" \
+-F "size=12345" \
+-F "asset=@/Users/weisun/Downloads/site.zip"
+
+curl -X POST "http://127.0.0.1:1314/api/mdf/preview/deploy?type=MDFPreview&id=1" \
+-F "type=MDFPreview" \
+-F "host_name=MDFriday Preview" 

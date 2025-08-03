@@ -7,21 +7,17 @@ import (
 	"net/http"
 )
 
-type Theme struct {
+type MDFPreview struct {
 	Item
 
-	Name        string   `json:"name"`
-	Author      string   `json:"author"`
-	Version     string   `json:"version"`
-	Screenshot  string   `json:"screenshot"`
-	DownloadURL string   `json:"download_url"`
-	DemoURL     string   `json:"demo_url"`
-	Tags        []string `json:"tags"`
+	Name  string `json:"name"`
+	Asset string `json:"asset"`
+	Size  string `json:"size"`
 }
 
 // MarshalEditor writes a buffer of html to edit a Song within the CMS
 // and implements editor.Editable
-func (s *Theme) MarshalEditor() ([]byte, error) {
+func (s *MDFPreview) MarshalEditor() ([]byte, error) {
 	view, err := editor.Form(s,
 		editor.Field{
 			View: editor.Input("Name", s, map[string]string{
@@ -31,64 +27,41 @@ func (s *Theme) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
-			View: editor.Input("DownloadURL", s, map[string]string{
-				"label":       "DownloadURL",
-				"type":        "text",
-				"placeholder": "Enter the module URL here",
+			View: editor.File("Asset", s, map[string]string{
+				"label":       "Asset",
+				"placeholder": "Upload the asset here",
 			}),
 		},
 		editor.Field{
-			View: editor.Input("DemoURL", s, map[string]string{
-				"label":       "DemoURL",
-				"type":        "text",
-				"placeholder": "Enter the demo URL here",
-			}),
-		},
-		editor.Field{
-			View: editor.Input("Author", s, map[string]string{
-				"label":       "Author",
-				"type":        "text",
-				"placeholder": "Enter the Author here",
-			}),
-		},
-		editor.Field{
-			View: editor.Input("Version", s, map[string]string{
-				"label":       "Version",
-				"type":        "text",
-				"placeholder": "Enter the Author here",
-			}),
-		},
-		editor.Field{
-			View: editor.File("Screenshot", s, map[string]string{
-				"label":       "Screenshot",
-				"placeholder": "Upload the screenshot here",
-			}),
-		},
-		editor.Field{
-			View: editor.Tags("Tags", s, map[string]string{
-				"label":       "Tags",
-				"placeholder": "Upload the tags here",
+			View: editor.Input("Size", s, map[string]string{
+				"label":       "Size",
+				"placeholder": "Upload the size here",
 			}),
 		},
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to render Author editor view: %s", err.Error())
+		return nil, fmt.Errorf("failed to render Resource editor view: %s", err.Error())
 	}
 
 	return view, nil
 }
 
 // String defines the display name of a Song in the CMS list-view
-func (s *Theme) String() string { return s.Name }
+func (s *MDFPreview) String() string { return s.Name }
+
+func (s *MDFPreview) SetHash() {
+	s.Hash = hash.Fields([]string{s.Name, s.Size})
+}
 
 // Create implements api.Createable, and allows external POST requests from clients
 // to add content as long as the request contains the json tag names of the Song
 // struct fields, and is multipart encoded
-func (s *Theme) Create(res http.ResponseWriter, req *http.Request) error {
+func (s *MDFPreview) Create(res http.ResponseWriter, req *http.Request) error {
 	// do form data validation for required fields
 	required := []string{
 		"name",
+		"asset",
 	}
 
 	for _, r := range required {
@@ -104,7 +77,7 @@ func (s *Theme) Create(res http.ResponseWriter, req *http.Request) error {
 // BeforeAPICreate is only called if the Song type implements api.Createable
 // It is called before Create, and returning an error will cancel the request
 // causing the system to reject the data sent in the POST
-func (s *Theme) BeforeAPICreate(res http.ResponseWriter, req *http.Request) error {
+func (s *MDFPreview) BeforeAPICreate(res http.ResponseWriter, req *http.Request) error {
 	// do initial user authentication here on the request, checking for a
 	// token or cookie, or that certain form fields are set and valid
 
@@ -123,7 +96,7 @@ func (s *Theme) BeforeAPICreate(res http.ResponseWriter, req *http.Request) erro
 // notifications, etc. after the data is saved to the database, etc.
 // The request has a context containing the databse 'target' affected by the
 // request. Ex. Song__pending:3 or Song:8 depending if Song implements api.Trustable
-func (s *Theme) AfterAPICreate(res http.ResponseWriter, req *http.Request) error {
+func (s *MDFPreview) AfterAPICreate(res http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
@@ -132,7 +105,7 @@ func (s *Theme) AfterAPICreate(res http.ResponseWriter, req *http.Request) error
 // is approved, it is waiting in the Pending bucket, and can only be approved in
 // the CMS if the Mergeable interface is satisfied. If not, you will not see this
 // content show up in the CMS.
-func (s *Theme) Approve(res http.ResponseWriter, req *http.Request) error {
+func (s *MDFPreview) Approve(res http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
@@ -148,7 +121,7 @@ func (s *Theme) Approve(res http.ResponseWriter, req *http.Request) error {
 // when using AutoApprove, because content will immediately be available through
 // your public content API. If the Trustable interface is satisfied, the AfterApprove
 // method is bypassed. The
-func (s *Theme) AutoApprove(res http.ResponseWriter, req *http.Request) error {
+func (s *MDFPreview) AutoApprove(res http.ResponseWriter, req *http.Request) error {
 	// Use AutoApprove to check for trust-specific headers or whitelisted IPs,
 	// etc. Remember, you will not be able to Approve or Reject content that
 	// is auto-approved. You could add a field to Song, i.e.
@@ -159,14 +132,14 @@ func (s *Theme) AutoApprove(res http.ResponseWriter, req *http.Request) error {
 	return nil
 }
 
-func (s *Theme) IndexContent() bool {
+func (s *MDFPreview) IndexContent() bool {
 	return true
 }
 
-func (s *Theme) SetHash() {
-	s.Hash = hash.Fields([]string{s.Name})
+func (s *MDFPreview) Deploy() bool {
+	return true
 }
 
-func (s *Theme) ItemTags() []string {
-	return s.Tags
+func (s *MDFPreview) AbsAssetPath(uploadDir string) (string, error) {
+	return getAssetAbsPath(s.Asset, uploadDir)
 }

@@ -45,6 +45,18 @@ func (d *Database) Open(next http.HandlerFunc) http.HandlerFunc {
 	})
 }
 
+func (d *Database) OpenPublic(next http.HandlerFunc) http.HandlerFunc {
+	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+		if err := d.StartUserDatabase("mdf_public@mdfriday.com"); err != nil {
+			d.log.Errorf("Error starting user database: %v", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		next.ServeHTTP(res, req)
+	})
+}
+
 func (d *Database) StartUserDatabase(email string) error {
 	var buckets []string
 	buckets = append(buckets, d.contentBuckets...)
