@@ -1,4 +1,4 @@
-module github.com/mdfriday/hugoverse
+module github.com/mdfriday/hugoverse/v25
 
 go 1.23.0
 
