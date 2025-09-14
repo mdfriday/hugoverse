@@ -19,6 +19,8 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/signature", s.wrapContentHandler(s.handler.SignatureHandler))
 	s.mux.HandleFunc("/api/cta/submit", s.wrapSignatureHandler(s.handler.CTAHandler))
 
+	s.mux.HandleFunc("/api/counter", s.wrapCounterHandler(s.handler.CounterHandler))
+
 	s.mux.HandleFunc("/api/images", s.wrapPublicHandler(s.handler.ImagesHandler))
 	s.mux.HandleFunc("/api/image", s.wrapPublicHandler(s.handler.ImageHandler))
 	s.mux.HandleFunc("/api/image/search", s.wrapPublicHandler(s.handler.SearchContentHandler))
@@ -73,6 +75,10 @@ func (s *Server) wrapSignatureHandler(handler http.HandlerFunc) http.HandlerFunc
 
 func (s *Server) wrapPublicHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(handler)))
+}
+
+func (s *Server) wrapCounterHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(s.cors.Handle(handler))
 }
 
 func (s *Server) wrapPreviewHandler(handler http.HandlerFunc) http.HandlerFunc {

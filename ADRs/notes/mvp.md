@@ -23,6 +23,13 @@ curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
 -d "email=user_625216@mdfriday.com&password=123456"
 
+### 创建 Counter
+
+curl -v -X POST "http://127.0.0.1:1314/api/counter?type=Counter" \
+-F "id=-1" \
+-F "kind=preview" \
+-F "request_id=test-request-id" 
+
 ### 创建 CTA
 
 curl -v -X POST "http://127.0.0.1:1314/api/content?type=CTA" \

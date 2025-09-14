@@ -62,6 +62,7 @@ func prepareAdminTypes(c *entity.Content) {
 	c.AdminTypes["Image"] = func() interface{} { return new(valueobject.Image) }
 	c.AdminTypes["ShortCode"] = func() interface{} { return new(valueobject.ShortCode) }
 	c.AdminTypes["Theme"] = func() interface{} { return new(valueobject.Theme) }
+	c.AdminTypes["Counter"] = func() interface{} { return new(valueobject.Counter) }
 }
 
 func NewContentWithServices(repo repository.Repository, services content.Services, dirService content.DirService) *entity.Content {
