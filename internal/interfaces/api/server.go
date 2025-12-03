@@ -144,6 +144,7 @@ func (s *Server) Close() {
 }
 
 func (s *Server) registerHandler() {
+	s.registerLicenseHandler()
 	s.registerContentHandler()
 	s.registerAdminHandler()
 	s.registerUserHandler()

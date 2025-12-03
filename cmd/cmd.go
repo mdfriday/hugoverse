@@ -4,8 +4,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/mdfriday/hugoverse/internal/interfaces/cli"
 	"os"
+
+	"github.com/mdfriday/hugoverse/internal/interfaces/cli"
 )
 
 func New() error {
@@ -13,11 +14,14 @@ func New() error {
 	topLevel.Usage = func() {
 		fmt.Println("Usage:\n  hugov [command]")
 		fmt.Println("\nCommands:")
-		fmt.Println("    serve:  start the headless CMS server")
-		fmt.Println("  version:  show hugoverse command version")
+		fmt.Println("    serve:   start the headless CMS server")
+		fmt.Println("  version:   show hugoverse command version")
+		fmt.Println("  license:   manage license keys and generation")
 
 		fmt.Println("\nExample:")
 		fmt.Println("  hugov version")
+		fmt.Println("  hugov license keygen")
+		fmt.Println("  hugov license generate -plan lifetime -count 5")
 	}
 
 	err := topLevel.Parse(os.Args[1:])
@@ -81,6 +85,14 @@ func New() error {
 				return err
 			}
 			if err := loadCmd.Run(); err != nil {
+				return err
+			}
+		case "license":
+			licenseCmd, err := cli.NewLicenseCmd(topLevel)
+			if err != nil {
+				return err
+			}
+			if err := licenseCmd.Run(); err != nil {
 				return err
 			}
 

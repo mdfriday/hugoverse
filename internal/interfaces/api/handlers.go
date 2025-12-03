@@ -2,9 +2,25 @@ package api
 
 import (
 	"fmt"
-	"github.com/mdfriday/hugoverse/internal/application"
 	"net/http"
+
+	"github.com/mdfriday/hugoverse/internal/application"
 )
+
+func (s *Server) registerLicenseHandler() {
+	// Initialize license handler
+	licenseHandler, err := NewLicenseHandler()
+	if err != nil {
+		// Log error but don't fail server startup
+		fmt.Printf("Warning: Failed to initialize license handler: %v\n", err)
+		return
+	}
+
+	// Register license endpoints (no authentication required)
+	s.mux.HandleFunc("/api/license/activate", s.wrapPublicHandler(licenseHandler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/public-keys", s.wrapPublicHandler(licenseHandler.GetPublicKeysHandler))
+	s.mux.HandleFunc("/api/license/validate", s.wrapPublicHandler(licenseHandler.ValidateLicenseKeyHandler))
+}
 
 func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/contents", s.wrapContentHandler(s.handler.ApiContentsHandler))
