@@ -17,9 +17,10 @@ func (s *Server) registerLicenseHandler() {
 	}
 
 	// Register license endpoints (no authentication required)
-	s.mux.HandleFunc("/api/license/activate", s.wrapPublicHandler(licenseHandler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/activate", s.wrapLicensePostHandler(licenseHandler.ActivateLicenseHandler))
 	s.mux.HandleFunc("/api/license/public-keys", s.wrapPublicHandler(licenseHandler.GetPublicKeysHandler))
-	s.mux.HandleFunc("/api/license/validate", s.wrapPublicHandler(licenseHandler.ValidateLicenseKeyHandler))
+	s.mux.HandleFunc("/api/license/validate", s.wrapLicensePostHandler(licenseHandler.ValidateLicenseKeyHandler))
+	s.mux.HandleFunc("/api/license/decrypt", s.wrapLicensePostHandler(licenseHandler.DecryptContentHandler))
 }
 
 func (s *Server) registerContentHandler() {
@@ -91,6 +92,10 @@ func (s *Server) wrapSignatureHandler(handler http.HandlerFunc) http.HandlerFunc
 
 func (s *Server) wrapPublicHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(handler)))
+}
+
+func (s *Server) wrapLicensePostHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(s.cors.Handle(s.auth.CheckPostMethod(handler)))
 }
 
 func (s *Server) wrapCounterHandler(handler http.HandlerFunc) http.HandlerFunc {

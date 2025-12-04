@@ -609,6 +609,86 @@ func (s *Service) DecryptContentWithLicense(payload *LicensePayload, encryptedDa
 	return decryptedData, nil
 }
 
+// DecryptContentFromRequest decrypts content from API request
+func (s *Service) DecryptContentFromRequest(req *DecryptRequest) (*DecryptResponse, error) {
+	if s.cryptoService == nil {
+		if err := s.LoadKeys(); err != nil {
+			return &DecryptResponse{
+				Success:  false,
+				ErrorMsg: fmt.Sprintf("Failed to load keys: %v", err),
+			}, nil
+		}
+	}
+
+	// Decode license payload
+	payloadBytes, err := base64.StdEncoding.DecodeString(req.License)
+	if err != nil {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: "Invalid license format",
+		}, nil
+	}
+
+	var payload LicensePayload
+	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: "Failed to parse license payload",
+		}, nil
+	}
+
+	// Verify license signature
+	isValid, err := s.cryptoService.VerifySignature(&payload, req.Signature)
+	if err != nil {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: "Failed to verify license signature",
+		}, nil
+	}
+
+	if !isValid {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: "Invalid license signature",
+		}, nil
+	}
+
+	// Check license expiration
+	if payload.Exp != nil && payload.Exp.Before(time.Now()) {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: "License has expired",
+		}, nil
+	}
+
+	// Decode encrypted content
+	encryptedData, err := base64.StdEncoding.DecodeString(req.EncryptedContent)
+	if err != nil {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: "Invalid encrypted content format",
+		}, nil
+	}
+
+	// Decrypt content
+	decryptedData, err := s.DecryptContentWithLicense(&payload, encryptedData)
+	if err != nil {
+		return &DecryptResponse{
+			Success:  false,
+			ErrorMsg: fmt.Sprintf("Failed to decrypt content: %v", err),
+		}, nil
+	}
+
+	// Encode decrypted content as base64
+	contentBase64 := base64.StdEncoding.EncodeToString(decryptedData)
+
+	return &DecryptResponse{
+		Success:     true,
+		Content:     contentBase64,
+		ContentType: "application/octet-stream", // Generic binary type
+	}, nil
+}
+
 // EncryptContentWithLicenseKey encrypts content using the CEK from a specific license
 func (s *Service) EncryptContentWithLicenseKey(licenseKey string, content []byte) ([]byte, error) {
 	if s.cryptoService == nil {

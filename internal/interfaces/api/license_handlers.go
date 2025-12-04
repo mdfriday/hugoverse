@@ -107,6 +107,56 @@ func (h *LicenseHandler) GetPublicKeysHandler(w http.ResponseWriter, r *http.Req
 	}
 }
 
+// DecryptContentHandler handles content decryption requests
+func (h *LicenseHandler) DecryptContentHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req license.DecryptRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if req.EncryptedContent == "" {
+		http.Error(w, "Encrypted content is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.License == "" {
+		http.Error(w, "License is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.Signature == "" {
+		http.Error(w, "Signature is required", http.StatusBadRequest)
+		return
+	}
+
+	// Decrypt content
+	response, err := h.service.DecryptContentFromRequest(&req)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Internal server error: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Set response headers
+	w.Header().Set("Content-Type", "application/json")
+	
+	if !response.Success {
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	// Send response
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
+}
+
 // ValidateLicenseKeyHandler validates a license key format without activation
 func (h *LicenseHandler) ValidateLicenseKeyHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

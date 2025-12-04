@@ -582,6 +582,42 @@ Content-Type: application/json
 }
 ```
 
+## 11.4 解密内容（前端使用，无需认证）
+
+```http
+POST /api/license/decrypt
+Content-Type: application/json
+
+{
+  "encryptedContent": "base64-encoded-encrypted-content",
+  "license": "base64-encoded-license-payload",
+  "signature": "ecdsa-signature"
+}
+```
+
+成功响应：
+```json
+{
+  "success": true,
+  "content": "base64-encoded-decrypted-content",
+  "contentType": "application/octet-stream"
+}
+```
+
+失败响应：
+```json
+{
+  "success": false,
+  "errorMsg": "License has expired"
+}
+```
+
+**说明**：
+- `encryptedContent`: 使用 `encrypt-level` 命令加密的内容（base64 编码）
+- `license`: 激活后的 license payload（base64 编码）
+- `signature`: license 的 ECDSA 签名
+- 后端会验证 license 签名和权限，然后使用 KEK 解密内容
+
 ## 11.4 CLI 管理命令（后端管理员使用）
 
 ```bash

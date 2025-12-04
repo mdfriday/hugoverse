@@ -84,6 +84,21 @@ type ActivationResponse struct {
 	Detail      *LicenseDetail `json:"detail,omitempty"`      // License detail info
 }
 
+// DecryptRequest represents a request to decrypt content
+type DecryptRequest struct {
+	EncryptedContent string `json:"encryptedContent"` // Base64 encoded encrypted content
+	License          string `json:"license"`          // Base64 encoded license payload
+	Signature        string `json:"signature"`        // License signature
+}
+
+// DecryptResponse represents the response to content decryption
+type DecryptResponse struct {
+	Success      bool   `json:"success"`
+	Content      string `json:"content,omitempty"`      // Base64 encoded decrypted content
+	ContentType  string `json:"contentType,omitempty"`  // MIME type of the content
+	ErrorMsg     string `json:"errorMsg,omitempty"`
+}
+
 // ContentEncryptionKey represents the CEK used to encrypt theme content
 type ContentEncryptionKey []byte
 
