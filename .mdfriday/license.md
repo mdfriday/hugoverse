@@ -501,25 +501,18 @@ import (
 )
 
 // PublishDomain 自定义域名记录
+// SSL 证书由 Caddy 自动管理和续签
 type PublishDomain struct {
     Item
 
     License     string `json:"license"`      // 关联的 License
     PublishSite string `json:"publish_site"` // 关联的站点
-    Domain      string `json:"domain"`       // 自定义域名
+    Domain      string `json:"domain"`       // 自定义域名 (如 blog.example.com)
+    TargetPath  string `json:"target_path"`  // 指向的发布目录路径
     
-    // DNS 验证
-    VerifyToken  string `json:"verify_token"`  // DNS TXT 验证令牌
-    VerifyStatus string `json:"verify_status"` // pending / verified / failed
-    VerifiedAt   int64  `json:"verified_at"`
-    
-    // SSL 证书
-    SSLEnabled bool   `json:"ssl_enabled"`
-    SSLStatus  string `json:"ssl_status"` // pending / active / expired
-    SSLExpiry  int64  `json:"ssl_expiry"`
-    
-    Status    string `json:"status"` // active / inactive
+    Status    string `json:"status"`     // active / inactive
     CreatedAt int64  `json:"created_at"`
+    UpdatedAt int64  `json:"updated_at"`
 }
 
 func (d *PublishDomain) MarshalEditor() ([]byte, error) {
@@ -529,13 +522,6 @@ func (d *PublishDomain) MarshalEditor() ([]byte, error) {
                 "label":       "Custom Domain",
                 "type":        "text",
                 "placeholder": "blog.example.com",
-            }),
-        },
-        editor.Field{
-            View: editor.Input("VerifyToken", d, map[string]string{
-                "label":    "Verify Token",
-                "type":     "text",
-                "disabled": "true",
             }),
         },
         editor.Field{
@@ -555,7 +541,20 @@ func (d *PublishDomain) String() string {
 }
 
 func (d *PublishDomain) IndexContent() bool { return true }
+
+// ToCaddyConfig 生成 Caddy 配置片段
+func (d *PublishDomain) ToCaddyConfig() string {
+    return fmt.Sprintf(`%s {
+    root * %s
+    file_server
+}`, d.Domain, d.TargetPath)
+}
 ```
+
+**Caddy 集成说明**:
+- Caddy 自动申请和续签 Let's Encrypt 证书
+- 只需将域名配置添加到 Caddyfile 即可
+- `ToCaddyConfig()` 方法生成对应的 Caddy 配置片段
 
 ---
 
@@ -795,8 +794,6 @@ func (m *Manager) UpdateUsage(licenseKey string) (*contentVO.SyncUsage, error) {
 package entity
 
 import (
-    "crypto/rand"
-    "encoding/hex"
     "fmt"
     "os"
     "path/filepath"
@@ -821,6 +818,7 @@ type Repository interface {
     // 自定义域名
     SavePublishDomain(domain *contentVO.PublishDomain) error
     GetPublishDomainBySite(siteID string) (*contentVO.PublishDomain, error)
+    GetAllActivePublishDomains() ([]contentVO.PublishDomain, error)
 }
 
 func NewManager(repo Repository) *Manager {
@@ -905,43 +903,59 @@ func (m *Manager) getDirSize(path string) (int64, error) {
     return size, err
 }
 
-// ========== 自定义域名 ==========
+// ========== 自定义域名 (Caddy 管理 SSL) ==========
 
-func (m *Manager) BindCustomDomain(license *contentVO.License, siteID, domain string) (*contentVO.PublishDomain, error) {
+func (m *Manager) BindCustomDomain(license *contentVO.License, site *contentVO.PublishSite, domain string) (*contentVO.PublishDomain, error) {
     // 检查权限
     features := license.GetFeatures()
     if !features.CustomDomain {
         return nil, fmt.Errorf("custom domain not enabled for this plan")
     }
     
-    // 生成验证令牌
-    token := make([]byte, 16)
-    rand.Read(token)
-    verifyToken := hex.EncodeToString(token)
-    
     publishDomain := &contentVO.PublishDomain{
-        License:      license.QueryString(),
-        PublishSite:  siteID,
-        Domain:       domain,
-        VerifyToken:  verifyToken,
-        VerifyStatus: "pending",
-        Status:       "inactive",
-        CreatedAt:    time.Now().UnixMilli(),
+        License:     license.QueryString(),
+        PublishSite: site.QueryString(),
+        Domain:      domain,
+        TargetPath:  site.FolderPath,
+        Status:      "active",
+        CreatedAt:   time.Now().UnixMilli(),
+        UpdatedAt:   time.Now().UnixMilli(),
     }
     
     if err := m.repo.SavePublishDomain(publishDomain); err != nil {
         return nil, err
     }
     
+    // 更新 Caddy 配置
+    if err := m.updateCaddyConfig(); err != nil {
+        return nil, fmt.Errorf("failed to update caddy config: %w", err)
+    }
+    
     return publishDomain, nil
 }
 
-// VerifyDomain 验证域名 DNS 配置
-func (m *Manager) VerifyDomain(domainID string) error {
-    // TODO: 实现 DNS TXT 记录验证
-    // 1. 查询 DNS TXT 记录
-    // 2. 检查是否包含 verifyToken
-    // 3. 更新 VerifyStatus
+// updateCaddyConfig 更新 Caddy 配置文件
+func (m *Manager) updateCaddyConfig() error {
+    // 获取所有活跃的域名配置
+    domains, err := m.repo.GetAllActivePublishDomains()
+    if err != nil {
+        return err
+    }
+    
+    // 生成 Caddyfile 内容
+    var config string
+    for _, d := range domains {
+        config += d.ToCaddyConfig() + "\n\n"
+    }
+    
+    // 写入 Caddyfile
+    caddyfilePath := filepath.Join(application.DataDir(), "Caddyfile")
+    if err := afero.WriteFile(m.fs, caddyfilePath, []byte(config), 0644); err != nil {
+        return err
+    }
+    
+    // 重载 Caddy 配置 (caddy reload)
+    // 可以通过 Caddy Admin API 或命令行实现
     return nil
 }
 ```
