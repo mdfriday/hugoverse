@@ -493,7 +493,7 @@ func (s *Handler) ApproveContentHandler(res http.ResponseWriter, req *http.Reque
 	}
 
 	// set the target in the context so user can get saved value from db in hook
-	ctx := context.WithValue(req.Context(), "target", fmt.Sprintf("%s:%d", t, id))
+	ctx := context.WithValue(req.Context(), "target", fmt.Sprintf("%s:%s", t, id))
 	req = req.WithContext(ctx)
 
 	err = hook.AfterSave(res, req)
@@ -511,6 +511,6 @@ func (s *Handler) ApproveContentHandler(res http.ResponseWriter, req *http.Reque
 
 	// redirect to the new approved content's editor
 	redir := req.URL.Scheme + req.URL.Host + strings.TrimSuffix(req.URL.Path, "/approve")
-	redir += fmt.Sprintf("?type=%s&id=%d", t, id)
+	redir += fmt.Sprintf("?type=%s&id=%s", t, id)
 	http.Redirect(res, req, redir, http.StatusFound)
 }

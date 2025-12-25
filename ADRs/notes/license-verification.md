@@ -308,11 +308,69 @@ go test ./... 2>&1 | grep -E "(FAIL|---)"
 
 ---
 
-## 10. 后续集成步骤 (待实现)
+## 10. 后续集成步骤
 
-- [ ] 实现 CouchDB Client 真实接口
-- [ ] 添加 License API Handler
-- [ ] 集成到现有 API Server
+- [x] 实现 CouchDB Client 真实接口 ✅
+- [x] 添加 License API Handler ✅
+- [x] 集成到现有 API Server ✅
 - [ ] 实现 Caddy 配置热重载
 - [ ] 添加 E2E 测试
+
+---
+
+## 11. License V2 API 验证
+
+### 11.1 新增文件列表
+
+```shell
+# 基础设施层
+ls -la internal/infrastructure/couchdb/
+ls -la internal/infrastructure/repository/
+
+# Handler 层
+ls -la internal/interfaces/api/handler/handlelicense*.go
+```
+
+### 11.2 API 端点测试
+
+```bash
+# 1. 启动服务器
+go run main.go serve
+
+# 2. 激活 License
+curl -X POST http://localhost:1314/api/license/v2/activate \
+  -H "Content-Type: application/json" \
+  -d '{
+    "license_key": "MDF-STARTER-TEST-1234",
+    "device_id": "device-uuid-1234",
+    "device_name": "MacBook Pro",
+    "device_type": "desktop"
+  }'
+
+# 3. 查询 License 信息
+curl "http://localhost:1314/api/license/v2/info?key=MDF-STARTER-TEST-1234"
+
+# 4. 查询设备列表
+curl "http://localhost:1314/api/license/v2/devices?key=MDF-STARTER-TEST-1234"
+
+# 5. 查询 IP 列表
+curl "http://localhost:1314/api/license/v2/ips?key=MDF-STARTER-TEST-1234"
+
+# 6. 查询 Sync 信息
+curl "http://localhost:1314/api/license/v2/sync?key=MDF-STARTER-TEST-1234"
+
+# 7. 查询 Publish 信息
+curl "http://localhost:1314/api/license/v2/publish?key=MDF-STARTER-TEST-1234"
+```
+
+### 11.3 运行新增测试
+
+```bash
+# CouchDB Client 测试
+go test -v ./internal/infrastructure/couchdb/...
+
+# License Handler 测试
+go test -v ./internal/interfaces/api/handler/handlelicense_test.go \
+  ./internal/interfaces/api/handler/handlelicense.go
+```
 
