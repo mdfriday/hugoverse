@@ -11,6 +11,8 @@ license 有 Free，Starter，Creator，Pro, Enterprise 不同的类型，有效�
 用户就可以用这个账号进行文件同步了。
 同时，我们也会为用户生成一个专属的 WEB SERVER 文件夹，里面可以放用户分享的单篇文章，或者是整个站点，而且每一个都是以独立文件夹存在的，所以我们还可以绑定自定义域名。
 
+**设备/IP 限制**: 每个 License 默认允许 3 台设备、3 个 IP 使用，需要记录使用的设备和 IP 信息，为以后治理所用。
+
 ---
 
 ## 2. 核心设计
@@ -37,52 +39,39 @@ License Key: MDF-ABCD-EFGH-JKLM
 ```
 internal/
 ├── application/
-│   └── dir.go                   # 添加 PublishDir() 函数 (参考 PreviewDir)
+│   └── dir.go                   # 添加 PublishDir() 函数
 ├── domain/
 │   ├── content/valueobject/
 │   │   ├── license.go           # License 数据结构 (内容资源)
+│   │   ├── licensedevice.go     # 设备记录表 (治理用)
+│   │   ├── licenseip.go         # IP 记录表 (治理用)
 │   │   ├── syncaccount.go       # Sync 账号关系表
 │   │   ├── syncusage.go         # Sync 使用量记录
 │   │   ├── publishsite.go       # Publish 站点记录
-│   │   └── publishusage.go      # Publish 容量记录
+│   │   ├── publishusage.go      # Publish 容量记录
+│   │   └── publishdomain.go     # 自定义域名记录
 │   ├── admin/valueobject/
-│   │   └── couchdb.go           # CouchDB 配置 (仅配置，无业务逻辑)
-│   ├── sync/                    # 新 Domain - Sync 业务
-│   │   └── entity/manager.go
-│   └── publish/                 # 新 Domain - Publish 业务
-│       └── entity/manager.go    # 参考现有 preview/deploy 实现
+│   │   └── couchdb.go           # CouchDB 配置 (仅配置)
+│   ├── sync/                    # Sync Domain - 业务逻辑
+│   │   └── entity/manager.go    # 设备/IP 验证、CouchDB 账号分配、用量监控
+│   └── publish/                 # Publish Domain - 业务逻辑
+│       └── entity/manager.go    # 用量管理、自定义域名
 └── interfaces/api/handler/
-    ├── handlepublish.go         # 参考 handlepreview.go, handlemdf.go
     └── ...
 ```
 
 ### 2.3 参考现有实现
 
-**目录结构 (参考 `application/dir.go`)**:
 ```go
 // 现有实现
 func PreviewDir() string {
-    return filepath.Join(DataDir(), "preview")  // ~/.local/share/hugoverse/preview
+    return filepath.Join(DataDir(), "preview")
 }
 
 // 新增 - Publish 目录
 func PublishDir() string {
-    return filepath.Join(DataDir(), "publish")  // ~/.local/share/hugoverse/publish
+    return filepath.Join(DataDir(), "publish")
 }
-```
-
-**API 处理 (参考 `handlemdf.go`)**:
-```go
-// DeployMDFridayPreviewHandler 现有逻辑:
-// 1. 获取 MDFPreview 对象
-// 2. 解压 zip 到 preview/{name} 目录
-// 3. 返回 /preview/{name} 路径
-
-// 新的 Publish 逻辑:
-// 1. 验证 License
-// 2. 获取 userDir (license.ToUserDir())
-// 3. 解压到 publish/{userDir}/sites/{name} 或 publish/{userDir}/articles/{name}
-// 4. 返回 /publish/{userDir}/sites/{name} 路径
 ```
 
 ---
@@ -106,15 +95,14 @@ import (
     "github.com/mdfriday/hugoverse/pkg/hash"
 )
 
-// LicensePlan 定义 License 类型
 type LicensePlan string
 
 const (
-    PlanFree       LicensePlan = "free"       // 免费版 - 7天试用
-    PlanStarter    LicensePlan = "starter"    // 入门版 - 1年
-    PlanCreator    LicensePlan = "creator"    // 创作者版 - 1年
-    PlanPro        LicensePlan = "pro"        // 专业版 - 1年
-    PlanEnterprise LicensePlan = "enterprise" // 企业版 - 1年
+    PlanFree       LicensePlan = "free"
+    PlanStarter    LicensePlan = "starter"
+    PlanCreator    LicensePlan = "creator"
+    PlanPro        LicensePlan = "pro"
+    PlanEnterprise LicensePlan = "enterprise"
 )
 
 // License 作为 Content ValueObject
@@ -124,14 +112,21 @@ type License struct {
     LicenseKey string      `json:"license_key"`  // MDF-XXXX-XXXX-XXXX
     Plan       LicensePlan `json:"plan"`
     
+    // 有效期
     IssueDate   int64 `json:"issue_date"`
     ExpiryDate  int64 `json:"expiry_date"`
     
+    // 激活状态
     Activated   bool  `json:"activated"`
     ActivatedAt int64 `json:"activated_at"`
+    
+    // 设备/IP 限制 (治理用)
+    MaxDevices     int `json:"max_devices"`      // 最大设备数，默认 3
+    MaxIPs         int `json:"max_ips"`          // 最大 IP 数，默认 3
+    CurrentDevices int `json:"current_devices"`  // 当前设备数
+    CurrentIPs     int `json:"current_ips"`      // 当前 IP 数
 }
 
-// MarshalEditor 实现 editor.Editable 接口
 func (l *License) MarshalEditor() ([]byte, error) {
     view, err := editor.Form(l,
         editor.Field{
@@ -146,6 +141,18 @@ func (l *License) MarshalEditor() ([]byte, error) {
             }, map[string]string{
                 "free": "Free", "starter": "Starter", 
                 "creator": "Creator", "pro": "Pro", "enterprise": "Enterprise",
+            }),
+        },
+        editor.Field{
+            View: editor.Input("MaxDevices", l, map[string]string{
+                "label": "Max Devices",
+                "type":  "number",
+            }),
+        },
+        editor.Field{
+            View: editor.Input("MaxIPs", l, map[string]string{
+                "label": "Max IPs",
+                "type":  "number",
             }),
         },
     )
@@ -164,19 +171,16 @@ func (l *License) IndexContent() bool { return true }
 
 // ========== License 转用户机制 ==========
 
-// ToEmail: MDF-ABCD-EFGH-JKLM -> abcd-efgh-jklm@mdfriday.com
 func (l *License) ToEmail() string {
     key := strings.ToLower(strings.TrimPrefix(l.LicenseKey, "MDF-"))
     return fmt.Sprintf("%s@mdfriday.com", key)
 }
 
-// ToPassword: base64("abcd-efgh-jklm")
 func (l *License) ToPassword() string {
     key := strings.ToLower(strings.TrimPrefix(l.LicenseKey, "MDF-"))
     return base64.StdEncoding.EncodeToString([]byte(key))
 }
 
-// ToUserDir: hash(email)[:16]
 func (l *License) ToUserDir() string {
     return hash.MD5(l.ToEmail())[:16]
 }
@@ -192,31 +196,68 @@ func (l *License) IsValid() bool {
 func (l *License) GetFeatures() *LicenseFeatures {
     return GetPlanFeatures(l.Plan)
 }
+
+// ========== 设备/IP 限制检查 ==========
+
+func (l *License) CanAddDevice() bool {
+    return l.CurrentDevices < l.MaxDevices
+}
+
+func (l *License) CanAddIP() bool {
+    return l.CurrentIPs < l.MaxIPs
+}
 ```
 
 **权限定义**:
 ```go
 type LicenseFeatures struct {
-    MaxSites     int  `json:"max_sites"`
-    MaxStorageMB int  `json:"max_storage"`
+    // 设备/IP 限制
+    MaxDevices   int  `json:"max_devices"`
+    MaxIPs       int  `json:"max_ips"`
+    
+    // Sync 功能
     SyncEnabled  bool `json:"sync_enabled"`
     SyncQuotaMB  int  `json:"sync_quota"`
+    
+    // Publish 功能
     PublishEnabled bool `json:"publish_enabled"`
-    CustomDomain bool `json:"custom_domain"`
+    MaxSites       int  `json:"max_sites"`
+    MaxStorageMB   int  `json:"max_storage"`
+    CustomDomain   bool `json:"custom_domain"`
 }
 
 func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
     switch plan {
     case PlanFree:
-        return &LicenseFeatures{1, 100, false, 0, false, false}
+        return &LicenseFeatures{
+            MaxDevices: 1, MaxIPs: 1,
+            SyncEnabled: false, SyncQuotaMB: 0,
+            PublishEnabled: false, MaxSites: 0, MaxStorageMB: 100, CustomDomain: false,
+        }
     case PlanStarter:
-        return &LicenseFeatures{3, 1024, true, 500, true, false}
+        return &LicenseFeatures{
+            MaxDevices: 3, MaxIPs: 3,
+            SyncEnabled: true, SyncQuotaMB: 500,
+            PublishEnabled: true, MaxSites: 3, MaxStorageMB: 1024, CustomDomain: false,
+        }
     case PlanCreator:
-        return &LicenseFeatures{10, 5120, true, 2048, true, true}
+        return &LicenseFeatures{
+            MaxDevices: 5, MaxIPs: 5,
+            SyncEnabled: true, SyncQuotaMB: 2048,
+            PublishEnabled: true, MaxSites: 10, MaxStorageMB: 5120, CustomDomain: true,
+        }
     case PlanPro:
-        return &LicenseFeatures{50, 20480, true, 10240, true, true}
+        return &LicenseFeatures{
+            MaxDevices: 10, MaxIPs: 10,
+            SyncEnabled: true, SyncQuotaMB: 10240,
+            PublishEnabled: true, MaxSites: 50, MaxStorageMB: 20480, CustomDomain: true,
+        }
     case PlanEnterprise:
-        return &LicenseFeatures{-1, 102400, true, 51200, true, true}
+        return &LicenseFeatures{
+            MaxDevices: -1, MaxIPs: -1, // 无限制
+            SyncEnabled: true, SyncQuotaMB: 51200,
+            PublishEnabled: true, MaxSites: -1, MaxStorageMB: 102400, CustomDomain: true,
+        }
     default:
         return &LicenseFeatures{}
     }
@@ -225,40 +266,131 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 
 ---
 
-### 任务 2: Application - 目录函数 ⭐ 优先级: 高
+### 任务 2: Content Domain - 设备/IP 记录表 ⭐ 优先级: 高
 
-**文件**: `internal/application/dir.go` (修改)
+**文件**: `internal/domain/content/valueobject/licensedevice.go`
 
 ```go
-// 新增常量
-const folderPublish = "publish"
+package valueobject
 
-// 新增函数 (参考 PreviewDir)
-func PublishDir() string {
-    return filepath.Join(DataDir(), folderPublish)
-}
+import (
+    "fmt"
+    "github.com/mdfriday/hugoverse/pkg/editor"
+)
 
-func PublishFolder() string {
-    return folderPublish
-}
+// LicenseDevice 设备记录表 (治理用)
+type LicenseDevice struct {
+    Item
 
-// 在 init() 中添加
-func init() {
-    // ... 现有代码 ...
+    License    string `json:"license"`      // 关联的 License
+    DeviceID   string `json:"device_id"`    // 设备唯一标识
+    DeviceName string `json:"device_name"`  // 设备名称 (UA/OS 等)
+    DeviceType string `json:"device_type"`  // desktop / mobile / tablet
     
-    err = EnsureDirExists(PublishDir())
-    if err != nil {
-        log.Fatalln(err)
-    }
+    // 使用信息
+    FirstSeenAt int64 `json:"first_seen_at"` // 首次使用时间
+    LastSeenAt  int64 `json:"last_seen_at"`  // 最后使用时间
+    AccessCount int   `json:"access_count"`  // 访问次数
+    
+    // 状态
+    Status string `json:"status"` // active / blocked
 }
 
-// 更新 dir 结构体
-func (d *dir) PublishDir() string {
-    return PublishDir()
+func (d *LicenseDevice) MarshalEditor() ([]byte, error) {
+    view, err := editor.Form(d,
+        editor.Field{
+            View: editor.Input("DeviceID", d, map[string]string{
+                "label": "Device ID",
+                "type":  "text",
+            }),
+        },
+        editor.Field{
+            View: editor.Input("DeviceName", d, map[string]string{
+                "label": "Device Name",
+                "type":  "text",
+            }),
+        },
+        editor.Field{
+            View: editor.Select("Status", d, map[string]string{
+                "label": "Status",
+            }, map[string]string{
+                "active":  "Active",
+                "blocked": "Blocked",
+            }),
+        },
+    )
+    return view, err
 }
-func (d *dir) PublishFolder() string {
-    return folderPublish
+
+func (d *LicenseDevice) String() string {
+    return fmt.Sprintf("%s - %s", d.DeviceID[:8], d.DeviceName)
 }
+
+func (d *LicenseDevice) IndexContent() bool { return true }
+```
+
+**文件**: `internal/domain/content/valueobject/licenseip.go`
+
+```go
+package valueobject
+
+import (
+    "fmt"
+    "github.com/mdfriday/hugoverse/pkg/editor"
+)
+
+// LicenseIP IP 记录表 (治理用)
+type LicenseIP struct {
+    Item
+
+    License   string `json:"license"`    // 关联的 License
+    IPAddress string `json:"ip_address"` // IP 地址
+    
+    // 地理位置信息 (可选)
+    Country string `json:"country"`
+    Region  string `json:"region"`
+    City    string `json:"city"`
+    
+    // 使用信息
+    FirstSeenAt int64 `json:"first_seen_at"`
+    LastSeenAt  int64 `json:"last_seen_at"`
+    AccessCount int   `json:"access_count"`
+    
+    // 状态
+    Status string `json:"status"` // active / blocked
+}
+
+func (i *LicenseIP) MarshalEditor() ([]byte, error) {
+    view, err := editor.Form(i,
+        editor.Field{
+            View: editor.Input("IPAddress", i, map[string]string{
+                "label": "IP Address",
+                "type":  "text",
+            }),
+        },
+        editor.Field{
+            View: editor.Input("Country", i, map[string]string{
+                "label": "Country",
+                "type":  "text",
+            }),
+        },
+        editor.Field{
+            View: editor.Select("Status", i, map[string]string{
+                "label": "Status",
+            }, map[string]string{
+                "active":  "Active",
+                "blocked": "Blocked",
+            }),
+        },
+    )
+    return view, err
+}
+
+func (i *LicenseIP) String() string {
+    return fmt.Sprintf("%s (%s)", i.IPAddress, i.Country)
+}
+
+func (i *LicenseIP) IndexContent() bool { return true }
 ```
 
 ---
@@ -274,11 +406,11 @@ package valueobject
 type SyncAccount struct {
     Item
 
-    License    string `json:"license"`     // 关联的 License
-    Email      string `json:"email"`       // CouchDB 用户邮箱
-    DBName     string `json:"db_name"`     // 分配的数据库名
-    DBEndpoint string `json:"db_endpoint"` // 数据库访问端点
-    Status     string `json:"status"`      // active / suspended
+    License    string `json:"license"`
+    Email      string `json:"email"`
+    DBName     string `json:"db_name"`
+    DBEndpoint string `json:"db_endpoint"`
+    Status     string `json:"status"` // active / suspended
     CreatedAt  int64  `json:"created_at"`
 }
 
@@ -316,51 +448,25 @@ type SyncUsage struct {
 ```go
 package valueobject
 
-// PublishSite 发布站点记录 (参考 MDFPreview 结构)
+// PublishSite 发布站点记录
 type PublishSite struct {
     Item
 
-    License      string `json:"license"`       // 关联的 License
-    Name         string `json:"name"`          // 站点名称
-    SiteType     string `json:"site_type"`     // site / article
-    Asset        string `json:"asset"`         // 上传的 zip 文件
-    Size         string `json:"size"`          // 文件大小
-    FolderPath   string `json:"folder_path"`   // 部署后的路径
-    PublicURL    string `json:"public_url"`    // 公开访问 URL
-    CustomDomain string `json:"custom_domain"` // 自定义域名
-    Status       string `json:"status"`        // pending / active / deleted
+    License      string `json:"license"`
+    Name         string `json:"name"`
+    SiteType     string `json:"site_type"`  // site / article
+    Asset        string `json:"asset"`
+    Size         string `json:"size"`
+    FolderPath   string `json:"folder_path"`
+    PublicURL    string `json:"public_url"`
+    Status       string `json:"status"` // pending / active / deleted
     CreatedAt    int64  `json:"created_at"`
-}
-
-func (p *PublishSite) MarshalEditor() ([]byte, error) {
-    view, err := editor.Form(p,
-        editor.Field{
-            View: editor.Input("Name", p, map[string]string{
-                "label": "Site Name",
-                "type":  "text",
-            }),
-        },
-        editor.Field{
-            View: editor.Select("SiteType", p, map[string]string{
-                "label": "Type",
-            }, map[string]string{
-                "site": "Full Site", "article": "Article",
-            }),
-        },
-        editor.Field{
-            View: editor.File("Asset", p, map[string]string{
-                "label": "Asset (zip)",
-            }),
-        },
-    )
-    return view, err
 }
 
 func (p *PublishSite) String() string { return p.Name }
 func (p *PublishSite) Deploy() bool   { return true }
 func (p *PublishSite) IndexContent() bool { return true }
 
-// AbsAssetPath 获取资源绝对路径 (参考 MDFPreview)
 func (p *PublishSite) AbsAssetPath(uploadDir string) (string, error) {
     return getAssetAbsPath(p.Asset, uploadDir)
 }
@@ -384,50 +490,298 @@ type PublishUsage struct {
 }
 ```
 
----
-
-### 任务 5: Admin Domain - CouchDB 配置 ⭐ 优先级: 中
-
-**文件**: `internal/domain/admin/valueobject/couchdb.go`
+**文件**: `internal/domain/content/valueobject/publishdomain.go`
 
 ```go
 package valueobject
 
-// CouchDBConfig CouchDB 服务器配置 (仅配置信息，无业务逻辑)
-type CouchDBConfig struct {
-    contentVO.Item
+import (
+    "fmt"
+    "github.com/mdfriday/hugoverse/pkg/editor"
+)
 
-    URL      string `json:"url"`       // http://localhost:5984
-    Username string `json:"username"`
-    Password string `json:"password"`
-    DBPrefix string `json:"db_prefix"` // mdf_sync_
+// PublishDomain 自定义域名记录
+type PublishDomain struct {
+    Item
+
+    License     string `json:"license"`      // 关联的 License
+    PublishSite string `json:"publish_site"` // 关联的站点
+    Domain      string `json:"domain"`       // 自定义域名
+    
+    // DNS 验证
+    VerifyToken  string `json:"verify_token"`  // DNS TXT 验证令牌
+    VerifyStatus string `json:"verify_status"` // pending / verified / failed
+    VerifiedAt   int64  `json:"verified_at"`
+    
+    // SSL 证书
+    SSLEnabled bool   `json:"ssl_enabled"`
+    SSLStatus  string `json:"ssl_status"` // pending / active / expired
+    SSLExpiry  int64  `json:"ssl_expiry"`
+    
+    Status    string `json:"status"` // active / inactive
+    CreatedAt int64  `json:"created_at"`
 }
 
-func (c *CouchDBConfig) MarshalEditor() ([]byte, error) {
-    view, err := editor.Form(c,
+func (d *PublishDomain) MarshalEditor() ([]byte, error) {
+    view, err := editor.Form(d,
         editor.Field{
-            View: editor.Input("URL", c, map[string]string{
-                "label": "CouchDB URL",
+            View: editor.Input("Domain", d, map[string]string{
+                "label":       "Custom Domain",
+                "type":        "text",
+                "placeholder": "blog.example.com",
             }),
         },
         editor.Field{
-            View: editor.Input("Username", c, map[string]string{
-                "label": "Admin Username",
+            View: editor.Input("VerifyToken", d, map[string]string{
+                "label":    "Verify Token",
+                "type":     "text",
+                "disabled": "true",
             }),
         },
         editor.Field{
-            View: editor.Input("Password", c, map[string]string{
-                "label": "Admin Password",
-                "type":  "password",
-            }),
-        },
-        editor.Field{
-            View: editor.Input("DBPrefix", c, map[string]string{
-                "label": "Database Prefix",
+            View: editor.Select("Status", d, map[string]string{
+                "label": "Status",
+            }, map[string]string{
+                "active":   "Active",
+                "inactive": "Inactive",
             }),
         },
     )
     return view, err
+}
+
+func (d *PublishDomain) String() string {
+    return d.Domain
+}
+
+func (d *PublishDomain) IndexContent() bool { return true }
+```
+
+---
+
+### 任务 5: Sync Domain - 业务逻辑 ⭐ 优先级: 中
+
+**文件**: `internal/domain/sync/entity/manager.go`
+
+```go
+package entity
+
+import (
+    "fmt"
+    "time"
+    
+    adminVO "github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
+    contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
+)
+
+type Manager struct {
+    config      *adminVO.CouchDBConfig
+    couchClient CouchDBClient
+    repo        Repository
+}
+
+type CouchDBClient interface {
+    CreateDatabase(name string) error
+    CreateUser(email, password string) error
+    GetDatabaseInfo(name string) (*DatabaseInfo, error)
+}
+
+type DatabaseInfo struct {
+    DocCount int   `json:"doc_count"`
+    DiskSize int64 `json:"disk_size"`
+}
+
+type Repository interface {
+    // License
+    GetLicenseByKey(key string) (*contentVO.License, error)
+    UpdateLicense(license *contentVO.License) error
+    
+    // 设备/IP
+    GetDevicesByLicense(licenseKey string) ([]contentVO.LicenseDevice, error)
+    GetIPsByLicense(licenseKey string) ([]contentVO.LicenseIP, error)
+    SaveDevice(device *contentVO.LicenseDevice) error
+    SaveIP(ip *contentVO.LicenseIP) error
+    GetDeviceByID(licenseKey, deviceID string) (*contentVO.LicenseDevice, error)
+    GetIPByAddress(licenseKey, ipAddress string) (*contentVO.LicenseIP, error)
+    
+    // Sync
+    SaveSyncAccount(account *contentVO.SyncAccount) error
+    GetSyncAccountByLicense(licenseKey string) (*contentVO.SyncAccount, error)
+    SaveSyncUsage(usage *contentVO.SyncUsage) error
+}
+
+func NewManager(config *adminVO.CouchDBConfig, client CouchDBClient, repo Repository) *Manager {
+    return &Manager{
+        config:      config,
+        couchClient: client,
+        repo:        repo,
+    }
+}
+
+// ========== 设备/IP 验证 (治理逻辑) ==========
+
+// ValidateAndRecordAccess 验证设备和 IP，记录访问
+func (m *Manager) ValidateAndRecordAccess(licenseKey, deviceID, deviceName, ipAddress string) error {
+    license, err := m.repo.GetLicenseByKey(licenseKey)
+    if err != nil {
+        return fmt.Errorf("license not found: %w", err)
+    }
+    
+    if !license.IsValid() {
+        return fmt.Errorf("license is not valid")
+    }
+    
+    // 检查设备
+    if err := m.checkAndRecordDevice(license, deviceID, deviceName); err != nil {
+        return err
+    }
+    
+    // 检查 IP
+    if err := m.checkAndRecordIP(license, ipAddress); err != nil {
+        return err
+    }
+    
+    return nil
+}
+
+func (m *Manager) checkAndRecordDevice(license *contentVO.License, deviceID, deviceName string) error {
+    now := time.Now().UnixMilli()
+    
+    // 查找已存在的设备
+    existingDevice, err := m.repo.GetDeviceByID(license.LicenseKey, deviceID)
+    if err == nil && existingDevice != nil {
+        // 更新访问记录
+        existingDevice.LastSeenAt = now
+        existingDevice.AccessCount++
+        return m.repo.SaveDevice(existingDevice)
+    }
+    
+    // 新设备 - 检查限制
+    if !license.CanAddDevice() {
+        return fmt.Errorf("device limit reached (%d/%d)", license.CurrentDevices, license.MaxDevices)
+    }
+    
+    // 添加新设备
+    device := &contentVO.LicenseDevice{
+        License:     license.QueryString(),
+        DeviceID:    deviceID,
+        DeviceName:  deviceName,
+        FirstSeenAt: now,
+        LastSeenAt:  now,
+        AccessCount: 1,
+        Status:      "active",
+    }
+    
+    if err := m.repo.SaveDevice(device); err != nil {
+        return err
+    }
+    
+    // 更新 License 设备计数
+    license.CurrentDevices++
+    return m.repo.UpdateLicense(license)
+}
+
+func (m *Manager) checkAndRecordIP(license *contentVO.License, ipAddress string) error {
+    now := time.Now().UnixMilli()
+    
+    // 查找已存在的 IP
+    existingIP, err := m.repo.GetIPByAddress(license.LicenseKey, ipAddress)
+    if err == nil && existingIP != nil {
+        // 更新访问记录
+        existingIP.LastSeenAt = now
+        existingIP.AccessCount++
+        return m.repo.SaveIP(existingIP)
+    }
+    
+    // 新 IP - 检查限制
+    if !license.CanAddIP() {
+        return fmt.Errorf("IP limit reached (%d/%d)", license.CurrentIPs, license.MaxIPs)
+    }
+    
+    // 添加新 IP
+    ip := &contentVO.LicenseIP{
+        License:     license.QueryString(),
+        IPAddress:   ipAddress,
+        FirstSeenAt: now,
+        LastSeenAt:  now,
+        AccessCount: 1,
+        Status:      "active",
+    }
+    
+    if err := m.repo.SaveIP(ip); err != nil {
+        return err
+    }
+    
+    // 更新 License IP 计数
+    license.CurrentIPs++
+    return m.repo.UpdateLicense(license)
+}
+
+// ========== CouchDB 账号分配 ==========
+
+func (m *Manager) CreateSyncAccount(license *contentVO.License) (*contentVO.SyncAccount, error) {
+    // 检查是否已存在
+    existing, _ := m.repo.GetSyncAccountByLicense(license.LicenseKey)
+    if existing != nil {
+        return existing, nil
+    }
+    
+    email := license.ToEmail()
+    password := license.ToPassword()
+    dbName := fmt.Sprintf("%s%s", m.config.DBPrefix, license.ToUserDir())
+    
+    // 创建 CouchDB 数据库
+    if err := m.couchClient.CreateDatabase(dbName); err != nil {
+        return nil, fmt.Errorf("failed to create database: %w", err)
+    }
+    
+    // 创建用户
+    if err := m.couchClient.CreateUser(email, password); err != nil {
+        return nil, fmt.Errorf("failed to create user: %w", err)
+    }
+    
+    account := &contentVO.SyncAccount{
+        License:    license.QueryString(),
+        Email:      email,
+        DBName:     dbName,
+        DBEndpoint: fmt.Sprintf("%s/%s", m.config.URL, dbName),
+        Status:     "active",
+        CreatedAt:  time.Now().UnixMilli(),
+    }
+    
+    if err := m.repo.SaveSyncAccount(account); err != nil {
+        return nil, err
+    }
+    
+    return account, nil
+}
+
+// ========== 使用量监控 ==========
+
+func (m *Manager) UpdateUsage(licenseKey string) (*contentVO.SyncUsage, error) {
+    account, err := m.repo.GetSyncAccountByLicense(licenseKey)
+    if err != nil {
+        return nil, err
+    }
+    
+    dbInfo, err := m.couchClient.GetDatabaseInfo(account.DBName)
+    if err != nil {
+        return nil, err
+    }
+    
+    usage := &contentVO.SyncUsage{
+        SyncAccount:   account.QueryString(),
+        DocumentCount: dbInfo.DocCount,
+        StorageBytes:  dbInfo.DiskSize,
+        LastSyncAt:    time.Now().UnixMilli(),
+        RecordedAt:    time.Now().UnixMilli(),
+    }
+    
+    if err := m.repo.SaveSyncUsage(usage); err != nil {
+        return nil, err
+    }
+    
+    return usage, nil
 }
 ```
 
@@ -435,18 +789,18 @@ func (c *CouchDBConfig) MarshalEditor() ([]byte, error) {
 
 ### 任务 6: Publish Domain - 业务逻辑 ⭐ 优先级: 中
 
-**参考现有实现**:
-- `handlemdf.go` → `DeployMDFridayPreviewHandler` 
-- `handlepreview.go` → `PreviewContentHandler`
-
 **文件**: `internal/domain/publish/entity/manager.go`
 
 ```go
 package entity
 
 import (
+    "crypto/rand"
+    "encoding/hex"
     "fmt"
+    "os"
     "path/filepath"
+    "time"
     
     "github.com/mdfriday/hugoverse/internal/application"
     contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
@@ -456,27 +810,31 @@ import (
 
 type Manager struct {
     fs   afero.Fs
-    repo ContentRepository
+    repo Repository
 }
 
-type ContentRepository interface {
+type Repository interface {
     SavePublishSite(site *contentVO.PublishSite) error
     GetPublishSitesByLicense(licenseKey string) ([]contentVO.PublishSite, error)
+    SavePublishUsage(usage *contentVO.PublishUsage) error
+    
+    // 自定义域名
+    SavePublishDomain(domain *contentVO.PublishDomain) error
+    GetPublishDomainBySite(siteID string) (*contentVO.PublishDomain, error)
 }
 
-func NewManager(repo ContentRepository) *Manager {
+func NewManager(repo Repository) *Manager {
     return &Manager{
         fs:   afero.NewOsFs(),
         repo: repo,
     }
 }
 
-// DeploySite 部署站点 (参考 DeployMDFridayPreviewHandler)
+// ========== 站点部署 ==========
+
 func (m *Manager) DeploySite(license *contentVO.License, site *contentVO.PublishSite) error {
-    // 1. 获取用户目录
     userDir := license.ToUserDir()
     
-    // 2. 构建目标路径: ~/.local/share/hugoverse/publish/{userDir}/sites/{name}
     var targetDir string
     if site.SiteType == "article" {
         targetDir = filepath.Join(application.PublishDir(), userDir, "articles", site.Name)
@@ -484,12 +842,10 @@ func (m *Manager) DeploySite(license *contentVO.License, site *contentVO.Publish
         targetDir = filepath.Join(application.PublishDir(), userDir, "sites", site.Name)
     }
     
-    // 3. 确保目录存在
     if err := application.EnsureDirExists(targetDir); err != nil {
         return err
     }
     
-    // 4. 解压资源 (参考 handlemdf.go)
     absAssetPath, err := site.AbsAssetPath(application.UploadDir())
     if err != nil {
         return err
@@ -499,7 +855,6 @@ func (m *Manager) DeploySite(license *contentVO.License, site *contentVO.Publish
         return err
     }
     
-    // 5. 更新站点信息
     site.FolderPath = targetDir
     site.PublicURL = fmt.Sprintf("/%s/%s/%ss/%s", 
         application.PublishFolder(), userDir, site.SiteType, site.Name)
@@ -508,128 +863,86 @@ func (m *Manager) DeploySite(license *contentVO.License, site *contentVO.Publish
     return m.repo.SavePublishSite(site)
 }
 
-// GetUserDir 获取用户发布目录
-func (m *Manager) GetUserDir(license *contentVO.License) string {
-    return filepath.Join(application.PublishDir(), license.ToUserDir())
+// ========== 容量管理 ==========
+
+func (m *Manager) UpdateUsage(licenseKey string) (*contentVO.PublishUsage, error) {
+    sites, err := m.repo.GetPublishSitesByLicense(licenseKey)
+    if err != nil {
+        return nil, err
+    }
+    
+    var totalSize int64
+    for _, site := range sites {
+        size, _ := m.getDirSize(site.FolderPath)
+        totalSize += size
+    }
+    
+    usage := &contentVO.PublishUsage{
+        License:      licenseKey,
+        SiteCount:    len(sites),
+        StorageBytes: totalSize,
+        RecordedAt:   time.Now().UnixMilli(),
+    }
+    
+    if err := m.repo.SavePublishUsage(usage); err != nil {
+        return nil, err
+    }
+    
+    return usage, nil
 }
-```
 
----
+func (m *Manager) getDirSize(path string) (int64, error) {
+    var size int64
+    err := afero.Walk(m.fs, path, func(_ string, info os.FileInfo, err error) error {
+        if err != nil {
+            return err
+        }
+        if !info.IsDir() {
+            size += info.Size()
+        }
+        return nil
+    })
+    return size, err
+}
 
-### 任务 7: API Handler ⭐ 优先级: 中
+// ========== 自定义域名 ==========
 
-**文件**: `internal/interfaces/api/handler/handlepublish.go` (新建，参考 handlemdf.go)
-
-```go
-package handler
-
-import (
-    "encoding/json"
-    "fmt"
-    "net/http"
-    
-    "github.com/mdfriday/hugoverse/internal/application"
-    "github.com/mdfriday/hugoverse/internal/domain/content"
-    "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
-    "github.com/mdfriday/hugoverse/pkg/loggers"
-    "github.com/mdfriday/hugoverse/pkg/zip"
-    "path/filepath"
-)
-
-// DeployPublishSiteHandler 部署用户站点
-// 参考 DeployMDFridayPreviewHandler 实现
-func (s *Handler) DeployPublishSiteHandler(res http.ResponseWriter, req *http.Request) {
-    q := req.URL.Query()
-    id := q.Get("id")
-    t := q.Get("type")
-    licenseKey := req.FormValue("license_key")
-
-    loggers.SetGlobalFields(s.newLogFields("deploy publish site"))
-
-    // 1. 验证 License
-    license, err := s.contentApp.GetLicenseByKey(licenseKey)
-    if err != nil || !license.IsValid() {
-        s.log.Errorf("Invalid license: %v", err)
-        res.WriteHeader(http.StatusUnauthorized)
-        return
-    }
-
-    // 2. 检查权限
+func (m *Manager) BindCustomDomain(license *contentVO.License, siteID, domain string) (*contentVO.PublishDomain, error) {
+    // 检查权限
     features := license.GetFeatures()
-    if !features.PublishEnabled {
-        s.log.Errorf("Publish not enabled for this plan")
-        res.WriteHeader(http.StatusForbidden)
-        return
+    if !features.CustomDomain {
+        return nil, fmt.Errorf("custom domain not enabled for this plan")
     }
-
-    // 3. 获取 PublishSite 对象
-    pt, ok := s.contentApp.GetContentCreator(t)
-    if !ok {
-        res.WriteHeader(http.StatusNotFound)
-        return
-    }
-
-    p := pt()
-    _, ok = p.(content.Deployable)
-    if !ok {
-        res.WriteHeader(http.StatusBadRequest)
-        return
-    }
-
-    sc, err := s.contentApp.GetContentObject(t, id)
-    if err != nil {
-        s.log.Errorf("Error getting content: %v", err)
-        res.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-
-    site, ok := sc.(*valueobject.PublishSite)
-    if !ok {
-        res.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-
-    // 4. 获取用户目录
-    userDir := license.ToUserDir()
     
-    // 5. 构建目标路径
-    var targetDir string
-    if site.SiteType == "article" {
-        targetDir = filepath.Join(application.PublishDir(), userDir, "articles", site.Name)
-    } else {
-        targetDir = filepath.Join(application.PublishDir(), userDir, "sites", site.Name)
-    }
-
-    // 6. 确保目录存在
-    if err := application.EnsureDirExists(targetDir); err != nil {
-        s.log.Errorf("Error creating directory: %v", err)
-        res.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-
-    // 7. 解压资源
-    absAssetPath, err := site.AbsAssetPath(application.UploadDir())
-    if err != nil {
-        s.log.Errorf("Error getting asset path: %v", err)
-        res.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-
-    if err := zip.Unzip(absAssetPath, targetDir); err != nil {
-        s.log.Errorf("Error unzipping: %v", err)
-        res.WriteHeader(http.StatusInternalServerError)
-        return
-    }
-
-    // 8. 返回公开 URL
-    publicURL := fmt.Sprintf("/%s/%s/%ss/%s", 
-        application.PublishFolder(), userDir, site.SiteType, site.Name)
+    // 生成验证令牌
+    token := make([]byte, 16)
+    rand.Read(token)
+    verifyToken := hex.EncodeToString(token)
     
-    jsonBytes, _ := json.Marshal(publicURL)
-    j, _ := s.res.FmtJSON(jsonBytes)
+    publishDomain := &contentVO.PublishDomain{
+        License:      license.QueryString(),
+        PublishSite:  siteID,
+        Domain:       domain,
+        VerifyToken:  verifyToken,
+        VerifyStatus: "pending",
+        Status:       "inactive",
+        CreatedAt:    time.Now().UnixMilli(),
+    }
+    
+    if err := m.repo.SavePublishDomain(publishDomain); err != nil {
+        return nil, err
+    }
+    
+    return publishDomain, nil
+}
 
-    res.WriteHeader(http.StatusOK)
-    s.res.Json(res, j)
+// VerifyDomain 验证域名 DNS 配置
+func (m *Manager) VerifyDomain(domainID string) error {
+    // TODO: 实现 DNS TXT 记录验证
+    // 1. 查询 DNS TXT 记录
+    // 2. 检查是否包含 verifyToken
+    // 3. 更新 VerifyStatus
+    return nil
 }
 ```
 
@@ -637,16 +950,6 @@ func (s *Handler) DeployPublishSiteHandler(res http.ResponseWriter, req *http.Re
 
 ## 4. 目录结构
 
-**现有 Preview 目录**:
-```
-~/.local/share/hugoverse/
-├── preview/
-│   ├── {shortLink1}/    # 随机短链接
-│   └── {shortLink2}/
-└── ...
-```
-
-**新增 Publish 目录** (参考 Preview):
 ```
 ~/.local/share/hugoverse/
 ├── preview/             # 现有 - 临时预览
@@ -666,32 +969,33 @@ func (s *Handler) DeployPublishSiteHandler(res http.ResponseWriter, req *http.Re
 
 ## 5. 权限矩阵
 
-| 套餐 | 最大站点 | 存储空间 | Sync | Sync 配额 | Publish | 自定义域名 | 有效期 |
-|-----|---------|---------|------|----------|---------|----------|-------|
-| Free | 1 | 100MB | ❌ | - | ❌ | ❌ | 7天 |
-| Starter | 3 | 1GB | ✅ | 500MB | ✅ | ❌ | 1年 |
-| Creator | 10 | 5GB | ✅ | 2GB | ✅ | ✅ | 1年 |
-| Pro | 50 | 20GB | ✅ | 10GB | ✅ | ✅ | 1年 |
-| Enterprise | 无限制 | 100GB | ✅ | 50GB | ✅ | ✅ | 1年 |
+| 套餐 | 设备数 | IP数 | Sync | Sync配额 | Publish | 站点数 | 存储 | 自定义域名 | 有效期 |
+|-----|-------|-----|------|---------|---------|-------|------|----------|-------|
+| Free | 1 | 1 | ❌ | - | ❌ | 0 | 100MB | ❌ | 7天 |
+| Starter | 3 | 3 | ✅ | 500MB | ✅ | 3 | 1GB | ❌ | 1年 |
+| Creator | 5 | 5 | ✅ | 2GB | ✅ | 10 | 5GB | ✅ | 1年 |
+| Pro | 10 | 10 | ✅ | 10GB | ✅ | 50 | 20GB | ✅ | 1年 |
+| Enterprise | 无限制 | 无限制 | ✅ | 50GB | ✅ | 无限制 | 100GB | ✅ | 1年 |
 
 ---
 
 ## 6. 实现优先级
 
 ### Phase 1: 基础结构 (2天)
-- [ ] 任务 1: License ValueObject
-- [ ] 任务 2: Application 目录函数
+- [ ] 任务 1: License ValueObject (含设备/IP 限制)
+- [ ] 任务 2: LicenseDevice/LicenseIP 数据表
+- [ ] Application 目录函数
 - [ ] 注册为内容类型
 
-### Phase 2: Publish 功能 (2天)
-- [ ] 任务 4: PublishSite/PublishUsage ValueObject
-- [ ] 任务 6: Publish Manager
-- [ ] 任务 7: Publish API Handler
+### Phase 2: Sync 功能 (3天)
+- [ ] 任务 3: SyncAccount/SyncUsage 数据表
+- [ ] 任务 5: Sync Manager (设备/IP 验证 + CouchDB 分配)
+- [ ] Admin CouchDB 配置
 
-### Phase 3: Sync 功能 (3天)
-- [ ] 任务 3: SyncAccount/SyncUsage ValueObject
-- [ ] 任务 5: CouchDB 配置
-- [ ] Sync Manager 实现
+### Phase 3: Publish 功能 (3天)
+- [ ] 任务 4: PublishSite/PublishUsage/PublishDomain 数据表
+- [ ] 任务 6: Publish Manager (部署 + 容量 + 域名)
+- [ ] Publish API Handler
 
 ---
 
@@ -700,7 +1004,7 @@ func (s *Handler) DeployPublishSiteHandler(res http.ResponseWriter, req *http.Re
 | 功能 | 参考文件 |
 |-----|---------|
 | 目录管理 | `internal/application/dir.go` → `PreviewDir()` |
-| 资源部署 | `internal/interfaces/api/handler/handlemdf.go` → `DeployMDFridayPreviewHandler` |
-| 文件上传 | `internal/domain/content/valueobject/previewmdf.go` → `MDFPreview` |
-| Zip 解压 | `pkg/zip/zip.go` → `Unzip()` |
-| 用户数据库 | `pkg/db/cache.go` → `OpenUserStore()` |
+| 资源部署 | `internal/interfaces/api/handler/handlemdf.go` |
+| 文件上传 | `internal/domain/content/valueobject/previewmdf.go` |
+| Zip 解压 | `pkg/zip/zip.go` |
+| 用户数据库 | `pkg/db/cache.go` |
