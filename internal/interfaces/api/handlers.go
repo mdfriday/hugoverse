@@ -11,6 +11,7 @@ func (s *Server) registerLicenseHandler() {
 	// Register License API endpoints
 	// 激活和信息
 	s.mux.HandleFunc("/api/license/activate", s.wrapLicensePostHandler(s.handler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/create", s.wrapLicensePostHandler(s.handler.CreateLicenseHandler))
 	s.mux.HandleFunc("/api/license/info", s.wrapPublicHandler(s.handler.GetLicenseInfoHandler))
 
 	// 设备和 IP 管理

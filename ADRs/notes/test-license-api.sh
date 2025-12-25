@@ -3,6 +3,11 @@
 # License V2 API 端到端测试脚本
 # 用于验证 License 管理系统的完整流程（包括真实 CouchDB 集成）
 #
+# 测试场景：
+# 1. 预先在数据库中创建测试 License
+# 2. 使用已存在的 License 进行完整流程测试
+# 3. 测试不存在的 License 自动创建场景
+#
 # 使用方法:
 #   cd /Users/sunwei/github/mdfriday/hugoverse
 #   bash ADRs/notes/test-license-api.sh
@@ -14,9 +19,15 @@ set -e
 PROJECT_DIR="/Users/sunwei/github/mdfriday/hugoverse"
 API_BASE="http://localhost:1314"
 COUCHDB_URL="http://admin:987123@127.0.0.1:5984"
-LICENSE_KEY="MDF-STARTER-TEST-$(date +%s)"
+
+# 预先创建的测试 License
+TIMESTAMP=$(date +%s)
+EXISTING_LICENSE_KEY="MDF-STARTER-EXISTING-${TIMESTAMP}"
+NEW_LICENSE_KEY="MDF-STARTER-NEW-${TIMESTAMP}"
+
 DEVICE_ID="device-$(uuidgen 2>/dev/null || echo "test-device-$$")"
 SERVER_PID=""
+DB_NAME=""
 
 # 颜色输出
 RED='\033[0;31m'
@@ -103,7 +114,8 @@ echo ""
 echo "测试配置:"
 echo "  - 项目目录: $PROJECT_DIR"
 echo "  - API 地址: $API_BASE"
-echo "  - License Key: $LICENSE_KEY"
+echo "  - 已存在 License: $EXISTING_LICENSE_KEY"
+echo "  - 新建 License: $NEW_LICENSE_KEY"
 echo "  - Device ID: ${DEVICE_ID:0:20}..."
 
 # ---------- 1. 编译验证 ----------
@@ -196,15 +208,89 @@ for i in {1..20}; do
 done
 
 # ---------- 4. API 测试 ----------
-print_header "阶段 4: API 端点测试"
+print_header "阶段 4: 预先创建测试 License"
 
-# 4.1 激活 License
-print_step "测试 1: 激活 License (POST /api/license/activate)"
+# 4.0 预先在数据库中创建几条 License
+print_step "创建测试 License 1 (Starter Plan)"
+
+CREATE_RESPONSE_1=$(curl -s -X POST "$API_BASE/api/license/create" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"license_key\": \"$EXISTING_LICENSE_KEY\",
+        \"plan\": \"starter\",
+        \"expiry_days\": 365
+    }")
+
+echo "响应:"
+format_json "$CREATE_RESPONSE_1"
+
+if check_success "$CREATE_RESPONSE_1"; then
+    print_success "测试 License 1 创建成功"
+else
+    print_error "测试 License 1 创建失败"
+fi
+
+print_step "创建测试 License 2 (Creator Plan)"
+
+CREATE_RESPONSE_2=$(curl -s -X POST "$API_BASE/api/license/create" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"license_key\": \"MDF-CREATOR-PRE-${TIMESTAMP}\",
+        \"plan\": \"creator\",
+        \"expiry_days\": 365
+    }")
+
+echo "响应:"
+format_json "$CREATE_RESPONSE_2"
+
+if check_success "$CREATE_RESPONSE_2"; then
+    print_success "测试 License 2 创建成功"
+else
+    print_error "测试 License 2 创建失败"
+fi
+
+print_step "创建测试 License 3 (Pro Plan)"
+
+CREATE_RESPONSE_3=$(curl -s -X POST "$API_BASE/api/license/create" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"license_key\": \"MDF-PRO-PRE-${TIMESTAMP}\",
+        \"plan\": \"pro\",
+        \"expiry_days\": 365
+    }")
+
+echo "响应:"
+format_json "$CREATE_RESPONSE_3"
+
+if check_success "$CREATE_RESPONSE_3"; then
+    print_success "测试 License 3 创建成功"
+    print_info "✅ 已在数据库中预先创建 3 条 License"
+else
+    print_error "测试 License 3 创建失败"
+fi
+
+# ---------- 5. 使用已存在的 License 进行完整流程测试 ----------
+print_header "阶段 5: 测试已存在的 License (完整流程)"
+
+print_step "验证 License 未激活状态"
+INFO_BEFORE=$(curl -s "$API_BASE/api/license/info?key=$EXISTING_LICENSE_KEY")
+echo "激活前状态:"
+format_json "$INFO_BEFORE"
+
+if echo "$INFO_BEFORE" | grep -q "\"activated\":false"; then
+    print_success "确认 License 未激活"
+else
+    print_info "License 状态: $(echo $INFO_BEFORE | grep -o '\"activated\":[^,}]*')"
+fi
+
+# 5.1 激活已存在的 License
+# 5.1 激活已存在的 License
+print_step "测试 1: 激活已存在的 License (POST /api/license/activate)"
 
 ACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d "{
-        \"license_key\": \"$LICENSE_KEY\",
+        \"license_key\": \"$EXISTING_LICENSE_KEY\",
         \"device_id\": \"$DEVICE_ID\",
         \"device_name\": \"Test Device\",
         \"device_type\": \"desktop\"
@@ -219,10 +305,10 @@ else
     print_error "License 激活失败"
 fi
 
-# 4.2 查询 License 信息
+# 5.2 查询 License 信息
 print_step "测试 2: 查询 License 信息 (GET /api/license/info)"
 
-INFO_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=$LICENSE_KEY")
+INFO_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=$EXISTING_LICENSE_KEY")
 
 echo "响应:"
 format_json "$INFO_RESPONSE"
@@ -241,10 +327,10 @@ else
     print_error "查询 License 信息失败"
 fi
 
-# 4.3 查询设备列表
+# 5.3 查询设备列表
 print_step "测试 3: 查询设备列表 (GET /api/license/devices)"
 
-DEVICES_RESPONSE=$(curl -s "$API_BASE/api/license/devices?key=$LICENSE_KEY")
+DEVICES_RESPONSE=$(curl -s "$API_BASE/api/license/devices?key=$EXISTING_LICENSE_KEY")
 
 echo "响应:"
 format_json "$DEVICES_RESPONSE"
@@ -257,10 +343,10 @@ else
     print_error "查询设备列表失败"
 fi
 
-# 4.4 查询 IP 列表
+# 5.4 查询 IP 列表
 print_step "测试 4: 查询 IP 列表 (GET /api/license/ips)"
 
-IPS_RESPONSE=$(curl -s "$API_BASE/api/license/ips?key=$LICENSE_KEY")
+IPS_RESPONSE=$(curl -s "$API_BASE/api/license/ips?key=$EXISTING_LICENSE_KEY")
 
 echo "响应:"
 format_json "$IPS_RESPONSE"
@@ -271,10 +357,10 @@ else
     print_error "查询 IP 列表失败"
 fi
 
-# 4.5 查询 Sync 信息
+# 5.5 查询 Sync 信息
 print_step "测试 5: 查询 Sync 信息 (GET /api/license/sync)"
 
-SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/sync?key=$LICENSE_KEY")
+SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/sync?key=$EXISTING_LICENSE_KEY")
 
 echo "响应:"
 format_json "$SYNC_RESPONSE"
@@ -326,10 +412,10 @@ else
     print_error "查询 Sync 信息失败"
 fi
 
-# 4.6 查询 Publish 信息
+# 5.6 查询 Publish 信息
 print_step "测试 6: 查询 Publish 信息 (GET /api/license/publish)"
 
-PUBLISH_RESPONSE=$(curl -s "$API_BASE/api/license/publish?key=$LICENSE_KEY")
+PUBLISH_RESPONSE=$(curl -s "$API_BASE/api/license/publish?key=$EXISTING_LICENSE_KEY")
 
 echo "响应:"
 format_json "$PUBLISH_RESPONSE"
@@ -340,8 +426,53 @@ else
     print_error "查询 Publish 信息失败"
 fi
 
-# 4.7 测试不存在的 License
-print_step "测试 7: 查询不存在的 License (边界测试)"
+# ---------- 6. 测试新 License（不存在于数据库）的自动创建场景 ----------
+print_header "阶段 6: 测试不存在的 License (自动创建场景)"
+
+print_step "测试 7: 激活不存在的 License (自动创建)"
+
+NEW_LICENSE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"license_key\": \"$NEW_LICENSE_KEY\",
+        \"device_id\": \"device-new-${TIMESTAMP}\",
+        \"device_name\": \"New Device\",
+        \"device_type\": \"desktop\"
+    }")
+
+echo "响应:"
+format_json "$NEW_LICENSE_RESPONSE"
+
+if check_success "$NEW_LICENSE_RESPONSE"; then
+    print_success "新 License 自动创建并激活成功"
+    
+    # 验证是否自动创建
+    if echo "$NEW_LICENSE_RESPONSE" | grep -q "\"plan\":\"starter\""; then
+        print_success "自动判断 Plan: starter (基于 Key 格式)"
+    fi
+else
+    print_error "新 License 创建失败"
+fi
+
+print_step "测试 8: 验证新创建的 License 信息"
+
+NEW_INFO=$(curl -s "$API_BASE/api/license/info?key=$NEW_LICENSE_KEY")
+echo "新 License 信息:"
+format_json "$NEW_INFO"
+
+if echo "$NEW_INFO" | grep -q "\"license_key\""; then
+    print_success "新 License 已保存到数据库"
+else
+    print_error "新 License 未保存"
+fi
+
+# ---------- 7. 边界测试 ----------
+print_header "阶段 7: 边界测试"
+
+# ---------- 7. 边界测试 ----------
+print_header "阶段 7: 边界测试"
+
+print_step "测试 9: 查询不存在的 License"
 
 NOT_FOUND_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=NOT-EXIST-KEY")
 
@@ -354,8 +485,8 @@ else
     print_error "边界测试失败"
 fi
 
-# 4.8 测试缺少参数
-print_step "测试 8: 缺少必要参数 (边界测试)"
+# 7.2 测试缺少参数
+print_step "测试 10: 缺少必要参数"
 
 MISSING_PARAM_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
@@ -370,13 +501,16 @@ else
     print_error "边界测试失败"
 fi
 
-# 4.9 再次激活同一 License (模拟重复激活)
-print_step "测试 9: 重复激活 License (幂等性测试)"
+# ---------- 8. 幂等性和设备限制测试 ----------
+print_header "阶段 8: 幂等性和设备限制测试"
+
+# 8.1 再次激活同一 License
+print_step "测试 11: 重复激活 License (幂等性测试)"
 
 REACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d "{
-        \"license_key\": \"$LICENSE_KEY\",
+        \"license_key\": \"$EXISTING_LICENSE_KEY\",
         \"device_id\": \"$DEVICE_ID\",
         \"device_name\": \"Test Device Updated\",
         \"device_type\": \"desktop\"
@@ -391,14 +525,14 @@ else
     print_error "重复激活失败"
 fi
 
-# 4.10 新设备激活
-print_step "测试 10: 新设备激活 (设备限制测试)"
+# 8.2 新设备激活
+print_step "测试 12: 新设备激活 (设备限制测试)"
 
 NEW_DEVICE_ID="device-new-$(date +%s)"
 NEW_DEVICE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d "{
-        \"license_key\": \"$LICENSE_KEY\",
+        \"license_key\": \"$EXISTING_LICENSE_KEY\",
         \"device_id\": \"$NEW_DEVICE_ID\",
         \"device_name\": \"New Test Device\",
         \"device_type\": \"mobile\"
@@ -415,20 +549,30 @@ fi
 
 # 最终验证设备数量
 print_step "最终验证: 确认设备数量"
-FINAL_DEVICES=$(curl -s "$API_BASE/api/license/devices?key=$LICENSE_KEY")
+FINAL_DEVICES=$(curl -s "$API_BASE/api/license/devices?key=$EXISTING_LICENSE_KEY")
 echo "最终设备列表:"
 format_json "$FINAL_DEVICES"
 
-# ---------- 5. 测试总结 ----------
+# ---------- 9. 测试总结 ----------
+# ---------- 9. 测试总结 ----------
 print_header "测试总结"
 
 echo ""
 echo "测试完成！"
 echo ""
-echo "测试的 License Key: $LICENSE_KEY"
-echo "使用的 Device ID: ${DEVICE_ID:0:20}..."
+echo "✅ 测试场景："
+echo "  1. 预先创建 3 条测试 License (Starter, Creator, Pro)"
+echo "  2. 使用已存在的 License 进行完整流程测试"
+echo "  3. 测试不存在的 License 自动创建场景"
 echo ""
-echo "服务器日志位置: /tmp/hugoverse-test.log"
+echo "📋 测试的 License:"
+echo "  - 已存在: $EXISTING_LICENSE_KEY"
+echo "  - 新建: $NEW_LICENSE_KEY"
+echo "  - 其他: MDF-CREATOR-PRE-${TIMESTAMP}, MDF-PRO-PRE-${TIMESTAMP}"
+echo ""
+echo "🔧 使用的 Device ID: ${DEVICE_ID:0:20}..."
+echo ""
+echo "📝 服务器日志位置: /tmp/hugoverse-test.log"
 echo ""
 
 print_success "License V2 API 端到端测试完成"

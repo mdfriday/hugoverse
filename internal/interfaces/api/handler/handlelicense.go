@@ -11,6 +11,76 @@ import (
 
 // ========== License API Handlers ==========
 
+// CreateLicenseHandler 创建 License (管理员接口)
+// POST /api/license/create
+func (h *Handler) CreateLicenseHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		LicenseKey string `json:"license_key"`
+		Plan       string `json:"plan"`
+		ExpiryDays int    `json:"expiry_days"` // 有效期天数，默认 365
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	if req.LicenseKey == "" {
+		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	// 检查 License 是否已存在
+	existing, _ := h.contentApp.GetLicenseByKey(req.LicenseKey)
+	if existing != nil {
+		h.jsonError(w, "License already exists", http.StatusConflict)
+		return
+	}
+
+	// 解析 Plan
+	plan := contentVO.LicensePlan(req.Plan)
+	if plan == "" {
+		plan = contentVO.PlanStarter // 默认 Starter
+	}
+
+	// 计算过期时间
+	expiryDays := req.ExpiryDays
+	if expiryDays <= 0 {
+		expiryDays = 365 // 默认一年
+	}
+
+	now := time.Now()
+	license := &contentVO.License{
+		LicenseKey: req.LicenseKey,
+		Plan:       plan,
+		Activated:  false,
+		IssueDate:  now.UnixMilli(),
+		ExpiryDate: now.Add(time.Duration(expiryDays) * 24 * time.Hour).UnixMilli(),
+		MaxDevices: contentVO.GetPlanFeatures(plan).MaxDevices,
+		MaxIPs:     contentVO.GetPlanFeatures(plan).MaxIPs,
+	}
+
+	if err := h.contentApp.CreateLicense(license); err != nil {
+		h.jsonError(w, "Failed to create license: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	h.jsonResponse(w, map[string]interface{}{
+		"success":     true,
+		"message":     "License created successfully",
+		"license_key": license.LicenseKey,
+		"plan":        license.Plan,
+		"issue_date":  license.IssueDate,
+		"expires_at":  license.ExpiryDate,
+		"features":    license.GetFeatures(),
+	})
+}
+
 // ActivateLicenseHandler 激活 License
 // POST /api/license/activate
 func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request) {
