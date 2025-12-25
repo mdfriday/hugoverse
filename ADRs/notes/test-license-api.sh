@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # License V2 API 端到端测试脚本
-# 用于验证 License 管理系统的完整流程
+# 用于验证 License 管理系统的完整流程（包括真实 CouchDB 集成）
 #
 # 使用方法:
 #   cd /Users/sunwei/github/mdfriday/hugoverse
@@ -13,6 +13,7 @@ set -e
 # ========== 配置 ==========
 PROJECT_DIR="/Users/sunwei/github/mdfriday/hugoverse"
 API_BASE="http://localhost:1314"
+COUCHDB_URL="http://admin:987123@127.0.0.1:5984"
 LICENSE_KEY="MDF-STARTER-TEST-$(date +%s)"
 DEVICE_ID="device-$(uuidgen 2>/dev/null || echo "test-device-$$")"
 SERVER_PID=""
@@ -81,6 +82,13 @@ cleanup() {
         kill "$SERVER_PID" 2>/dev/null || true
         wait "$SERVER_PID" 2>/dev/null || true
     fi
+    
+    # 清理测试数据库 (可选)
+    if [ -n "$DB_NAME" ]; then
+        print_info "清理测试数据库: $DB_NAME"
+        curl -s -X DELETE "http://admin:987123@127.0.0.1:5984/$DB_NAME" > /dev/null 2>&1 || true
+    fi
+    
     print_success "清理完成"
 }
 
@@ -99,7 +107,18 @@ echo "  - License Key: $LICENSE_KEY"
 echo "  - Device ID: ${DEVICE_ID:0:20}..."
 
 # ---------- 1. 编译验证 ----------
-print_header "阶段 1: 编译验证"
+print_header "阶段 1: 环境检查和编译"
+
+print_step "检查 CouchDB 连接"
+if curl -s "$COUCHDB_URL" > /dev/null 2>&1; then
+    print_success "CouchDB 连接正常"
+    COUCHDB_VERSION=$(curl -s "$COUCHDB_URL" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
+    print_info "CouchDB 版本: $COUCHDB_VERSION"
+else
+    print_error "CouchDB 连接失败！请确保 CouchDB 已启动在 127.0.0.1:5984"
+    print_info "启动命令示例: docker run -d -p 5984:5984 -e COUCHDB_USER=admin -e COUCHDB_PASSWORD=987123 couchdb:latest"
+    exit 1
+fi
 
 print_step "切换到项目目录"
 cd "$PROJECT_DIR"
@@ -260,14 +279,49 @@ SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/sync?key=$LICENSE_KEY")
 echo "响应:"
 format_json "$SYNC_RESPONSE"
 
-if echo "$SYNC_RESPONSE" | grep -q "\"email\"\|\"db_endpoint\"\|error"; then
-    if echo "$SYNC_RESPONSE" | grep -q "\"email\""; then
-        print_success "查询 Sync 信息成功"
-        EMAIL=$(echo "$SYNC_RESPONSE" | grep -o '"email":"[^"]*"' | cut -d'"' -f4)
-        print_info "Sync Email: $EMAIL"
+if echo "$SYNC_RESPONSE" | grep -q "\"email\"\|\"db_endpoint\""; then
+    print_success "查询 Sync 信息成功"
+    
+    # 提取 DB 信息
+    SYNC_EMAIL=$(echo "$SYNC_RESPONSE" | grep -o '"email":"[^"]*"' | cut -d'"' -f4)
+    DB_NAME=$(echo "$SYNC_RESPONSE" | grep -o '"db_name":"[^"]*"' | cut -d'"' -f4)
+    
+    print_info "Sync Email: $SYNC_EMAIL"
+    print_info "DB Name: $DB_NAME"
+    
+    # 验证 CouchDB 数据库是否真的被创建
+    print_step "验证 CouchDB 数据库是否存在"
+    DB_CHECK_URL="http://admin:987123@127.0.0.1:5984/$DB_NAME"
+    if DB_INFO=$(curl -s "$DB_CHECK_URL"); then
+        if echo "$DB_INFO" | grep -q '"db_name"'; then
+            print_success "✅ CouchDB 数据库已成功创建"
+            DOC_COUNT=$(echo "$DB_INFO" | grep -o '"doc_count":[0-9]*' | cut -d: -f2)
+            DISK_SIZE=$(echo "$DB_INFO" | grep -o '"disk_size":[0-9]*' | cut -d: -f2)
+            print_info "文档数量: $DOC_COUNT"
+            print_info "磁盘大小: $DISK_SIZE bytes"
+        else
+            print_error "数据库信息异常"
+            echo "$DB_INFO"
+        fi
     else
-        print_info "Sync 账号尚未创建或 CouchDB 未配置"
+        print_error "无法访问 CouchDB 数据库"
     fi
+    
+    # 验证用户是否被创建
+    print_step "验证 CouchDB 用户是否存在"
+    USER_CHECK_URL="http://admin:987123@127.0.0.1:5984/_users/org.couchdb.user:$SYNC_EMAIL"
+    if USER_INFO=$(curl -s "$USER_CHECK_URL"); then
+        if echo "$USER_INFO" | grep -q "\"name\":\"$SYNC_EMAIL\""; then
+            print_success "✅ CouchDB 用户已成功创建"
+            print_info "用户名: $SYNC_EMAIL"
+        else
+            print_info "用户信息: $USER_INFO"
+        fi
+    fi
+    
+elif echo "$SYNC_RESPONSE" | grep -q "error"; then
+    print_info "Sync 功能未启用或配置错误"
+    echo "$SYNC_RESPONSE"
 else
     print_error "查询 Sync 信息失败"
 fi

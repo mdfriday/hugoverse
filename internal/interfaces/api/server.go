@@ -121,7 +121,12 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 	s.tls = tls.NewTls(s, s.adminApp, application.TLSDir())
 
 	// Initialize License managers
-	couchConfig := adminVO.DefaultCouchDBConfig()
+	couchConfig := &adminVO.CouchDBConfig{
+		URL:       "http://127.0.0.1:5984",
+		AdminUser: "admin",
+		AdminPass: "987123",
+		DBPrefix:  "userdb_",
+	}
 	couchClient := couchdb.NewClient(couchConfig)
 	licenseRepo := repository.NewLicenseRepository(s.db)
 	syncManager := syncEntity.NewManager(couchConfig, couchClient, licenseRepo)

@@ -289,6 +289,34 @@ func (r *LicenseRepository) GetSyncAccountByLicense(licenseKey string) (*valueob
 
 // SaveSyncAccount 保存 SyncAccount
 func (r *LicenseRepository) SaveSyncAccount(account *valueobject.SyncAccount) error {
+	if account.ID <= 0 {
+		// 新记录 - 初始化 Item 字段
+		id, err := r.db.NextContentId(NsSyncAccount)
+		if err != nil {
+			return fmt.Errorf("failed to get next ID: %w", err)
+		}
+		account.ID = int(id)
+		account.Namespace = NsSyncAccount
+		account.Status = "public"
+		
+		// 初始化 UUID
+		if account.UUID.String() == "00000000-0000-0000-0000-000000000000" {
+			newUUID, err := uuid.NewV4()
+			if err != nil {
+				return fmt.Errorf("failed to generate UUID: %w", err)
+			}
+			account.UUID = newUUID
+		}
+		
+		// 初始化时间戳
+		if account.Timestamp == 0 {
+			account.Timestamp = account.CreatedAt
+		}
+		if account.Updated == 0 {
+			account.Updated = account.CreatedAt
+		}
+	}
+	
 	account.SetHash()
 	account.SetSlug("")
 
@@ -298,11 +326,6 @@ func (r *LicenseRepository) SaveSyncAccount(account *valueobject.SyncAccount) er
 	}
 
 	if account.ID <= 0 {
-		id, err := r.db.NextContentId(NsSyncAccount)
-		if err != nil {
-			return fmt.Errorf("failed to get next ID: %w", err)
-		}
-		account.ID = int(id)
 		return r.db.NewContent(account, data)
 	}
 	return r.db.PutContent(account, data)

@@ -100,7 +100,9 @@ func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request)
 	var syncInfo map[string]interface{}
 	if h.syncManager != nil && license.GetFeatures().SyncEnabled {
 		syncAccount, err := h.syncManager.CreateSyncAccount(license)
-		if err == nil && syncAccount != nil {
+		if err != nil {
+			h.log.Errorf("Failed to create sync account for license %s: %v", license.LicenseKey, err)
+		} else if syncAccount != nil {
 			syncInfo = map[string]interface{}{
 				"email":       syncAccount.Email,
 				"db_name":     syncAccount.DBName,
