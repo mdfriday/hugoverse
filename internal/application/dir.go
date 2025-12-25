@@ -25,6 +25,11 @@ func init() {
 		log.Fatalln(err)
 	}
 
+	err = EnsureDirExists(UploadDir())
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	err = EnsureDirExists(ImageStorageDir())
 	if err != nil {
 		log.Fatalln(err)
