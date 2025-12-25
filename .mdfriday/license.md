@@ -76,9 +76,316 @@ func PublishDir() string {
 
 ---
 
-## 3. 任务拆解
+## 3. 数据库设计 (BoltDB)
+
+### 3.1 Bucket 命名规则
+
+每个 ValueObject 在 BoltDB 中有三个 Bucket，充分发挥 KV 存储的优势：
+
+```
+License (namespace: "license")
+├── license                  # 主存储: key=ID, value=JSON
+├── license__index           # 索引: key=slug, value=JSON (方便按 slug 查找)
+└── license__sorted          # 排序: key=timestamp:ID, value=JSON (按时间排序)
+
+全局索引 bucket:
+└── __contentIndex           # key=slug → value="license:123"
+                             # key="license:{hash}" → value="123"
+```
+
+### 3.2 Hash 索引机制
+
+每个 ValueObject 需要实现 `SetHash()` 方法，生成唯一 hash 用于快速查找：
+
+```go
+// License 使用 LicenseKey 的 MD5 作为 hash
+func (l *License) SetHash() {
+    l.Hash = hash.MD5(l.LicenseKey)  // 如 "abc123..."
+}
+
+// LicenseDevice 使用 License + DeviceID 的组合 hash
+func (d *LicenseDevice) SetHash() {
+    d.Hash = hash.MD5(d.License + ":" + d.DeviceID)
+}
+
+// LicenseIP 使用 License + IPAddress 的组合 hash
+func (i *LicenseIP) SetHash() {
+    i.Hash = hash.MD5(i.License + ":" + i.IPAddress)
+}
+
+// SyncAccount 使用 License 的 hash
+func (s *SyncAccount) SetHash() {
+    s.Hash = hash.MD5(s.License)
+}
+
+// PublishSite 使用 License + Name 的组合 hash
+func (p *PublishSite) SetHash() {
+    p.Hash = hash.MD5(p.License + ":" + p.Name)
+}
+```
+
+### 3.3 数据库查找流程
+
+**按 LicenseKey 查找 License**:
+```
+1. 计算 hash = MD5(licenseKey)
+2. 查 __contentIndex[license:{hash}] → 获取 ID
+3. 查 license[{ID}] → 获取完整 JSON
+```
+
+**按 License + DeviceID 查找 Device**:
+```
+1. 计算 hash = MD5(license + ":" + deviceID)
+2. 查 __contentIndex[licensedevice:{hash}] → 获取 ID
+3. 查 licensedevice[{ID}] → 获取完整 JSON
+```
+
+**按前缀查找 (如获取某 License 的所有设备)**:
+```
+使用 ns__index bucket 的 Cursor.Seek() + HasPrefix():
+1. 在 licensedevice__index bucket
+2. Seek 到 "{license}:" 前缀
+3. 遍历所有匹配项
+```
+
+### 3.4 Repository 接口实现参考
+
+```go
+// internal/infrastructure/repository/license_repo.go
+package repository
+
+import (
+    "encoding/json"
+    "fmt"
+    
+    "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
+    "github.com/mdfriday/hugoverse/internal/interfaces/api/database"
+    "github.com/mdfriday/hugoverse/pkg/hash"
+)
+
+const (
+    NsLicense       = "license"
+    NsLicenseDevice = "licensedevice"
+    NsLicenseIP     = "licenseip"
+    NsSyncAccount   = "syncaccount"
+    NsPublishSite   = "publishsite"
+)
+
+type LicenseRepository struct {
+    db *database.Database
+}
+
+func NewLicenseRepository(db *database.Database) *LicenseRepository {
+    return &LicenseRepository{db: db}
+}
+
+// ========== License 查询 ==========
+
+// GetLicenseByKey 通过 LicenseKey 查找 License
+// 利用 hash 索引: __contentIndex["license:{hash}"] → ID
+func (r *LicenseRepository) GetLicenseByKey(licenseKey string) (*valueobject.License, error) {
+    hashKey := hash.MD5(licenseKey)
+    
+    // 通过 hash 获取 ID
+    idBytes, err := r.db.GetIdByHash(NsLicense, hashKey)
+    if err != nil || idBytes == nil {
+        return nil, fmt.Errorf("license not found: %s", licenseKey)
+    }
+    
+    // 通过 ID 获取完整数据
+    data, err := r.db.GetContent(NsLicense, string(idBytes))
+    if err != nil {
+        return nil, err
+    }
+    
+    var license valueobject.License
+    if err := json.Unmarshal(data, &license); err != nil {
+        return nil, err
+    }
+    
+    return &license, nil
+}
+
+// UpdateLicense 更新 License
+func (r *LicenseRepository) UpdateLicense(license *valueobject.License) error {
+    data, err := json.Marshal(license)
+    if err != nil {
+        return err
+    }
+    return r.db.PutContent(license, data)
+}
+
+// ========== Device 查询 ==========
+
+// GetDeviceByID 通过 License + DeviceID 查找设备
+func (r *LicenseRepository) GetDeviceByID(licenseKey, deviceID string) (*valueobject.LicenseDevice, error) {
+    // 组合 hash key
+    hashKey := hash.MD5(licenseKey + ":" + deviceID)
+    
+    idBytes, err := r.db.GetIdByHash(NsLicenseDevice, hashKey)
+    if err != nil || idBytes == nil {
+        return nil, fmt.Errorf("device not found")
+    }
+    
+    data, err := r.db.GetContent(NsLicenseDevice, string(idBytes))
+    if err != nil {
+        return nil, err
+    }
+    
+    var device valueobject.LicenseDevice
+    if err := json.Unmarshal(data, &device); err != nil {
+        return nil, err
+    }
+    
+    return &device, nil
+}
+
+// GetDevicesByLicense 获取某 License 的所有设备
+// 使用前缀查询: licensedevice__index["{slug-prefix}:*"]
+func (r *LicenseRepository) GetDevicesByLicense(licenseKey string) ([]valueobject.LicenseDevice, error) {
+    // 使用 slug 前缀查询
+    // slug 格式: "{license-slug}:{deviceID}"
+    prefix := fmt.Sprintf("%s:", licenseKey)
+    
+    results, err := r.db.ContentByPrefix(NsLicenseDevice, prefix)
+    if err != nil {
+        return nil, err
+    }
+    
+    devices := make([]valueobject.LicenseDevice, 0, len(results))
+    for _, data := range results {
+        var device valueobject.LicenseDevice
+        if err := json.Unmarshal(data, &device); err != nil {
+            continue
+        }
+        devices = append(devices, device)
+    }
+    
+    return devices, nil
+}
+
+// ========== IP 查询 ==========
+
+// GetIPByAddress 通过 License + IPAddress 查找 IP 记录
+func (r *LicenseRepository) GetIPByAddress(licenseKey, ipAddress string) (*valueobject.LicenseIP, error) {
+    hashKey := hash.MD5(licenseKey + ":" + ipAddress)
+    
+    idBytes, err := r.db.GetIdByHash(NsLicenseIP, hashKey)
+    if err != nil || idBytes == nil {
+        return nil, fmt.Errorf("IP not found")
+    }
+    
+    data, err := r.db.GetContent(NsLicenseIP, string(idBytes))
+    if err != nil {
+        return nil, err
+    }
+    
+    var ip valueobject.LicenseIP
+    if err := json.Unmarshal(data, &ip); err != nil {
+        return nil, err
+    }
+    
+    return &ip, nil
+}
+
+// GetIPsByLicense 获取某 License 的所有 IP 记录
+func (r *LicenseRepository) GetIPsByLicense(licenseKey string) ([]valueobject.LicenseIP, error) {
+    prefix := fmt.Sprintf("%s:", licenseKey)
+    
+    results, err := r.db.ContentByPrefix(NsLicenseIP, prefix)
+    if err != nil {
+        return nil, err
+    }
+    
+    ips := make([]valueobject.LicenseIP, 0, len(results))
+    for _, data := range results {
+        var ip valueobject.LicenseIP
+        if err := json.Unmarshal(data, &ip); err != nil {
+            continue
+        }
+        ips = append(ips, ip)
+    }
+    
+    return ips, nil
+}
+
+// ========== Sync Account 查询 ==========
+
+// GetSyncAccountByLicense 通过 License 查找 SyncAccount
+func (r *LicenseRepository) GetSyncAccountByLicense(licenseKey string) (*valueobject.SyncAccount, error) {
+    hashKey := hash.MD5(licenseKey)
+    
+    idBytes, err := r.db.GetIdByHash(NsSyncAccount, hashKey)
+    if err != nil || idBytes == nil {
+        return nil, fmt.Errorf("sync account not found")
+    }
+    
+    data, err := r.db.GetContent(NsSyncAccount, string(idBytes))
+    if err != nil {
+        return nil, err
+    }
+    
+    var account valueobject.SyncAccount
+    if err := json.Unmarshal(data, &account); err != nil {
+        return nil, err
+    }
+    
+    return &account, nil
+}
+```
+
+### 3.5 Slug 设计原则
+
+为了支持前缀查询，Slug 需要有规律的命名：
+
+```go
+// License: 使用 LicenseKey 作为 slug
+func (l *License) SetSlug(req *http.Request) {
+    l.Slug = l.LicenseKey
+}
+
+// LicenseDevice: 使用 "LicenseKey:DeviceID" 作为 slug
+func (d *LicenseDevice) SetSlug(req *http.Request) {
+    d.Slug = fmt.Sprintf("%s:%s", d.License, d.DeviceID[:8])
+}
+
+// LicenseIP: 使用 "LicenseKey:IPAddress" 作为 slug
+func (i *LicenseIP) SetSlug(req *http.Request) {
+    i.Slug = fmt.Sprintf("%s:%s", i.License, i.IPAddress)
+}
+
+// SyncAccount: 使用 License 作为 slug
+func (s *SyncAccount) SetSlug(req *http.Request) {
+    s.Slug = s.License
+}
+
+// PublishSite: 使用 "LicenseKey:SiteName" 作为 slug
+func (p *PublishSite) SetSlug(req *http.Request) {
+    p.Slug = fmt.Sprintf("%s:%s", p.License, p.Name)
+}
+```
+
+### 3.6 BoltDB Bucket 一览
+
+| ValueObject | 主 Bucket | 索引 Bucket | 排序 Bucket | Hash 来源 |
+|-------------|-----------|-------------|-------------|-----------|
+| License | `license` | `license__index` | `license__sorted` | `MD5(LicenseKey)` |
+| LicenseDevice | `licensedevice` | `licensedevice__index` | - | `MD5(License:DeviceID)` |
+| LicenseIP | `licenseip` | `licenseip__index` | - | `MD5(License:IPAddress)` |
+| SyncAccount | `syncaccount` | `syncaccount__index` | - | `MD5(License)` |
+| SyncUsage | `syncusage` | `syncusage__index` | - | `MD5(SyncAccount:Timestamp)` |
+| PublishSite | `publishsite` | `publishsite__index` | - | `MD5(License:Name)` |
+| PublishUsage | `publishusage` | `publishusage__index` | - | `MD5(License:Timestamp)` |
+| PublishDomain | `publishdomain` | `publishdomain__index` | - | `MD5(License:Domain)` |
+
+---
+
+## 4. 任务拆解
 
 ### 任务 1: Content Domain - License ValueObject ⭐ 优先级: 高
+
+> **BoltDB 存储**: `license` / `license__index` / `license__sorted`
+> **Hash**: `MD5(LicenseKey)` | **Slug**: `LicenseKey`
 
 **文件**: `internal/domain/content/valueobject/license.go`
 
@@ -163,8 +470,14 @@ func (l *License) String() string {
     return fmt.Sprintf("%s (%s)", l.LicenseKey, l.Plan)
 }
 
+// SetHash 使用 LicenseKey 的 MD5 作为 hash，用于快速查找
 func (l *License) SetHash() {
     l.Hash = hash.MD5(l.LicenseKey)
+}
+
+// SetSlug 使用 LicenseKey 作为 slug，存入 ns__index bucket
+func (l *License) SetSlug(req *http.Request) {
+    l.Slug = l.LicenseKey
 }
 
 func (l *License) IndexContent() bool { return true }
@@ -268,6 +581,9 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 
 ### 任务 2: Content Domain - 设备/IP 记录表 ⭐ 优先级: 高
 
+> **BoltDB 存储**: `licensedevice` / `licensedevice__index`
+> **Hash**: `MD5(License:DeviceID)` | **Slug**: `{License}:{DeviceID[:8]}`
+
 **文件**: `internal/domain/content/valueobject/licensedevice.go`
 
 ```go
@@ -326,8 +642,21 @@ func (d *LicenseDevice) String() string {
     return fmt.Sprintf("%s - %s", d.DeviceID[:8], d.DeviceName)
 }
 
+// SetHash 使用 License + DeviceID 的组合 hash
+func (d *LicenseDevice) SetHash() {
+    d.Hash = hash.MD5(d.License + ":" + d.DeviceID)
+}
+
+// SetSlug 使用 "License:DeviceID[:8]" 格式，支持按 License 前缀查询
+func (d *LicenseDevice) SetSlug(req *http.Request) {
+    d.Slug = fmt.Sprintf("%s:%s", d.License, d.DeviceID[:8])
+}
+
 func (d *LicenseDevice) IndexContent() bool { return true }
 ```
+
+> **BoltDB 存储**: `licenseip` / `licenseip__index`
+> **Hash**: `MD5(License:IPAddress)` | **Slug**: `{License}:{IPAddress}`
 
 **文件**: `internal/domain/content/valueobject/licenseip.go`
 
@@ -390,12 +719,25 @@ func (i *LicenseIP) String() string {
     return fmt.Sprintf("%s (%s)", i.IPAddress, i.Country)
 }
 
+// SetHash 使用 License + IPAddress 的组合 hash
+func (i *LicenseIP) SetHash() {
+    i.Hash = hash.MD5(i.License + ":" + i.IPAddress)
+}
+
+// SetSlug 使用 "License:IPAddress" 格式，支持按 License 前缀查询
+func (i *LicenseIP) SetSlug(req *http.Request) {
+    i.Slug = fmt.Sprintf("%s:%s", i.License, i.IPAddress)
+}
+
 func (i *LicenseIP) IndexContent() bool { return true }
 ```
 
 ---
 
 ### 任务 3: Content Domain - Sync 关系数据表 ⭐ 优先级: 中
+
+> **BoltDB 存储**: `syncaccount` / `syncaccount__index`
+> **Hash**: `MD5(License)` | **Slug**: `{License}`
 
 **文件**: `internal/domain/content/valueobject/syncaccount.go`
 
@@ -418,8 +760,21 @@ func (s *SyncAccount) String() string {
     return fmt.Sprintf("%s - %s", s.Email, s.DBName)
 }
 
+// SetHash 使用 License 的 hash，一个 License 对应一个 SyncAccount
+func (s *SyncAccount) SetHash() {
+    s.Hash = hash.MD5(s.License)
+}
+
+// SetSlug 使用 License 作为 slug
+func (s *SyncAccount) SetSlug(req *http.Request) {
+    s.Slug = s.License
+}
+
 func (s *SyncAccount) IndexContent() bool { return true }
 ```
+
+> **BoltDB 存储**: `syncusage` / `syncusage__index`
+> **Hash**: `MD5(SyncAccount:RecordedAt)` | 用于记录历史使用量
 
 **文件**: `internal/domain/content/valueobject/syncusage.go`
 
@@ -442,6 +797,9 @@ type SyncUsage struct {
 ---
 
 ### 任务 4: Content Domain - Publish 关系数据表 ⭐ 优先级: 中
+
+> **BoltDB 存储**: `publishsite` / `publishsite__index`
+> **Hash**: `MD5(License:Name)` | **Slug**: `{License}:{Name}`
 
 **文件**: `internal/domain/content/valueobject/publishsite.go`
 
@@ -467,10 +825,23 @@ func (p *PublishSite) String() string { return p.Name }
 func (p *PublishSite) Deploy() bool   { return true }
 func (p *PublishSite) IndexContent() bool { return true }
 
+// SetHash 使用 License + Name 的组合 hash
+func (p *PublishSite) SetHash() {
+    p.Hash = hash.MD5(p.License + ":" + p.Name)
+}
+
+// SetSlug 使用 "License:Name" 格式，支持按 License 前缀查询
+func (p *PublishSite) SetSlug(req *http.Request) {
+    p.Slug = fmt.Sprintf("%s:%s", p.License, p.Name)
+}
+
 func (p *PublishSite) AbsAssetPath(uploadDir string) (string, error) {
     return getAssetAbsPath(p.Asset, uploadDir)
 }
 ```
+
+> **BoltDB 存储**: `publishusage` / `publishusage__index`
+> **Hash**: `MD5(License:RecordedAt)` | 用于记录历史容量
 
 **文件**: `internal/domain/content/valueobject/publishusage.go`
 
@@ -490,6 +861,9 @@ type PublishUsage struct {
 }
 ```
 
+> **BoltDB 存储**: `publishdomain` / `publishdomain__index`
+> **Hash**: `MD5(License:Domain)` | **Slug**: `{License}:{Domain}`
+
 **文件**: `internal/domain/content/valueobject/publishdomain.go`
 
 ```go
@@ -498,6 +872,8 @@ package valueobject
 import (
     "fmt"
     "github.com/mdfriday/hugoverse/pkg/editor"
+    "github.com/mdfriday/hugoverse/pkg/hash"
+    "net/http"
 )
 
 // PublishDomain 自定义域名记录
@@ -538,6 +914,16 @@ func (d *PublishDomain) MarshalEditor() ([]byte, error) {
 
 func (d *PublishDomain) String() string {
     return d.Domain
+}
+
+// SetHash 使用 License + Domain 的组合 hash
+func (d *PublishDomain) SetHash() {
+    d.Hash = hash.MD5(d.License + ":" + d.Domain)
+}
+
+// SetSlug 使用 "License:Domain" 格式，支持按 License 前缀查询
+func (d *PublishDomain) SetSlug(req *http.Request) {
+    d.Slug = fmt.Sprintf("%s:%s", d.License, d.Domain)
 }
 
 func (d *PublishDomain) IndexContent() bool { return true }
@@ -962,7 +1348,7 @@ func (m *Manager) updateCaddyConfig() error {
 
 ---
 
-## 4. 目录结构
+## 5. 目录结构
 
 ```
 ~/.local/share/hugoverse/
@@ -981,7 +1367,7 @@ func (m *Manager) updateCaddyConfig() error {
 
 ---
 
-## 5. 权限矩阵
+## 6. 权限矩阵
 
 | 套餐 | 设备数 | IP数 | Sync | Sync配额 | Publish | 站点数 | 存储 | 自定义域名 | 有效期 |
 |-----|-------|-----|------|---------|---------|-------|------|----------|-------|
@@ -993,7 +1379,7 @@ func (m *Manager) updateCaddyConfig() error {
 
 ---
 
-## 6. 实现优先级
+## 7. 实现优先级
 
 ### Phase 1: 基础结构 (2天)
 - [ ] 任务 1: License ValueObject (含设备/IP 限制)
@@ -1013,7 +1399,7 @@ func (m *Manager) updateCaddyConfig() error {
 
 ---
 
-## 7. 关键代码参考
+## 8. 关键代码参考
 
 | 功能 | 参考文件 |
 |-----|---------|
