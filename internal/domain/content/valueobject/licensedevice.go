@@ -2,8 +2,7 @@ package valueobject
 
 import (
 	"fmt"
-	"net/http"
-
+	
 	"github.com/mdfriday/hugoverse/pkg/editor"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -90,7 +89,7 @@ func (d *LicenseDevice) SetHash() {
 }
 
 // SetSlug 使用 "License:DeviceID[:8]" 格式，支持按 License 前缀查询
-func (d *LicenseDevice) SetSlug(req *http.Request) {
+func (d *LicenseDevice) SetSlug(slug string) {
 	if len(d.DeviceID) >= 8 {
 		d.Slug = fmt.Sprintf("%s:%s", d.License, d.DeviceID[:8])
 	} else {

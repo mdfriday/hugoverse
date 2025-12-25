@@ -3,7 +3,6 @@ package valueobject
 import (
 	"encoding/base64"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
@@ -98,8 +97,12 @@ func (l *License) SetHash() {
 }
 
 // SetSlug 使用 LicenseKey 作为 slug，存入 ns__index bucket
-func (l *License) SetSlug(req *http.Request) {
-	l.Slug = l.LicenseKey
+func (l *License) SetSlug(slug string) {
+	if slug != "" {
+		l.Slug = slug
+	} else {
+		l.Slug = l.LicenseKey
+	}
 }
 
 // IndexContent 标记此类型需要被索引

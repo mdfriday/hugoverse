@@ -2,8 +2,7 @@ package valueobject
 
 import (
 	"fmt"
-	"net/http"
-
+	
 	"github.com/mdfriday/hugoverse/pkg/editor"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -70,7 +69,7 @@ func (u *SyncUsage) SetHash() {
 }
 
 // SetSlug 使用 "SyncAccount:RecordedAt" 格式
-func (u *SyncUsage) SetSlug(req *http.Request) {
+func (u *SyncUsage) SetSlug(slug string) {
 	u.Slug = fmt.Sprintf("%s:%d", u.SyncAccount, u.RecordedAt)
 }
 

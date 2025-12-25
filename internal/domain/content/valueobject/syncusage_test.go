@@ -25,7 +25,7 @@ func TestSyncUsageSetSlug(t *testing.T) {
 		RecordedAt:  1234567890,
 	}
 
-	usage.SetSlug(nil)
+	usage.SetSlug("")
 	expected := "MDF-ABCD-EFGH-JKLM:1234567890"
 	if usage.Slug != expected {
 		t.Errorf("SetSlug() = %v, want %v", usage.Slug, expected)

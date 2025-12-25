@@ -25,7 +25,7 @@ func TestLicenseIPSetSlug(t *testing.T) {
 		IPAddress: "192.168.1.100",
 	}
 
-	ip.SetSlug(nil)
+	ip.SetSlug("")
 	expected := "MDF-ABCD-EFGH-JKLM:192.168.1.100"
 	if ip.Slug != expected {
 		t.Errorf("SetSlug() = %v, want %v", ip.Slug, expected)

@@ -2,8 +2,7 @@ package valueobject
 
 import (
 	"fmt"
-	"net/http"
-
+	
 	"github.com/mdfriday/hugoverse/pkg/editor"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -78,7 +77,7 @@ func (s *SyncAccount) SetHash() {
 }
 
 // SetSlug 使用 License 作为 slug
-func (s *SyncAccount) SetSlug(req *http.Request) {
+func (s *SyncAccount) SetSlug(slug string) {
 	s.Slug = s.License
 }
 

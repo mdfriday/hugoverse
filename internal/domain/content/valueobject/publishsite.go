@@ -2,8 +2,7 @@ package valueobject
 
 import (
 	"fmt"
-	"net/http"
-	"path/filepath"
+		"path/filepath"
 
 	"github.com/mdfriday/hugoverse/pkg/editor"
 	"github.com/mdfriday/hugoverse/pkg/hash"
@@ -85,7 +84,7 @@ func (p *PublishSite) SetHash() {
 }
 
 // SetSlug 使用 "License:Name" 格式，支持按 License 前缀查询
-func (p *PublishSite) SetSlug(req *http.Request) {
+func (p *PublishSite) SetSlug(slug string) {
 	p.Slug = fmt.Sprintf("%s:%s", p.License, p.Name)
 }
 

@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/gofrs/uuid"
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
-	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
 	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
+	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/database"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -75,7 +76,7 @@ func (r *LicenseRepository) CreateLicense(license *valueobject.License) error {
 	license.ID = int(id)
 
 	license.SetHash()
-	license.SetSlug(nil)
+	license.SetSlug("")
 
 	data, err := json.Marshal(license)
 	if err != nil {
@@ -131,8 +132,36 @@ func (r *LicenseRepository) GetDevicesByLicense(licenseKey string) ([]valueobjec
 
 // SaveDevice 保存设备记录
 func (r *LicenseRepository) SaveDevice(device *valueobject.LicenseDevice) error {
+	if device.ID <= 0 {
+		// 新记录 - 初始化 Item 字段
+		id, err := r.db.NextContentId(NsLicenseDevice)
+		if err != nil {
+			return fmt.Errorf("failed to get next ID: %w", err)
+		}
+		device.ID = int(id)
+		device.Namespace = NsLicenseDevice
+		device.Status = "public"
+		
+		// 初始化 UUID
+		if device.UUID.String() == "00000000-0000-0000-0000-000000000000" {
+			newUUID, err := uuid.NewV4()
+			if err != nil {
+				return fmt.Errorf("failed to generate UUID: %w", err)
+			}
+			device.UUID = newUUID
+		}
+		
+		// 初始化时间戳
+		if device.Timestamp == 0 {
+			device.Timestamp = device.FirstSeenAt
+		}
+		if device.Updated == 0 {
+			device.Updated = device.LastSeenAt
+		}
+	}
+	
 	device.SetHash()
-	device.SetSlug(nil)
+	device.SetSlug("")
 
 	data, err := json.Marshal(device)
 	if err != nil {
@@ -140,12 +169,6 @@ func (r *LicenseRepository) SaveDevice(device *valueobject.LicenseDevice) error 
 	}
 
 	if device.ID <= 0 {
-		// 新记录
-		id, err := r.db.NextContentId(NsLicenseDevice)
-		if err != nil {
-			return fmt.Errorf("failed to get next ID: %w", err)
-		}
-		device.ID = int(id)
 		return r.db.NewContent(device, data)
 	}
 	return r.db.PutContent(device, data)
@@ -198,8 +221,36 @@ func (r *LicenseRepository) GetIPsByLicense(licenseKey string) ([]valueobject.Li
 
 // SaveIP 保存 IP 记录
 func (r *LicenseRepository) SaveIP(ip *valueobject.LicenseIP) error {
+	if ip.ID <= 0 {
+		// 新记录 - 初始化 Item 字段
+		id, err := r.db.NextContentId(NsLicenseIP)
+		if err != nil {
+			return fmt.Errorf("failed to get next ID: %w", err)
+		}
+		ip.ID = int(id)
+		ip.Namespace = NsLicenseIP
+		ip.Status = "public"
+		
+		// 初始化 UUID
+		if ip.UUID.String() == "00000000-0000-0000-0000-000000000000" {
+			newUUID, err := uuid.NewV4()
+			if err != nil {
+				return fmt.Errorf("failed to generate UUID: %w", err)
+			}
+			ip.UUID = newUUID
+		}
+		
+		// 初始化时间戳
+		if ip.Timestamp == 0 {
+			ip.Timestamp = ip.FirstSeenAt
+		}
+		if ip.Updated == 0 {
+			ip.Updated = ip.LastSeenAt
+		}
+	}
+	
 	ip.SetHash()
-	ip.SetSlug(nil)
+	ip.SetSlug("")
 
 	data, err := json.Marshal(ip)
 	if err != nil {
@@ -207,12 +258,6 @@ func (r *LicenseRepository) SaveIP(ip *valueobject.LicenseIP) error {
 	}
 
 	if ip.ID <= 0 {
-		// 新记录
-		id, err := r.db.NextContentId(NsLicenseIP)
-		if err != nil {
-			return fmt.Errorf("failed to get next ID: %w", err)
-		}
-		ip.ID = int(id)
 		return r.db.NewContent(ip, data)
 	}
 	return r.db.PutContent(ip, data)
@@ -245,7 +290,7 @@ func (r *LicenseRepository) GetSyncAccountByLicense(licenseKey string) (*valueob
 // SaveSyncAccount 保存 SyncAccount
 func (r *LicenseRepository) SaveSyncAccount(account *valueobject.SyncAccount) error {
 	account.SetHash()
-	account.SetSlug(nil)
+	account.SetSlug("")
 
 	data, err := json.Marshal(account)
 	if err != nil {
@@ -266,7 +311,7 @@ func (r *LicenseRepository) SaveSyncAccount(account *valueobject.SyncAccount) er
 // SaveSyncUsage 保存 SyncUsage 记录
 func (r *LicenseRepository) SaveSyncUsage(usage *valueobject.SyncUsage) error {
 	usage.SetHash()
-	usage.SetSlug(nil)
+	usage.SetSlug("")
 
 	id, err := r.db.NextContentId(NsSyncUsage)
 	if err != nil {
@@ -307,7 +352,7 @@ func (r *LicenseRepository) GetPublishSitesByLicense(licenseKey string) ([]value
 // SavePublishSite 保存 PublishSite
 func (r *LicenseRepository) SavePublishSite(site *valueobject.PublishSite) error {
 	site.SetHash()
-	site.SetSlug(nil)
+	site.SetSlug("")
 
 	data, err := json.Marshal(site)
 	if err != nil {
@@ -328,7 +373,7 @@ func (r *LicenseRepository) SavePublishSite(site *valueobject.PublishSite) error
 // SavePublishUsage 保存 PublishUsage 记录
 func (r *LicenseRepository) SavePublishUsage(usage *valueobject.PublishUsage) error {
 	usage.SetHash()
-	usage.SetSlug(nil)
+	usage.SetSlug("")
 
 	id, err := r.db.NextContentId(NsPublishUsage)
 	if err != nil {
@@ -348,7 +393,7 @@ func (r *LicenseRepository) SavePublishUsage(usage *valueobject.PublishUsage) er
 // SavePublishDomain 保存 PublishDomain
 func (r *LicenseRepository) SavePublishDomain(domain *valueobject.PublishDomain) error {
 	domain.SetHash()
-	domain.SetSlug(nil)
+	domain.SetSlug("")
 
 	data, err := json.Marshal(domain)
 	if err != nil {

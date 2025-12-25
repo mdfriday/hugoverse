@@ -46,7 +46,7 @@ func TestLicenseDeviceSetSlug(t *testing.T) {
 				License:  tt.license,
 				DeviceID: tt.deviceID,
 			}
-			device.SetSlug(nil)
+			device.SetSlug("")
 			if device.Slug != tt.wantSlug {
 				t.Errorf("SetSlug() = %v, want %v", device.Slug, tt.wantSlug)
 			}

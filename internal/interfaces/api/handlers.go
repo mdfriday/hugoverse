@@ -5,69 +5,27 @@ import (
 	"net/http"
 
 	"github.com/mdfriday/hugoverse/internal/application"
-	adminVO "github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
-	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
-	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
-	"github.com/mdfriday/hugoverse/internal/infrastructure/couchdb"
-	"github.com/mdfriday/hugoverse/internal/infrastructure/repository"
-	"github.com/mdfriday/hugoverse/internal/interfaces/api/handler"
 )
 
 func (s *Server) registerLicenseHandler() {
-	// Initialize legacy license handler (v1)
-	licenseHandler, err := NewLicenseHandler()
-	if err != nil {
-		// Log error but don't fail server startup
-		fmt.Printf("Warning: Failed to initialize license handler: %v\n", err)
-	} else {
-		// Register legacy license endpoints (no authentication required)
-		s.mux.HandleFunc("/api/license/activate", s.wrapLicensePostHandler(licenseHandler.ActivateLicenseHandler))
-		s.mux.HandleFunc("/api/license/public-keys", s.wrapPublicHandler(licenseHandler.GetPublicKeysHandler))
-		s.mux.HandleFunc("/api/license/validate", s.wrapLicensePostHandler(licenseHandler.ValidateLicenseKeyHandler))
-		s.mux.HandleFunc("/api/license/decrypt", s.wrapLicensePostHandler(licenseHandler.DecryptContentHandler))
-	}
-
-	// Initialize License V2 API (new implementation)
-	s.registerLicenseV2Handler()
-}
-
-func (s *Server) registerLicenseV2Handler() {
-	// 创建 CouchDB 配置 (从环境变量或默认值)
-	couchConfig := adminVO.DefaultCouchDBConfig()
-
-	// 创建 CouchDB Client
-	couchClient := couchdb.NewClient(couchConfig)
-
-	// 创建 Repository
-	licenseRepo := repository.NewLicenseRepository(s.db)
-
-	// 创建 Sync Manager
-	syncManager := syncEntity.NewManager(couchConfig, couchClient, licenseRepo)
-
-	// 创建 Publish Manager
-	publishManager := publishEntity.NewManager(licenseRepo)
-
-	// 创建 License API Handler
-	licenseAPIHandler := handler.NewLicenseAPIHandler(syncManager, publishManager, licenseRepo)
-
-	// Register License V2 endpoints
+	// Register License API endpoints
 	// 激活和信息
-	s.mux.HandleFunc("/api/license/v2/activate", s.wrapLicensePostHandler(licenseAPIHandler.ActivateHandler))
-	s.mux.HandleFunc("/api/license/v2/info", s.wrapPublicHandler(licenseAPIHandler.GetLicenseHandler))
+	s.mux.HandleFunc("/api/license/activate", s.wrapLicensePostHandler(s.handler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/info", s.wrapPublicHandler(s.handler.GetLicenseInfoHandler))
 
 	// 设备和 IP 管理
-	s.mux.HandleFunc("/api/license/v2/devices", s.wrapPublicHandler(licenseAPIHandler.GetDevicesHandler))
-	s.mux.HandleFunc("/api/license/v2/ips", s.wrapPublicHandler(licenseAPIHandler.GetIPsHandler))
-	s.mux.HandleFunc("/api/license/v2/device/block", s.wrapLicensePostHandler(licenseAPIHandler.BlockDeviceHandler))
-	s.mux.HandleFunc("/api/license/v2/ip/block", s.wrapLicensePostHandler(licenseAPIHandler.BlockIPHandler))
+	s.mux.HandleFunc("/api/license/devices", s.wrapPublicHandler(s.handler.GetDevicesHandler))
+	s.mux.HandleFunc("/api/license/ips", s.wrapPublicHandler(s.handler.GetIPsHandler))
+	s.mux.HandleFunc("/api/license/device/block", s.wrapLicensePostHandler(s.handler.BlockDeviceHandler))
+	s.mux.HandleFunc("/api/license/ip/block", s.wrapLicensePostHandler(s.handler.BlockIPHandler))
 
 	// Sync 服务
-	s.mux.HandleFunc("/api/license/v2/sync", s.wrapPublicHandler(licenseAPIHandler.GetSyncInfoHandler))
+	s.mux.HandleFunc("/api/license/sync", s.wrapPublicHandler(s.handler.GetSyncInfoHandler))
 
 	// Publish 服务
-	s.mux.HandleFunc("/api/license/v2/publish", s.wrapPublicHandler(licenseAPIHandler.GetPublishInfoHandler))
+	s.mux.HandleFunc("/api/license/publish", s.wrapPublicHandler(s.handler.GetPublishInfoHandler))
 
-	fmt.Println("License V2 API registered successfully")
+	fmt.Println("License API registered successfully")
 }
 
 func (s *Server) registerContentHandler() {

@@ -26,7 +26,7 @@ func TestPublishDomainSetSlug(t *testing.T) {
 		Domain:  "blog.example.com",
 	}
 
-	domain.SetSlug(nil)
+	domain.SetSlug("")
 	expected := "MDF-ABCD-EFGH-JKLM:blog.example.com"
 	if domain.Slug != expected {
 		t.Errorf("SetSlug() = %v, want %v", domain.Slug, expected)

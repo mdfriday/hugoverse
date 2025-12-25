@@ -2,8 +2,7 @@ package valueobject
 
 import (
 	"fmt"
-	"net/http"
-
+	
 	"github.com/mdfriday/hugoverse/pkg/editor"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -96,7 +95,7 @@ func (i *LicenseIP) SetHash() {
 }
 
 // SetSlug 使用 "License:IPAddress" 格式，支持按 License 前缀查询
-func (i *LicenseIP) SetSlug(req *http.Request) {
+func (i *LicenseIP) SetSlug(slug string) {
 	i.Slug = fmt.Sprintf("%s:%s", i.License, i.IPAddress)
 }
 

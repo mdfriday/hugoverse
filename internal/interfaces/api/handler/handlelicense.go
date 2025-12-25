@@ -7,42 +7,13 @@ import (
 	"time"
 
 	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
-	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
-	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
 )
 
-// LicenseAPIHandler License 相关的 API Handler
-type LicenseAPIHandler struct {
-	syncManager    *syncEntity.Manager
-	publishManager *publishEntity.Manager
-	repo           LicenseRepository
-}
+// ========== License API Handlers ==========
 
-// LicenseRepository Handler 需要的 Repository 接口
-type LicenseRepository interface {
-	GetLicenseByKey(key string) (*contentVO.License, error)
-	UpdateLicense(license *contentVO.License) error
-	CreateLicense(license *contentVO.License) error
-}
-
-// NewLicenseAPIHandler 创建 License Handler
-func NewLicenseAPIHandler(
-	syncManager *syncEntity.Manager,
-	publishManager *publishEntity.Manager,
-	repo LicenseRepository,
-) *LicenseAPIHandler {
-	return &LicenseAPIHandler{
-		syncManager:    syncManager,
-		publishManager: publishManager,
-		repo:           repo,
-	}
-}
-
-// ========== API Handlers ==========
-
-// ActivateHandler 激活 License
-// POST /api/license/v2/activate
-func (h *LicenseAPIHandler) ActivateHandler(w http.ResponseWriter, r *http.Request) {
+// ActivateLicenseHandler 激活 License
+// POST /api/license/activate
+func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -74,7 +45,7 @@ func (h *LicenseAPIHandler) ActivateHandler(w http.ResponseWriter, r *http.Reque
 	ipAddress := h.getClientIP(r)
 
 	// 获取或创建 License
-	license, err := h.repo.GetLicenseByKey(req.LicenseKey)
+	license, err := h.contentApp.GetLicenseByKey(req.LicenseKey)
 	if err != nil {
 		// License 不存在，根据 LicenseKey 格式判断套餐
 		plan := h.detectPlanFromKey(req.LicenseKey)
@@ -92,7 +63,7 @@ func (h *LicenseAPIHandler) ActivateHandler(w http.ResponseWriter, r *http.Reque
 			CurrentDevices: 0,
 			CurrentIPs:     0,
 		}
-		if err := h.repo.CreateLicense(license); err != nil {
+		if err := h.contentApp.CreateLicense(license); err != nil {
 			h.jsonError(w, "Failed to create license: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -102,7 +73,7 @@ func (h *LicenseAPIHandler) ActivateHandler(w http.ResponseWriter, r *http.Reque
 	if !license.Activated {
 		license.Activated = true
 		license.ActivatedAt = time.Now().UnixMilli()
-		h.repo.UpdateLicense(license)
+		h.contentApp.UpdateLicense(license)
 	}
 
 	if license.IsExpired() {
@@ -116,16 +87,18 @@ func (h *LicenseAPIHandler) ActivateHandler(w http.ResponseWriter, r *http.Reque
 	}
 
 	// 验证设备和 IP
-	if err := h.syncManager.ValidateAndRecordAccess(
-		req.LicenseKey, req.DeviceID, req.DeviceName, req.DeviceType, ipAddress,
-	); err != nil {
-		h.jsonError(w, err.Error(), http.StatusForbidden)
-		return
+	if h.syncManager != nil {
+		if err := h.syncManager.ValidateAndRecordAccess(
+			req.LicenseKey, req.DeviceID, req.DeviceName, req.DeviceType, ipAddress,
+		); err != nil {
+			h.jsonError(w, err.Error(), http.StatusForbidden)
+			return
+		}
 	}
 
 	// 创建 Sync 账号 (如果支持)
 	var syncInfo map[string]interface{}
-	if license.GetFeatures().SyncEnabled {
+	if h.syncManager != nil && license.GetFeatures().SyncEnabled {
 		syncAccount, err := h.syncManager.CreateSyncAccount(license)
 		if err == nil && syncAccount != nil {
 			syncInfo = map[string]interface{}{
@@ -158,16 +131,16 @@ func (h *LicenseAPIHandler) ActivateHandler(w http.ResponseWriter, r *http.Reque
 	h.jsonResponse(w, response)
 }
 
-// GetLicenseHandler 获取 License 信息
-// GET /api/license/v2/info?key=xxx
-func (h *LicenseAPIHandler) GetLicenseHandler(w http.ResponseWriter, r *http.Request) {
+// GetLicenseInfoHandler 获取 License 信息
+// GET /api/license/info?key=xxx
+func (h *Handler) GetLicenseInfoHandler(w http.ResponseWriter, r *http.Request) {
 	licenseKey := r.URL.Query().Get("key")
 	if licenseKey == "" {
 		h.jsonError(w, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	license, err := h.repo.GetLicenseByKey(licenseKey)
+	license, err := h.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		h.jsonError(w, "License not found", http.StatusNotFound)
 		return
@@ -193,11 +166,16 @@ func (h *LicenseAPIHandler) GetLicenseHandler(w http.ResponseWriter, r *http.Req
 }
 
 // GetDevicesHandler 获取 License 的设备列表
-// GET /api/license/v2/devices?key=xxx
-func (h *LicenseAPIHandler) GetDevicesHandler(w http.ResponseWriter, r *http.Request) {
+// GET /api/license/devices?key=xxx
+func (h *Handler) GetDevicesHandler(w http.ResponseWriter, r *http.Request) {
 	licenseKey := r.URL.Query().Get("key")
 	if licenseKey == "" {
 		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	if h.syncManager == nil {
+		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -214,11 +192,16 @@ func (h *LicenseAPIHandler) GetDevicesHandler(w http.ResponseWriter, r *http.Req
 }
 
 // GetIPsHandler 获取 License 的 IP 列表
-// GET /api/license/v2/ips?key=xxx
-func (h *LicenseAPIHandler) GetIPsHandler(w http.ResponseWriter, r *http.Request) {
+// GET /api/license/ips?key=xxx
+func (h *Handler) GetIPsHandler(w http.ResponseWriter, r *http.Request) {
 	licenseKey := r.URL.Query().Get("key")
 	if licenseKey == "" {
 		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	if h.syncManager == nil {
+		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -235,11 +218,16 @@ func (h *LicenseAPIHandler) GetIPsHandler(w http.ResponseWriter, r *http.Request
 }
 
 // GetSyncInfoHandler 获取 Sync 信息
-// GET /api/license/v2/sync?key=xxx
-func (h *LicenseAPIHandler) GetSyncInfoHandler(w http.ResponseWriter, r *http.Request) {
+// GET /api/license/sync?key=xxx
+func (h *Handler) GetSyncInfoHandler(w http.ResponseWriter, r *http.Request) {
 	licenseKey := r.URL.Query().Get("key")
 	if licenseKey == "" {
 		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	if h.syncManager == nil {
+		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -273,11 +261,16 @@ func (h *LicenseAPIHandler) GetSyncInfoHandler(w http.ResponseWriter, r *http.Re
 }
 
 // GetPublishInfoHandler 获取 Publish 信息
-// GET /api/license/v2/publish?key=xxx
-func (h *LicenseAPIHandler) GetPublishInfoHandler(w http.ResponseWriter, r *http.Request) {
+// GET /api/license/publish?key=xxx
+func (h *Handler) GetPublishInfoHandler(w http.ResponseWriter, r *http.Request) {
 	licenseKey := r.URL.Query().Get("key")
 	if licenseKey == "" {
 		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	if h.publishManager == nil {
+		h.jsonError(w, "Publish manager not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -317,10 +310,15 @@ func (h *LicenseAPIHandler) GetPublishInfoHandler(w http.ResponseWriter, r *http
 }
 
 // BlockDeviceHandler 封禁设备
-// POST /api/license/v2/device/block
-func (h *LicenseAPIHandler) BlockDeviceHandler(w http.ResponseWriter, r *http.Request) {
+// POST /api/license/device/block
+func (h *Handler) BlockDeviceHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.syncManager == nil {
+		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -346,10 +344,15 @@ func (h *LicenseAPIHandler) BlockDeviceHandler(w http.ResponseWriter, r *http.Re
 }
 
 // BlockIPHandler 封禁 IP
-// POST /api/license/v2/ip/block
-func (h *LicenseAPIHandler) BlockIPHandler(w http.ResponseWriter, r *http.Request) {
+// POST /api/license/ip/block
+func (h *Handler) BlockIPHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	if h.syncManager == nil {
+		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
 		return
 	}
 
@@ -376,7 +379,7 @@ func (h *LicenseAPIHandler) BlockIPHandler(w http.ResponseWriter, r *http.Reques
 
 // ========== Helper Methods ==========
 
-func (h *LicenseAPIHandler) getClientIP(r *http.Request) string {
+func (h *Handler) getClientIP(r *http.Request) string {
 	// 优先检查 X-Forwarded-For
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// 取第一个 IP (可能有多个代理)
@@ -397,7 +400,7 @@ func (h *LicenseAPIHandler) getClientIP(r *http.Request) string {
 	return addr
 }
 
-func (h *LicenseAPIHandler) detectPlanFromKey(key string) contentVO.LicensePlan {
+func (h *Handler) detectPlanFromKey(key string) contentVO.LicensePlan {
 	// 根据 License Key 前缀判断套餐类型
 	// 例如: MDF-FREE-xxxx, MDF-STARTER-xxxx, MDF-CREATOR-xxxx, MDF-PRO-xxxx, MDF-ENT-xxxx
 	upperKey := strings.ToUpper(key)
@@ -418,12 +421,12 @@ func (h *LicenseAPIHandler) detectPlanFromKey(key string) contentVO.LicensePlan 
 	}
 }
 
-func (h *LicenseAPIHandler) jsonResponse(w http.ResponseWriter, data interface{}) {
+func (h *Handler) jsonResponse(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(data)
 }
 
-func (h *LicenseAPIHandler) jsonError(w http.ResponseWriter, message string, status int) {
+func (h *Handler) jsonError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]interface{}{
@@ -431,4 +434,3 @@ func (h *LicenseAPIHandler) jsonError(w http.ResponseWriter, message string, sta
 		"error":   message,
 	})
 }
-

@@ -164,7 +164,7 @@ print_info "等待服务器启动..."
 
 # 等待服务器启动 (最多 10 秒)
 for i in {1..20}; do
-    if curl -s "$API_BASE/api/license/v2/info?key=test" > /dev/null 2>&1; then
+    if curl -s "$API_BASE/api/license/info?key=test" > /dev/null 2>&1; then
         print_success "服务器已启动"
         break
     fi
@@ -180,9 +180,9 @@ done
 print_header "阶段 4: API 端点测试"
 
 # 4.1 激活 License
-print_step "测试 1: 激活 License (POST /api/license/v2/activate)"
+print_step "测试 1: 激活 License (POST /api/license/activate)"
 
-ACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/v2/activate" \
+ACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d "{
         \"license_key\": \"$LICENSE_KEY\",
@@ -201,9 +201,9 @@ else
 fi
 
 # 4.2 查询 License 信息
-print_step "测试 2: 查询 License 信息 (GET /api/license/v2/info)"
+print_step "测试 2: 查询 License 信息 (GET /api/license/info)"
 
-INFO_RESPONSE=$(curl -s "$API_BASE/api/license/v2/info?key=$LICENSE_KEY")
+INFO_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=$LICENSE_KEY")
 
 echo "响应:"
 format_json "$INFO_RESPONSE"
@@ -223,9 +223,9 @@ else
 fi
 
 # 4.3 查询设备列表
-print_step "测试 3: 查询设备列表 (GET /api/license/v2/devices)"
+print_step "测试 3: 查询设备列表 (GET /api/license/devices)"
 
-DEVICES_RESPONSE=$(curl -s "$API_BASE/api/license/v2/devices?key=$LICENSE_KEY")
+DEVICES_RESPONSE=$(curl -s "$API_BASE/api/license/devices?key=$LICENSE_KEY")
 
 echo "响应:"
 format_json "$DEVICES_RESPONSE"
@@ -239,9 +239,9 @@ else
 fi
 
 # 4.4 查询 IP 列表
-print_step "测试 4: 查询 IP 列表 (GET /api/license/v2/ips)"
+print_step "测试 4: 查询 IP 列表 (GET /api/license/ips)"
 
-IPS_RESPONSE=$(curl -s "$API_BASE/api/license/v2/ips?key=$LICENSE_KEY")
+IPS_RESPONSE=$(curl -s "$API_BASE/api/license/ips?key=$LICENSE_KEY")
 
 echo "响应:"
 format_json "$IPS_RESPONSE"
@@ -253,9 +253,9 @@ else
 fi
 
 # 4.5 查询 Sync 信息
-print_step "测试 5: 查询 Sync 信息 (GET /api/license/v2/sync)"
+print_step "测试 5: 查询 Sync 信息 (GET /api/license/sync)"
 
-SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/v2/sync?key=$LICENSE_KEY")
+SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/sync?key=$LICENSE_KEY")
 
 echo "响应:"
 format_json "$SYNC_RESPONSE"
@@ -273,9 +273,9 @@ else
 fi
 
 # 4.6 查询 Publish 信息
-print_step "测试 6: 查询 Publish 信息 (GET /api/license/v2/publish)"
+print_step "测试 6: 查询 Publish 信息 (GET /api/license/publish)"
 
-PUBLISH_RESPONSE=$(curl -s "$API_BASE/api/license/v2/publish?key=$LICENSE_KEY")
+PUBLISH_RESPONSE=$(curl -s "$API_BASE/api/license/publish?key=$LICENSE_KEY")
 
 echo "响应:"
 format_json "$PUBLISH_RESPONSE"
@@ -289,7 +289,7 @@ fi
 # 4.7 测试不存在的 License
 print_step "测试 7: 查询不存在的 License (边界测试)"
 
-NOT_FOUND_RESPONSE=$(curl -s "$API_BASE/api/license/v2/info?key=NOT-EXIST-KEY")
+NOT_FOUND_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=NOT-EXIST-KEY")
 
 echo "响应:"
 format_json "$NOT_FOUND_RESPONSE"
@@ -303,7 +303,7 @@ fi
 # 4.8 测试缺少参数
 print_step "测试 8: 缺少必要参数 (边界测试)"
 
-MISSING_PARAM_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/v2/activate" \
+MISSING_PARAM_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d '{"license_key": ""}')
 
@@ -319,7 +319,7 @@ fi
 # 4.9 再次激活同一 License (模拟重复激活)
 print_step "测试 9: 重复激活 License (幂等性测试)"
 
-REACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/v2/activate" \
+REACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d "{
         \"license_key\": \"$LICENSE_KEY\",
@@ -341,7 +341,7 @@ fi
 print_step "测试 10: 新设备激活 (设备限制测试)"
 
 NEW_DEVICE_ID="device-new-$(date +%s)"
-NEW_DEVICE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/v2/activate" \
+NEW_DEVICE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
     -d "{
         \"license_key\": \"$LICENSE_KEY\",
@@ -361,7 +361,7 @@ fi
 
 # 最终验证设备数量
 print_step "最终验证: 确认设备数量"
-FINAL_DEVICES=$(curl -s "$API_BASE/api/license/v2/devices?key=$LICENSE_KEY")
+FINAL_DEVICES=$(curl -s "$API_BASE/api/license/devices?key=$LICENSE_KEY")
 echo "最终设备列表:"
 format_json "$FINAL_DEVICES"
 

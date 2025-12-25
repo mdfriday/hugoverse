@@ -25,7 +25,7 @@ func TestPublishSiteSetSlug(t *testing.T) {
 		Name:    "my-blog",
 	}
 
-	site.SetSlug(nil)
+	site.SetSlug("")
 	expected := "MDF-ABCD-EFGH-JKLM:my-blog"
 	if site.Slug != expected {
 		t.Errorf("SetSlug() = %v, want %v", site.Slug, expected)

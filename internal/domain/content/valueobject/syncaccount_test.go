@@ -23,7 +23,7 @@ func TestSyncAccountSetSlug(t *testing.T) {
 		License: "MDF-ABCD-EFGH-JKLM",
 	}
 
-	account.SetSlug(nil)
+	account.SetSlug("")
 	expected := "MDF-ABCD-EFGH-JKLM"
 	if account.Slug != expected {
 		t.Errorf("SetSlug() = %v, want %v", account.Slug, expected)
