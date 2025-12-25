@@ -4,9 +4,10 @@
 # 用于验证 License 管理系统的完整流程（包括真实 CouchDB 集成）
 #
 # 测试场景：
-# 1. 预先在数据库中创建测试 License
-# 2. 使用已存在的 License 进行完整流程测试
-# 3. 测试不存在的 License 自动创建场景
+# 1. 用户登录获取 TOKEN
+# 2. 使用 TOKEN 创建测试 License（需要认证）
+# 3. 使用已存在的 License 进行公开激活（无需认证）
+# 4. 测试不存在的 License 激活失败场景
 #
 # 使用方法:
 #   cd /Users/sunwei/github/mdfriday/hugoverse
@@ -20,10 +21,16 @@ PROJECT_DIR="/Users/sunwei/github/mdfriday/hugoverse"
 API_BASE="http://localhost:1314"
 COUCHDB_URL="http://admin:987123@127.0.0.1:5984"
 
+# 测试账号
+TEST_EMAIL="me@sunwei.xyz"
+TEST_PASSWORD="123456"
+AUTH_TOKEN=""
+
 # 预先创建的测试 License
 TIMESTAMP=$(date +%s)
 EXISTING_LICENSE_KEY="MDF-STARTER-EXISTING-${TIMESTAMP}"
 NEW_LICENSE_KEY="MDF-STARTER-NEW-${TIMESTAMP}"
+INVALID_LICENSE_KEY="MDF-INVALID-KEY-${TIMESTAMP}"
 
 DEVICE_ID="device-$(uuidgen 2>/dev/null || echo "test-device-$$")"
 SERVER_PID=""
@@ -114,8 +121,10 @@ echo ""
 echo "测试配置:"
 echo "  - 项目目录: $PROJECT_DIR"
 echo "  - API 地址: $API_BASE"
+echo "  - 测试账号: $TEST_EMAIL"
 echo "  - 已存在 License: $EXISTING_LICENSE_KEY"
 echo "  - 新建 License: $NEW_LICENSE_KEY"
+echo "  - 无效 License: $INVALID_LICENSE_KEY"
 echo "  - Device ID: ${DEVICE_ID:0:20}..."
 
 # ---------- 1. 编译验证 ----------
@@ -207,14 +216,43 @@ for i in {1..20}; do
     sleep 0.5
 done
 
-# ---------- 4. API 测试 ----------
-print_header "阶段 4: 预先创建测试 License"
+# ---------- 4. 用户登录 ----------
+print_header "阶段 4: 用户登录获取 TOKEN"
 
-# 4.0 预先在数据库中创建几条 License
+print_step "登录测试账号: $TEST_EMAIL"
+
+LOGIN_RESPONSE=$(curl -s -X POST "$API_BASE/api/login" \
+    -H "Content-Type: application/x-www-form-urlencoded" \
+    -d "email=$TEST_EMAIL&password=$TEST_PASSWORD")
+
+echo "登录响应:"
+format_json "$LOGIN_RESPONSE"
+
+# 提取 TOKEN
+AUTH_TOKEN=$(echo "$LOGIN_RESPONSE" | grep -o '"key":"[^"]*"' | cut -d'"' -f4)
+
+if [ -n "$AUTH_TOKEN" ]; then
+    print_success "登录成功，TOKEN 已获取"
+    print_info "TOKEN (前20字符): ${AUTH_TOKEN:0:20}..."
+else
+    print_error "登录失败，无法获取 TOKEN"
+    echo "完整响应: $LOGIN_RESPONSE"
+    kill_server
+    exit 1
+fi
+
+# ---------- 5. 创建测试 License ----------
+print_header "阶段 5: 创建测试 License (需要认证)"
+
+# ---------- 5. 创建测试 License ----------
+print_header "阶段 5: 创建测试 License (需要认证)"
+
+# 5.1 创建测试 License 1 (Starter Plan)
 print_step "创建测试 License 1 (Starter Plan)"
 
 CREATE_RESPONSE_1=$(curl -s -X POST "$API_BASE/api/license/create" \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
     -d "{
         \"license_key\": \"$EXISTING_LICENSE_KEY\",
         \"plan\": \"starter\",
@@ -230,10 +268,12 @@ else
     print_error "测试 License 1 创建失败"
 fi
 
+# 5.2 创建测试 License 2 (Creator Plan)
 print_step "创建测试 License 2 (Creator Plan)"
 
 CREATE_RESPONSE_2=$(curl -s -X POST "$API_BASE/api/license/create" \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
     -d "{
         \"license_key\": \"MDF-CREATOR-PRE-${TIMESTAMP}\",
         \"plan\": \"creator\",
@@ -249,10 +289,12 @@ else
     print_error "测试 License 2 创建失败"
 fi
 
+# 5.3 创建测试 License 3 (Pro Plan)
 print_step "创建测试 License 3 (Pro Plan)"
 
 CREATE_RESPONSE_3=$(curl -s -X POST "$API_BASE/api/license/create" \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $AUTH_TOKEN" \
     -d "{
         \"license_key\": \"MDF-PRO-PRE-${TIMESTAMP}\",
         \"plan\": \"pro\",
@@ -269,11 +311,12 @@ else
     print_error "测试 License 3 创建失败"
 fi
 
-# ---------- 5. 使用已存在的 License 进行完整流程测试 ----------
-print_header "阶段 5: 测试已存在的 License (完整流程)"
+# ---------- 6. 测试公开的 License 激活接口 ----------
+print_header "阶段 6: 测试 License 激活 (公开接口，无需认证)"
 
-print_step "验证 License 未激活状态"
-INFO_BEFORE=$(curl -s "$API_BASE/api/license/info?key=$EXISTING_LICENSE_KEY")
+print_step "验证 License 未激活状态 (需要 TOKEN)"
+INFO_BEFORE=$(curl -s "$API_BASE/api/license/info?key=$EXISTING_LICENSE_KEY" \
+    -H "Authorization: Bearer $AUTH_TOKEN")
 echo "激活前状态:"
 format_json "$INFO_BEFORE"
 
@@ -283,9 +326,8 @@ else
     print_info "License 状态: $(echo $INFO_BEFORE | grep -o '\"activated\":[^,}]*')"
 fi
 
-# 5.1 激活已存在的 License
-# 5.1 激活已存在的 License
-print_step "测试 1: 激活已存在的 License (POST /api/license/activate)"
+# 6.2 激活已存在的 License (公开接口，无需 TOKEN)
+print_step "测试 1: 激活已存在的 License (公开接口，无需 TOKEN)"
 
 ACTIVATE_RESPONSE=$(curl -s -X POST "$API_BASE/api/license/activate" \
     -H "Content-Type: application/json" \
@@ -305,10 +347,35 @@ else
     print_error "License 激活失败"
 fi
 
-# 5.2 查询 License 信息
-print_step "测试 2: 查询 License 信息 (GET /api/license/info)"
+# 6.3 测试激活不存在的 License (应该失败)
+print_step "测试 2: 激活不存在的 License (应该失败)"
 
-INFO_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=$EXISTING_LICENSE_KEY")
+INVALID_ACTIVATE=$(curl -s -X POST "$API_BASE/api/license/activate" \
+    -H "Content-Type: application/json" \
+    -d "{
+        \"license_key\": \"$INVALID_LICENSE_KEY\",
+        \"device_id\": \"device-invalid\",
+        \"device_name\": \"Invalid Device\",
+        \"device_type\": \"desktop\"
+    }")
+
+echo "响应:"
+format_json "$INVALID_ACTIVATE"
+
+if echo "$INVALID_ACTIVATE" | grep -q "\"error\""; then
+    print_success "正确返回错误：License 不存在"
+else
+    print_error "应该返回错误，但激活成功了"
+fi
+
+# ---------- 7. 测试需要认证的 API ----------
+print_header "阶段 7: 测试需要认证的 API"
+
+# 7.1 查询 License 信息 (需要 TOKEN)
+print_step "测试 3: 查询 License 信息 (需要 TOKEN)"
+
+INFO_RESPONSE=$(curl -s "$API_BASE/api/license/info?key=$EXISTING_LICENSE_KEY" \
+    -H "Authorization: Bearer $AUTH_TOKEN")
 
 echo "响应:"
 format_json "$INFO_RESPONSE"
@@ -327,10 +394,11 @@ else
     print_error "查询 License 信息失败"
 fi
 
-# 5.3 查询设备列表
-print_step "测试 3: 查询设备列表 (GET /api/license/devices)"
+# 7.2 查询设备列表 (需要 TOKEN)
+print_step "测试 4: 查询设备列表 (需要 TOKEN)"
 
-DEVICES_RESPONSE=$(curl -s "$API_BASE/api/license/devices?key=$EXISTING_LICENSE_KEY")
+DEVICES_RESPONSE=$(curl -s "$API_BASE/api/license/devices?key=$EXISTING_LICENSE_KEY" \
+    -H "Authorization: Bearer $AUTH_TOKEN")
 
 echo "响应:"
 format_json "$DEVICES_RESPONSE"
@@ -343,10 +411,11 @@ else
     print_error "查询设备列表失败"
 fi
 
-# 5.4 查询 IP 列表
-print_step "测试 4: 查询 IP 列表 (GET /api/license/ips)"
+# 7.3 查询 IP 列表 (需要 TOKEN)
+print_step "测试 5: 查询 IP 列表 (需要 TOKEN)"
 
-IPS_RESPONSE=$(curl -s "$API_BASE/api/license/ips?key=$EXISTING_LICENSE_KEY")
+IPS_RESPONSE=$(curl -s "$API_BASE/api/license/ips?key=$EXISTING_LICENSE_KEY" \
+    -H "Authorization: Bearer $AUTH_TOKEN")
 
 echo "响应:"
 format_json "$IPS_RESPONSE"
@@ -357,10 +426,11 @@ else
     print_error "查询 IP 列表失败"
 fi
 
-# 5.5 查询 Sync 信息
-print_step "测试 5: 查询 Sync 信息 (GET /api/license/sync)"
+# 7.4 查询 Sync 信息 (需要 TOKEN)
+print_step "测试 6: 查询 Sync 信息 (需要 TOKEN)"
 
-SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/sync?key=$EXISTING_LICENSE_KEY")
+SYNC_RESPONSE=$(curl -s "$API_BASE/api/license/sync?key=$EXISTING_LICENSE_KEY" \
+    -H "Authorization: Bearer $AUTH_TOKEN")
 
 echo "响应:"
 format_json "$SYNC_RESPONSE"

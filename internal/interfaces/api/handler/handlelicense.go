@@ -81,8 +81,9 @@ func (h *Handler) CreateLicenseHandler(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ActivateLicenseHandler 激活 License
+// ActivateLicenseHandler 激活 License (公开接口)
 // POST /api/license/activate
+// 注意：只能激活已存在的 License，不会自动创建
 func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -114,41 +115,28 @@ func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request)
 	// 获取客户端 IP
 	ipAddress := h.getClientIP(r)
 
-	// 获取或创建 License
+	// 查找 License (必须已存在)
 	license, err := h.contentApp.GetLicenseByKey(req.LicenseKey)
 	if err != nil {
-		// License 不存在，根据 LicenseKey 格式判断套餐
-		plan := h.detectPlanFromKey(req.LicenseKey)
-		features := contentVO.GetPlanFeatures(plan)
-
-		license = &contentVO.License{
-			LicenseKey:     req.LicenseKey,
-			Plan:           plan,
-			Activated:      true,
-			ActivatedAt:    time.Now().UnixMilli(),
-			IssueDate:      time.Now().UnixMilli(),
-			ExpiryDate:     time.Now().Add(365 * 24 * time.Hour).UnixMilli(),
-			MaxDevices:     features.MaxDevices,
-			MaxIPs:         features.MaxIPs,
-			CurrentDevices: 0,
-			CurrentIPs:     0,
-		}
-		if err := h.contentApp.CreateLicense(license); err != nil {
-			h.jsonError(w, "Failed to create license: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+		// License 不存在，返回错误
+		h.jsonError(w, "Invalid license key: License not found", http.StatusNotFound)
+		return
 	}
 
-	// 验证 License
-	if !license.Activated {
-		license.Activated = true
-		license.ActivatedAt = time.Now().UnixMilli()
-		h.contentApp.UpdateLicense(license)
-	}
-
+	// 验证 License 是否过期
 	if license.IsExpired() {
 		h.jsonError(w, "License has expired", http.StatusForbidden)
 		return
+	}
+
+	// 首次激活
+	if !license.Activated {
+		license.Activated = true
+		license.ActivatedAt = time.Now().UnixMilli()
+		if err := h.contentApp.UpdateLicense(license); err != nil {
+			h.jsonError(w, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
 	}
 
 	// 设置默认设备类型

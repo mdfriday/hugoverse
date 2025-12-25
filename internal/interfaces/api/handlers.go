@@ -9,22 +9,23 @@ import (
 
 func (s *Server) registerLicenseHandler() {
 	// Register License API endpoints
-	// 激活和信息
+	
+	// 公开接口 - License 激活 (任何人都可以访问，POST 方法)
 	s.mux.HandleFunc("/api/license/activate", s.wrapLicensePostHandler(s.handler.ActivateLicenseHandler))
-	s.mux.HandleFunc("/api/license/create", s.wrapLicensePostHandler(s.handler.CreateLicenseHandler))
-	s.mux.HandleFunc("/api/license/info", s.wrapPublicHandler(s.handler.GetLicenseInfoHandler))
 
-	// 设备和 IP 管理
-	s.mux.HandleFunc("/api/license/devices", s.wrapPublicHandler(s.handler.GetDevicesHandler))
-	s.mux.HandleFunc("/api/license/ips", s.wrapPublicHandler(s.handler.GetIPsHandler))
-	s.mux.HandleFunc("/api/license/device/block", s.wrapLicensePostHandler(s.handler.BlockDeviceHandler))
-	s.mux.HandleFunc("/api/license/ip/block", s.wrapLicensePostHandler(s.handler.BlockIPHandler))
+	// 需要认证的接口 - 管理员功能 (需要 TOKEN)
+	s.mux.HandleFunc("/api/license/create", s.wrapLicenseAuthHandler(s.handler.CreateLicenseHandler))
+	s.mux.HandleFunc("/api/license/info", s.wrapLicenseAuthHandler(s.handler.GetLicenseInfoHandler))
 
-	// Sync 服务
-	s.mux.HandleFunc("/api/license/sync", s.wrapPublicHandler(s.handler.GetSyncInfoHandler))
+	// 设备和 IP 管理 (需要认证)
+	s.mux.HandleFunc("/api/license/devices", s.wrapLicenseAuthHandler(s.handler.GetDevicesHandler))
+	s.mux.HandleFunc("/api/license/ips", s.wrapLicenseAuthHandler(s.handler.GetIPsHandler))
+	s.mux.HandleFunc("/api/license/device/block", s.wrapLicenseAuthHandler(s.handler.BlockDeviceHandler))
+	s.mux.HandleFunc("/api/license/ip/block", s.wrapLicenseAuthHandler(s.handler.BlockIPHandler))
 
-	// Publish 服务
-	s.mux.HandleFunc("/api/license/publish", s.wrapPublicHandler(s.handler.GetPublishInfoHandler))
+	// Sync 和 Publish 服务 (需要认证)
+	s.mux.HandleFunc("/api/license/sync", s.wrapLicenseAuthHandler(s.handler.GetSyncInfoHandler))
+	s.mux.HandleFunc("/api/license/publish", s.wrapLicenseAuthHandler(s.handler.GetPublishInfoHandler))
 
 	fmt.Println("License API registered successfully")
 }
@@ -102,6 +103,12 @@ func (s *Server) wrapPublicHandler(handler http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) wrapLicensePostHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(s.cors.Handle(s.auth.CheckPostMethod(handler)))
+}
+
+// wrapLicenseAuthHandler wraps handlers that require authentication (TOKEN)
+// 支持 JSON Content-Type
+func (s *Server) wrapLicenseAuthHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(s.cors.Handle(s.auth.Check(handler)))
 }
 
 func (s *Server) wrapCounterHandler(handler http.HandlerFunc) http.HandlerFunc {
