@@ -63,6 +63,20 @@ func prepareAdminTypes(c *entity.Content) {
 	c.AdminTypes["ShortCode"] = func() interface{} { return new(valueobject.ShortCode) }
 	c.AdminTypes["Theme"] = func() interface{} { return new(valueobject.Theme) }
 	c.AdminTypes["Counter"] = func() interface{} { return new(valueobject.Counter) }
+
+	// License 管理
+	c.AdminTypes["License"] = func() interface{} { return new(valueobject.License) }
+	c.AdminTypes["LicenseDevice"] = func() interface{} { return new(valueobject.LicenseDevice) }
+	c.AdminTypes["LicenseIP"] = func() interface{} { return new(valueobject.LicenseIP) }
+
+	// Sync 相关
+	c.AdminTypes["SyncAccount"] = func() interface{} { return new(valueobject.SyncAccount) }
+	c.AdminTypes["SyncUsage"] = func() interface{} { return new(valueobject.SyncUsage) }
+
+	// Publish 相关
+	c.AdminTypes["PublishSite"] = func() interface{} { return new(valueobject.PublishSite) }
+	c.AdminTypes["PublishUsage"] = func() interface{} { return new(valueobject.PublishUsage) }
+	c.AdminTypes["PublishDomain"] = func() interface{} { return new(valueobject.PublishDomain) }
 }
 
 func NewContentWithServices(repo repository.Repository, services content.Services, dirService content.DirService) *entity.Content {

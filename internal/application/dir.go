@@ -11,6 +11,7 @@ import (
 var cachedHugoverseDir string
 
 const folderPreview = "preview"
+const folderPublish = "publish"
 
 func init() {
 	cachedHugoverseDir = hugoverseDir()
@@ -54,6 +55,16 @@ func PreviewDir() string {
 
 func PreviewFolder() string {
 	return folderPreview
+}
+
+// PublishDir 返回用户发布内容的根目录
+func PublishDir() string {
+	return filepath.Join(DataDir(), folderPublish)
+}
+
+// PublishFolder 返回发布目录名称
+func PublishFolder() string {
+	return folderPublish
 }
 
 func DataDir() string {
