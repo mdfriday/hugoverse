@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/mdfriday/hugoverse/internal/infrastructure/couchdb"
 	"html/template"
 	"os"
 	"os/signal"
@@ -12,7 +13,6 @@ import (
 	adminEntity "github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	contentEntity "github.com/mdfriday/hugoverse/internal/domain/content/entity"
 	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
-	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/admin"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/auth"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/database"
@@ -43,15 +43,15 @@ type Handler struct {
 	auth *auth.Auth
 
 	// License managers
-	syncManager    *syncEntity.Manager
 	publishManager *publishEntity.Manager
+	couchClient    *couchdb.Client
 
 	deployments sync.Map // stores deployment sessions
 }
 
 func New(log loggers.Logger, db *database.Database,
 	contentApp *contentEntity.Content, adminApp *adminEntity.Admin, auth *auth.Auth,
-	syncManager *syncEntity.Manager, publishManager *publishEntity.Manager) *Handler {
+	publishManager *publishEntity.Manager) *Handler {
 
 	adminView := &admin.View{
 		Logo:       adminApp.Name(),
@@ -60,6 +60,13 @@ func New(log loggers.Logger, db *database.Database,
 		AdminEmail: adminApp.Conf.AdminEmail,
 		Subview:    template.HTML(""),
 	}
+
+	couchClient := couchdb.NewClient(&couchdb.Config{
+		URL:       adminApp.CouchDBURL(),
+		AdminUser: adminApp.CouchDBAdminName(),
+		AdminPass: adminApp.CouchDBAdminPassword(),
+		DBPrefix:  adminApp.CouchDBPrefix(),
+	})
 
 	// 创建基本Handler结构
 	h := &Handler{
@@ -77,8 +84,8 @@ func New(log loggers.Logger, db *database.Database,
 		auth: auth,
 
 		// License managers
-		syncManager:    syncManager,
 		publishManager: publishManager,
+		couchClient:    couchClient,
 	}
 
 	// 初始化图像处理器

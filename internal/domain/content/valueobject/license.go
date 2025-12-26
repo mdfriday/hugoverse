@@ -84,12 +84,6 @@ func (l *License) MarshalEditor() ([]byte, error) {
 				"true": "Yes",
 			}),
 		},
-		editor.Field{
-			View: editor.Timestamp("ActivatedAt", l, map[string]string{
-				"label": "Activated Date & Time",
-				"help":  "Select the time this license was activated.",
-			}),
-		},
 	)
 
 	if err != nil {

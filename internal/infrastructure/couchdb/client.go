@@ -102,7 +102,7 @@ func (c *Client) SetDatabasePermission(dbName, email string) error {
 	securityDoc := map[string]interface{}{
 		"admins": map[string]interface{}{
 			"names": []string{},
-			"roles": []string{"_admin"},
+			"roles": []string{},
 		},
 		"members": map[string]interface{}{
 			"names": []string{email},

@@ -14,8 +14,6 @@ import (
 	"github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/factory"
 	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
-	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
-	"github.com/mdfriday/hugoverse/internal/infrastructure/couchdb"
 	"github.com/mdfriday/hugoverse/internal/infrastructure/repository"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/auth"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/cache"
@@ -119,18 +117,10 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 
 	s.tls = tls.NewTls(s, s.adminApp, application.TLSDir())
 
-	// Initialize License managers
-	couchClient := couchdb.NewClient(&couchdb.Config{
-		URL:       s.adminApp.CouchDBURL(),
-		AdminUser: s.adminApp.CouchDBAdminName(),
-		AdminPass: s.adminApp.CouchDBAdminPassword(),
-		DBPrefix:  s.adminApp.CouchDBPrefix(),
-	})
 	licenseRepo := repository.NewLicenseRepository(s.db)
-	syncManager := syncEntity.NewManager(couchClient, licenseRepo)
 	publishManager := publishEntity.NewManager(licenseRepo)
 
-	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp, s.auth, syncManager, publishManager)
+	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp, s.auth, publishManager)
 
 	s.registerHandler()
 

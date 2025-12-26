@@ -2,7 +2,8 @@ package valueobject
 
 import (
 	"fmt"
-	
+	"net/http"
+
 	"github.com/mdfriday/hugoverse/pkg/editor"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -94,9 +95,17 @@ func (i *LicenseIP) SetHash() {
 	i.Hash = hash.MD5(i.License + ":" + i.IPAddress)
 }
 
+func (i *LicenseIP) ItemHash() string {
+	return i.Hash
+}
+
 // SetSlug 使用 "License:IPAddress" 格式，支持按 License 前缀查询
 func (i *LicenseIP) SetSlug(slug string) {
 	i.Slug = fmt.Sprintf("%s:%s", i.License, i.IPAddress)
+}
+
+func (i *LicenseIP) ItemSlug() string {
+	return i.Slug
 }
 
 // IndexContent 标记此类型需要被索引
@@ -104,3 +113,33 @@ func (i *LicenseIP) IndexContent() bool {
 	return true
 }
 
+func (i *LicenseIP) Approve(res http.ResponseWriter, req *http.Request) error {
+	return nil
+}
+func (i *LicenseIP) AutoApprove(res http.ResponseWriter, req *http.Request) error {
+	// Use AutoApprove to check for trust-specific headers or whitelisted IPs,
+	// etc. Remember, you will not be able to Approve or Reject content that
+	// is auto-approved. You could add a field to Song, i.e.
+	// AutoApproved bool `json:auto_approved`
+	// and set that data here, as it is called before the content is saved, but
+	// after the BeforeSave hook.
+
+	return nil
+}
+
+func (i *LicenseIP) Create(res http.ResponseWriter, req *http.Request) error {
+	// do form data validation for required fields
+	required := []string{
+		"license",
+		"ip_address",
+	}
+
+	for _, r := range required {
+		if req.PostFormValue(r) == "" {
+			err := fmt.Errorf("request missing required field: %s", r)
+			return err
+		}
+	}
+
+	return nil
+}

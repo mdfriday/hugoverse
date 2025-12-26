@@ -2,12 +2,12 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
+	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	apiFrom "github.com/mdfriday/hugoverse/internal/interfaces/api/form"
+	"github.com/mdfriday/hugoverse/pkg/timestamp"
 	"net/http"
 	"strings"
-	"time"
-
-	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 )
 
 // ========== License API Handlers ==========
@@ -30,7 +30,7 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 
 	licenseKey := req.PostForm.Get("license_key")
 	deviceID := req.PostForm.Get("device_id")
-	//deviceName := req.PostForm.Get("device_name")
+	deviceName := req.PostForm.Get("device_name")
 	deviceType := req.PostForm.Get("device_type")
 	if deviceType == "" {
 		deviceType = "desktop"
@@ -48,9 +48,6 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	// 获取客户端 IP
-	//ipAddress := s.getClientIP(req)
-
 	// 查找 License (必须已存在)
 	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
@@ -66,41 +63,123 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		return
 	}
 
+	now := timestamp.CurrentTimeMillis()
 	// 首次激活
 	if !license.Activated {
 		license.Activated = true
-		license.ActivatedAt = time.Now().UnixMilli()
+		license.ActivatedAt = now
 		if err := s.contentApp.UpdateLicense(license); err != nil {
 			s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	//// 验证设备和 IP
-	//if h.syncManager != nil {
-	//	if err := h.syncManager.ValidateAndRecordAccess(
-	//		req.LicenseKey, req.DeviceID, req.DeviceName, req.DeviceType, ipAddress,
-	//	); err != nil {
-	//		h.jsonError(w, err.Error(), http.StatusForbidden)
-	//		return
-	//	}
-	//}
-	//
-	//// 创建 Sync 账号 (如果支持)
-	//var syncInfo map[string]interface{}
-	//if h.syncManager != nil && license.GetFeatures().SyncEnabled {
-	//	syncAccount, err := h.syncManager.CreateSyncAccount(license)
-	//	if err != nil {
-	//		h.log.Errorf("Failed to create sync account for license %s: %v", license.LicenseKey, err)
-	//	} else if syncAccount != nil {
-	//		syncInfo = map[string]interface{}{
-	//			"email":       syncAccount.Email,
-	//			"db_name":     syncAccount.DBName,
-	//			"db_endpoint": syncAccount.DBEndpoint,
-	//			"status":      syncAccount.Status,
-	//		}
-	//	}
-	//}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
+
+	// 查找已存在的设备
+	existingDevice, err := s.contentApp.GetDeviceByID(license.LicenseKey, deviceID)
+	if err == nil && existingDevice != nil {
+		// 设备已存在，更新访问记录
+		existingDevice.LastSeenAt = now
+		existingDevice.AccessCount++
+		if err := s.contentApp.UpdateDevice(existingDevice); err != nil {
+			s.log.Errorf("Failed to update device: %v", err)
+			s.jsonError(res, "Failed to update device: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// 新设备 - 检查限制
+		if !license.CanAddDevice() {
+			if err := fmt.Errorf("device limit reached (%d/%d)", license.CurrentDevices, license.MaxDevices); err != nil {
+				s.log.Errorf("Device limit reached for license %s: %v", license.LicenseKey, err)
+				s.jsonError(res, "Device limit reached", http.StatusForbidden)
+				return
+			}
+		}
+
+		// 创建新设备记录
+		device := &contentVO.LicenseDevice{
+			License:     license.LicenseKey,
+			DeviceID:    deviceID,
+			DeviceName:  deviceName,
+			DeviceType:  deviceType,
+			FirstSeenAt: now,
+			LastSeenAt:  now,
+			AccessCount: 1,
+			Status:      "active",
+			Item: contentVO.Item{
+				Timestamp: now,
+				Updated:   now,
+				Namespace: "LicenseDevice",
+			},
+		}
+
+		if _, err := s.contentApp.CreateDevice(device); err != nil {
+			s.log.Errorf("Failed to create device record: %v", err)
+			s.jsonError(res, "Failed to create device record: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 更新 License 设备计数
+		license.CurrentDevices++
+	}
+
+	// 获取客户端 IP
+	ipAddress := s.getClientIP(req)
+
+	// 查找已存在的 IP
+	existingIP, err := s.contentApp.GetIPByAddress(license.LicenseKey, ipAddress)
+	if err == nil && existingIP != nil {
+		// IP 已存在，更新访问记录
+		existingIP.LastSeenAt = now
+		existingIP.AccessCount++
+		if err := s.contentApp.UpdateLicenseIP(existingIP); err != nil {
+			s.log.Errorf("Failed to update IP: %v", err)
+			s.jsonError(res, "Failed to update IP: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		// 新 IP - 检查限制
+		if !license.CanAddIP() {
+			s.log.Errorf("IP limit reached for license %s", license.LicenseKey)
+			s.jsonError(res, "IP limit reached", http.StatusForbidden)
+			return
+		}
+
+		// 创建新 IP 记录
+		ip := &contentVO.LicenseIP{
+			License:     license.LicenseKey,
+			IPAddress:   ipAddress,
+			FirstSeenAt: now,
+			LastSeenAt:  now,
+			AccessCount: 1,
+			Status:      "active",
+			Item: contentVO.Item{
+				Timestamp: now,
+				Updated:   now,
+				Namespace: "LicenseIP",
+			},
+		}
+
+		if _, err := s.contentApp.CreateLicenseIP(ip); err != nil {
+			s.log.Errorf("Failed to create IP record: %v", err)
+			s.jsonError(res, "Failed to create IP record: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 更新 License IP 计数
+		license.CurrentIPs++
+	}
+
+	if err := s.contentApp.UpdateLicense(license); err != nil {
+		s.log.Errorf("Failed to update license: %v", err)
+		s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	// 返回响应
 	response := map[string]interface{}{
@@ -116,9 +195,76 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		},
 	}
 
-	//if syncInfo != nil {
-	//	response["sync"] = syncInfo
-	//}
+	// 创建 Sync 账号 (如果支持)
+	var syncInfo map[string]interface{}
+	if license.GetFeatures().SyncEnabled {
+		syncAccount, _ := s.contentApp.GetSyncAccountByLicense(license.LicenseKey)
+		if syncAccount != nil {
+			syncInfo = map[string]interface{}{
+				"email":       syncAccount.Email,
+				"db_name":     syncAccount.DBName,
+				"db_password": syncAccount.DBPassword,
+				"db_endpoint": syncAccount.DBEndpoint,
+				"status":      syncAccount.Status,
+			}
+			response["sync"] = syncInfo
+
+		} else {
+			email := license.ToEmail()
+			password := license.ToPassword()
+			dbName := fmt.Sprintf("%s%s", s.adminApp.CouchDBPrefix(), license.ToUserDir())
+
+			// 创建 CouchDB 数据库
+			if err := s.couchClient.CreateDatabase(dbName); err != nil {
+				s.log.Errorf("Failed to create database for sync account: %v", err)
+				s.jsonError(res, "Failed to create database for sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// 创建用户
+			if err := s.couchClient.CreateUser(email, password); err != nil {
+				s.log.Errorf("Failed to create user for sync account: %v", err)
+				s.jsonError(res, "Failed to create user for sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// 设置数据库权限
+			if err := s.couchClient.SetDatabasePermission(dbName, email); err != nil {
+				s.log.Errorf("Failed to set database permission for sync account: %v", err)
+				s.jsonError(res, "Failed to set database permission for sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			account := &contentVO.SyncAccount{
+				License:    license.LicenseKey,
+				Email:      email,
+				DBName:     dbName,
+				DBEndpoint: fmt.Sprintf("%s/%s", s.adminApp.CouchDBURL(), dbName),
+				Status:     "active",
+				CreatedAt:  now,
+				Item: contentVO.Item{
+					Timestamp: now,
+					Updated:   now,
+					Namespace: "SyncAccount",
+				},
+			}
+
+			if _, err := s.contentApp.CreateSyncAccount(account); err != nil {
+				s.log.Errorf("Failed to save sync account: %v", err)
+				s.jsonError(res, "Failed to save sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			syncInfo = map[string]interface{}{
+				"email":       syncAccount.Email,
+				"db_name":     syncAccount.DBName,
+				"db_password": syncAccount.DBPassword,
+				"db_endpoint": syncAccount.DBEndpoint,
+				"status":      syncAccount.Status,
+			}
+			response["sync"] = syncInfo
+		}
+	}
 
 	s.jsonResponse(res, response)
 }
