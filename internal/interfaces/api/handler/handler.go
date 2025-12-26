@@ -12,7 +12,6 @@ import (
 	"github.com/mdfriday/hugoverse/internal/application"
 	adminEntity "github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	contentEntity "github.com/mdfriday/hugoverse/internal/domain/content/entity"
-	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/admin"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/auth"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/database"
@@ -42,16 +41,14 @@ type Handler struct {
 
 	auth *auth.Auth
 
-	// License managers
-	publishManager *publishEntity.Manager
-	couchClient    *couchdb.Client
+	// CouchDB client for License management
+	couchClient *couchdb.Client
 
 	deployments sync.Map // stores deployment sessions
 }
 
 func New(log loggers.Logger, db *database.Database,
-	contentApp *contentEntity.Content, adminApp *adminEntity.Admin, auth *auth.Auth,
-	publishManager *publishEntity.Manager) *Handler {
+	contentApp *contentEntity.Content, adminApp *adminEntity.Admin, auth *auth.Auth) *Handler {
 
 	adminView := &admin.View{
 		Logo:       adminApp.Name(),
@@ -83,9 +80,8 @@ func New(log loggers.Logger, db *database.Database,
 
 		auth: auth,
 
-		// License managers
-		publishManager: publishManager,
-		couchClient:    couchClient,
+		// CouchDB client
+		couchClient: couchClient,
 	}
 
 	// 初始化图像处理器

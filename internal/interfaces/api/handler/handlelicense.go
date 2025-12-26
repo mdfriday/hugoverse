@@ -305,73 +305,141 @@ func (h *Handler) GetLicenseInfoHandler(w http.ResponseWriter, r *http.Request) 
 
 // GetDevicesHandler 获取 License 的设备列表
 // GET /api/license/devices?key=xxx
-func (h *Handler) GetDevicesHandler(w http.ResponseWriter, r *http.Request) {
-	licenseKey := r.URL.Query().Get("key")
+func (s *Handler) GetDevicesHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
 	if licenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	if h.syncManager == nil {
-		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
-		return
-	}
-
-	devices, err := h.syncManager.GetDevices(licenseKey)
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
-		h.jsonError(w, "Failed to get devices: "+err.Error(), http.StatusInternalServerError)
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
 
-	h.jsonResponse(w, map[string]interface{}{
-		"devices": devices,
-		"count":   len(devices),
+	// 获取设备列表
+	devices, err := s.contentApp.GetDevicesByLicense(license.LicenseKey)
+	if err != nil {
+		s.log.Errorf("Failed to get devices for license %s: %v", license.LicenseKey, err)
+		s.jsonError(res, "Failed to get devices: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 构建响应
+	deviceList := make([]map[string]interface{}, 0, len(devices))
+	for _, device := range devices {
+		deviceList = append(deviceList, map[string]interface{}{
+			"device_id":     device.DeviceID,
+			"device_name":   device.DeviceName,
+			"device_type":   device.DeviceType,
+			"first_seen_at": device.FirstSeenAt,
+			"last_seen_at":  device.LastSeenAt,
+			"access_count":  device.AccessCount,
+			"status":        device.Status,
+		})
+	}
+
+	s.jsonResponse(res, map[string]interface{}{
+		"devices": deviceList,
+		"count":   len(deviceList),
 	})
 }
 
 // GetIPsHandler 获取 License 的 IP 列表
 // GET /api/license/ips?key=xxx
-func (h *Handler) GetIPsHandler(w http.ResponseWriter, r *http.Request) {
-	licenseKey := r.URL.Query().Get("key")
+func (s *Handler) GetIPsHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
 	if licenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	if h.syncManager == nil {
-		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
-		return
-	}
-
-	ips, err := h.syncManager.GetIPs(licenseKey)
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
-		h.jsonError(w, "Failed to get IPs: "+err.Error(), http.StatusInternalServerError)
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
 
-	h.jsonResponse(w, map[string]interface{}{
-		"ips":   ips,
-		"count": len(ips),
+	// 获取 IP 列表
+	ips, err := s.contentApp.GetIPsByLicense(license.LicenseKey)
+	if err != nil {
+		s.log.Errorf("Failed to get IPs for license %s: %v", license.LicenseKey, err)
+		s.jsonError(res, "Failed to get IPs: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 构建响应
+	ipList := make([]map[string]interface{}, 0, len(ips))
+	for _, ip := range ips {
+		ipList = append(ipList, map[string]interface{}{
+			"ip_address":    ip.IPAddress,
+			"country":       ip.Country,
+			"region":        ip.Region,
+			"city":          ip.City,
+			"first_seen_at": ip.FirstSeenAt,
+			"last_seen_at":  ip.LastSeenAt,
+			"access_count":  ip.AccessCount,
+			"status":        ip.Status,
+		})
+	}
+
+	s.jsonResponse(res, map[string]interface{}{
+		"ips":   ipList,
+		"count": len(ipList),
 	})
 }
 
 // GetSyncInfoHandler 获取 Sync 信息
 // GET /api/license/sync?key=xxx
-func (h *Handler) GetSyncInfoHandler(w http.ResponseWriter, r *http.Request) {
-	licenseKey := r.URL.Query().Get("key")
+func (s *Handler) GetSyncInfoHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
 	if licenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	if h.syncManager == nil {
-		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
-		return
-	}
-
-	account, err := h.syncManager.GetSyncAccount(licenseKey)
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
-		h.jsonError(w, "Sync account not found", http.StatusNotFound)
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+
+	// 检查是否支持 Sync 功能
+	if !license.GetFeatures().SyncEnabled {
+		s.jsonError(res, "Sync feature not enabled for this license plan", http.StatusForbidden)
+		return
+	}
+
+	// 获取 Sync 账号
+	account, err := s.contentApp.GetSyncAccountByLicense(license.LicenseKey)
+	if err != nil {
+		s.log.Errorf("Sync account not found for license %s: %v", license.LicenseKey, err)
+		s.jsonError(res, "Sync account not found", http.StatusNotFound)
 		return
 	}
 
@@ -383,99 +451,100 @@ func (h *Handler) GetSyncInfoHandler(w http.ResponseWriter, r *http.Request) {
 		"created_at":  account.CreatedAt,
 	}
 
-	// 尝试获取使用量
-	usage, err := h.syncManager.UpdateUsage(licenseKey)
-	if err == nil && usage != nil {
-		response["usage"] = map[string]interface{}{
-			"document_count": usage.DocumentCount,
-			"storage_bytes":  usage.StorageBytes,
-			"quota_bytes":    usage.QuotaBytes,
-			"percentage":     usage.UsagePercentage(),
-			"over_quota":     usage.IsOverQuota(),
-		}
-	}
-
-	h.jsonResponse(w, response)
+	s.jsonResponse(res, response)
 }
 
 // GetPublishInfoHandler 获取 Publish 信息
 // GET /api/license/publish?key=xxx
-func (h *Handler) GetPublishInfoHandler(w http.ResponseWriter, r *http.Request) {
-	licenseKey := r.URL.Query().Get("key")
+func (s *Handler) GetPublishInfoHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
 	if licenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	if h.publishManager == nil {
-		h.jsonError(w, "Publish manager not available", http.StatusServiceUnavailable)
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
 
-	// 获取站点列表
-	sites, err := h.publishManager.GetSites(licenseKey)
-	if err != nil {
-		sites = []contentVO.PublishSite{}
-	}
-
-	// 获取使用量
-	usage, _ := h.publishManager.GetUsage(licenseKey)
-
-	// 获取域名列表
-	domains, err := h.publishManager.GetDomains(licenseKey)
-	if err != nil {
-		domains = []contentVO.PublishDomain{}
+	// 检查是否支持 Publish 功能
+	if !license.GetFeatures().PublishEnabled {
+		s.jsonError(res, "Publish feature not enabled for this license plan", http.StatusForbidden)
+		return
 	}
 
 	response := map[string]interface{}{
-		"sites":   sites,
-		"domains": domains,
+		"enabled": true,
+		"plan":    license.Plan,
+		"features": map[string]interface{}{
+			"max_sites":      license.GetFeatures().MaxSites,
+			"max_storage_mb": license.GetFeatures().MaxStorageMB,
+			"custom_domain":  license.GetFeatures().CustomDomain,
+		},
 	}
 
-	if usage != nil {
-		response["usage"] = map[string]interface{}{
-			"site_count":    usage.SiteCount,
-			"max_sites":     usage.MaxSites,
-			"storage_bytes": usage.StorageBytes,
-			"quota_bytes":   usage.QuotaBytes,
-			"storage_pct":   usage.StoragePercentage(),
-			"over_quota":    usage.IsStorageOverQuota(),
-			"can_add_site":  usage.CanAddSite(),
-		}
-	}
-
-	h.jsonResponse(w, response)
+	s.jsonResponse(res, response)
 }
 
 // BlockDeviceHandler 封禁设备
 // POST /api/license/device/block
-func (h *Handler) BlockDeviceHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+func (s *Handler) BlockDeviceHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	if h.syncManager == nil {
-		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
+	err := req.ParseMultipartForm(apiFrom.MaxMemory)
+	if err != nil {
+		s.log.Errorf("Error parsing multipart form: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	var req struct {
-		LicenseKey string `json:"license_key"`
-		DeviceID   string `json:"device_id"`
-	}
+	licenseKey := req.PostForm.Get("license_key")
+	deviceID := req.PostForm.Get("device_id")
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+	if licenseKey == "" || deviceID == "" {
+		s.log.Errorf("License key and device ID are required")
+		s.jsonError(res, "License key and device ID are required", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.syncManager.BlockDevice(req.LicenseKey, req.DeviceID); err != nil {
-		h.jsonError(w, err.Error(), http.StatusInternalServerError)
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
 
-	h.jsonResponse(w, map[string]interface{}{
+	// 获取设备记录
+	device, err := s.contentApp.GetDeviceByID(license.LicenseKey, deviceID)
+	if err != nil {
+		s.log.Errorf("Device not found: %s", deviceID)
+		s.jsonError(res, "Device not found", http.StatusNotFound)
+		return
+	}
+
+	// 更新设备状态为 blocked
+	device.Status = "blocked"
+	if err := s.contentApp.UpdateDevice(device); err != nil {
+		s.log.Errorf("Failed to block device: %v", err)
+		s.jsonError(res, "Failed to block device: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.jsonResponse(res, map[string]interface{}{
 		"success": true,
 		"message": "Device blocked successfully",
 	})
@@ -483,33 +552,53 @@ func (h *Handler) BlockDeviceHandler(w http.ResponseWriter, r *http.Request) {
 
 // BlockIPHandler 封禁 IP
 // POST /api/license/ip/block
-func (h *Handler) BlockIPHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+func (s *Handler) BlockIPHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	if h.syncManager == nil {
-		h.jsonError(w, "Sync manager not available", http.StatusServiceUnavailable)
+	err := req.ParseMultipartForm(apiFrom.MaxMemory)
+	if err != nil {
+		s.log.Errorf("Error parsing multipart form: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	var req struct {
-		LicenseKey string `json:"license_key"`
-		IPAddress  string `json:"ip_address"`
-	}
+	licenseKey := req.PostForm.Get("license_key")
+	ipAddress := req.PostForm.Get("ip_address")
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+	if licenseKey == "" || ipAddress == "" {
+		s.log.Errorf("License key and IP address are required")
+		s.jsonError(res, "License key and IP address are required", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.syncManager.BlockIP(req.LicenseKey, req.IPAddress); err != nil {
-		h.jsonError(w, err.Error(), http.StatusInternalServerError)
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
 
-	h.jsonResponse(w, map[string]interface{}{
+	// 获取 IP 记录
+	ip, err := s.contentApp.GetIPByAddress(license.LicenseKey, ipAddress)
+	if err != nil {
+		s.log.Errorf("IP not found: %s", ipAddress)
+		s.jsonError(res, "IP not found", http.StatusNotFound)
+		return
+	}
+
+	// 更新 IP 状态为 blocked
+	ip.Status = "blocked"
+	if err := s.contentApp.UpdateLicenseIP(ip); err != nil {
+		s.log.Errorf("Failed to block IP: %v", err)
+		s.jsonError(res, "Failed to block IP: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.jsonResponse(res, map[string]interface{}{
 		"success": true,
 		"message": "IP blocked successfully",
 	})

@@ -13,8 +13,6 @@ import (
 	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/factory"
-	publishEntity "github.com/mdfriday/hugoverse/internal/domain/publish/entity"
-	"github.com/mdfriday/hugoverse/internal/infrastructure/repository"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/auth"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/cache"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/compression"
@@ -117,10 +115,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 
 	s.tls = tls.NewTls(s, s.adminApp, application.TLSDir())
 
-	licenseRepo := repository.NewLicenseRepository(s.db)
-	publishManager := publishEntity.NewManager(licenseRepo)
-
-	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp, s.auth, publishManager)
+	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp, s.auth)
 
 	s.registerHandler()
 
