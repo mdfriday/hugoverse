@@ -3,6 +3,7 @@ package valueobject
 import (
 	"encoding/base64"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -108,6 +109,36 @@ func (l *License) SetSlug(slug string) {
 // IndexContent 标记此类型需要被索引
 func (l *License) IndexContent() bool {
 	return true
+}
+func (l *License) Approve(res http.ResponseWriter, req *http.Request) error {
+	return nil
+}
+func (l *License) AutoApprove(res http.ResponseWriter, req *http.Request) error {
+	// Use AutoApprove to check for trust-specific headers or whitelisted IPs,
+	// etc. Remember, you will not be able to Approve or Reject content that
+	// is auto-approved. You could add a field to Song, i.e.
+	// AutoApproved bool `json:auto_approved`
+	// and set that data here, as it is called before the content is saved, but
+	// after the BeforeSave hook.
+
+	return nil
+}
+
+func (l *License) Create(res http.ResponseWriter, req *http.Request) error {
+	// do form data validation for required fields
+	required := []string{
+		"license_key",
+		"plan",
+	}
+
+	for _, r := range required {
+		if req.PostFormValue(r) == "" {
+			err := fmt.Errorf("request missing required field: %s", r)
+			return err
+		}
+	}
+
+	return nil
 }
 
 // ========== License 转用户机制 ==========
@@ -244,4 +275,3 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 		return &LicenseFeatures{}
 	}
 }
-

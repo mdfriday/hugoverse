@@ -14,6 +14,8 @@
 #   bash ADRs/notes/test-license-api.sh
 #
 
+# http://localhost:5984/_utils/#login
+
 set -e
 
 # ========== 配置 ==========

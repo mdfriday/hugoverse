@@ -45,23 +45,23 @@ func NewContent(repo repository.Repository, dir content.DirService) *entity.Cont
 func prepareUserTypes(c *entity.Content) {
 	//c.UserTypes["Author"] = func() interface{} { return new(valueobject.Author) }
 	//c.UserTypes["Language"] = func() interface{} { return new(valueobject.Language) }
-	c.UserTypes["Post"] = func() interface{} { return new(valueobject.Post) }
-	c.UserTypes["Resource"] = func() interface{} { return new(valueobject.Resource) }
-	c.UserTypes["Site"] = func() interface{} { return new(valueobject.Site) }
+	//c.UserTypes["Post"] = func() interface{} { return new(valueobject.Post) }
+	//c.UserTypes["Resource"] = func() interface{} { return new(valueobject.Resource) }
+	//c.UserTypes["Site"] = func() interface{} { return new(valueobject.Site) }
 	//c.UserTypes["SiteLanguage"] = func() interface{} { return new(valueobject.SiteLanguage) }
-	c.UserTypes["SitePost"] = func() interface{} { return new(valueobject.SitePost) }
-	c.UserTypes["SiteResource"] = func() interface{} { return new(valueobject.SiteResource) }
-	c.UserTypes["Deployment"] = func() interface{} { return new(valueobject.Deployment) }
+	//c.UserTypes["SitePost"] = func() interface{} { return new(valueobject.SitePost) }
+	//c.UserTypes["SiteResource"] = func() interface{} { return new(valueobject.SiteResource) }
+	//c.UserTypes["Deployment"] = func() interface{} { return new(valueobject.Deployment) }
 	c.UserTypes["CTA"] = func() interface{} { return new(valueobject.CTA) }
 }
 
 func prepareAdminTypes(c *entity.Content) {
-	c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
+	//c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
 	c.AdminTypes["Preview"] = func() interface{} { return new(valueobject.Preview) }
 	c.AdminTypes["MDFPreview"] = func() interface{} { return new(valueobject.MDFPreview) }
 	c.AdminTypes["Image"] = func() interface{} { return new(valueobject.Image) }
-	c.AdminTypes["ShortCode"] = func() interface{} { return new(valueobject.ShortCode) }
-	c.AdminTypes["Theme"] = func() interface{} { return new(valueobject.Theme) }
+	//c.AdminTypes["ShortCode"] = func() interface{} { return new(valueobject.ShortCode) }
+	//c.AdminTypes["Theme"] = func() interface{} { return new(valueobject.Theme) }
 	c.AdminTypes["Counter"] = func() interface{} { return new(valueobject.Counter) }
 
 	// License 管理
