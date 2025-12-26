@@ -15,6 +15,10 @@
 curl -X POST http://127.0.0.1:1314/api/user \
 -H "Content-Type: application/x-www-form-urlencoded" \
 -d "email=mdf_public@mdfriday.com&password=987123"
+
+curl -X POST http://127.0.0.1:1314/api/login \
+-H "Content-Type: application/x-www-form-urlencoded" \
+-d "email=mdf_public@mdfriday.com&password=987123"
 ```
 
 **响应示例**:
