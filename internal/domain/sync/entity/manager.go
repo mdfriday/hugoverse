@@ -4,14 +4,12 @@ import (
 	"fmt"
 	"time"
 
-	adminVO "github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
 	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 )
 
 // Manager Sync 业务逻辑管理器
 // 负责设备/IP 验证、CouchDB 账号分配、用量监控
 type Manager struct {
-	config      *adminVO.CouchDBConfig
 	couchClient CouchDBClient
 	repo        Repository
 }
@@ -51,9 +49,8 @@ type Repository interface {
 }
 
 // NewManager 创建 Sync Manager
-func NewManager(config *adminVO.CouchDBConfig, client CouchDBClient, repo Repository) *Manager {
+func NewManager(client CouchDBClient, repo Repository) *Manager {
 	return &Manager{
-		config:      config,
 		couchClient: client,
 		repo:        repo,
 	}
@@ -177,7 +174,7 @@ func (m *Manager) CreateSyncAccount(license *contentVO.License) (*contentVO.Sync
 
 	email := license.ToEmail()
 	password := license.ToPassword()
-	dbName := fmt.Sprintf("%s%s", m.config.DBPrefix, license.ToUserDir())
+	dbName := fmt.Sprintf("%s%s", "m.config.DBPrefix", license.ToUserDir())
 
 	// 创建 CouchDB 数据库
 	if err := m.couchClient.CreateDatabase(dbName); err != nil {
@@ -198,7 +195,7 @@ func (m *Manager) CreateSyncAccount(license *contentVO.License) (*contentVO.Sync
 		License:    license.LicenseKey,
 		Email:      email,
 		DBName:     dbName,
-		DBEndpoint: fmt.Sprintf("%s/%s", m.config.URL, dbName),
+		DBEndpoint: fmt.Sprintf("%s/%s", "m.config.URL", dbName),
 		Status:     "active",
 		CreatedAt:  time.Now().UnixMilli(),
 	}
@@ -285,4 +282,3 @@ func (m *Manager) BlockIP(licenseKey, ipAddress string) error {
 	ip.Status = "blocked"
 	return m.repo.SaveIP(ip)
 }
-

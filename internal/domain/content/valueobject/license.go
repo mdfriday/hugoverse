@@ -77,6 +77,19 @@ func (l *License) MarshalEditor() ([]byte, error) {
 				"type":  "number",
 			}),
 		},
+		editor.Field{
+			View: editor.Checkbox("Activated", l, map[string]string{
+				"label": "Activated",
+			}, map[string]string{
+				"true": "Yes",
+			}),
+		},
+		editor.Field{
+			View: editor.Timestamp("ActivatedAt", l, map[string]string{
+				"label": "Activated Date & Time",
+				"help":  "Select the time this license was activated.",
+			}),
+		},
 	)
 
 	if err != nil {
@@ -97,6 +110,10 @@ func (l *License) SetHash() {
 	l.Hash = hash.MD5(l.LicenseKey)
 }
 
+func (l *License) ItemHash() string {
+	return l.Hash
+}
+
 // SetSlug 使用 LicenseKey 作为 slug，存入 ns__index bucket
 func (l *License) SetSlug(slug string) {
 	if slug != "" {
@@ -104,6 +121,10 @@ func (l *License) SetSlug(slug string) {
 	} else {
 		l.Slug = l.LicenseKey
 	}
+}
+
+func (l *License) ItemSlug() string {
+	return l.Slug
 }
 
 // IndexContent 标记此类型需要被索引

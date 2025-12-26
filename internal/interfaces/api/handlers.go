@@ -9,12 +9,11 @@ import (
 
 func (s *Server) registerLicenseHandler() {
 	// Register License API endpoints
-	
+
 	// 公开接口 - License 激活 (任何人都可以访问，POST 方法)
-	s.mux.HandleFunc("/api/license/activate", s.wrapLicensePostHandler(s.handler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/activate", s.wrapContentHandler(s.handler.ActivateLicenseHandler))
 
 	// 需要认证的接口 - 管理员功能 (需要 TOKEN)
-	s.mux.HandleFunc("/api/license/create", s.wrapLicenseAuthHandler(s.handler.CreateLicenseHandler))
 	s.mux.HandleFunc("/api/license/info", s.wrapLicenseAuthHandler(s.handler.GetLicenseInfoHandler))
 
 	// 设备和 IP 管理 (需要认证)

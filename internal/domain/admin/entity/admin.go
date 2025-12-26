@@ -20,6 +20,7 @@ type Admin struct {
 	*Controller
 	*Client
 	*Netlify
+	*CouchDB
 
 	Log loggers.Logger
 }
@@ -108,6 +109,9 @@ func (a *Admin) PutConfig(key string, value any) error {
 	}
 	if a.Netlify != nil {
 		a.Netlify.Conf = a.Conf
+	}
+	if a.CouchDB != nil {
+		a.CouchDB.Conf = a.Conf
 	}
 
 	return nil

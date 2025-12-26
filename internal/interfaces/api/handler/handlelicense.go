@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	apiFrom "github.com/mdfriday/hugoverse/internal/interfaces/api/form"
 	"net/http"
 	"strings"
 	"time"
@@ -11,121 +12,57 @@ import (
 
 // ========== License API Handlers ==========
 
-// CreateLicenseHandler 创建 License (管理员接口)
-// POST /api/license/create
-func (h *Handler) CreateLicenseHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req struct {
-		LicenseKey string `json:"license_key"`
-		Plan       string `json:"plan"`
-		ExpiryDays int    `json:"expiry_days"` // 有效期天数，默认 365
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if req.LicenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
-		return
-	}
-
-	// 检查 License 是否已存在
-	existing, _ := h.contentApp.GetLicenseByKey(req.LicenseKey)
-	if existing != nil {
-		h.jsonError(w, "License already exists", http.StatusConflict)
-		return
-	}
-
-	// 解析 Plan
-	plan := contentVO.LicensePlan(req.Plan)
-	if plan == "" {
-		plan = contentVO.PlanStarter // 默认 Starter
-	}
-
-	// 计算过期时间
-	expiryDays := req.ExpiryDays
-	if expiryDays <= 0 {
-		expiryDays = 365 // 默认一年
-	}
-
-	now := time.Now()
-	license := &contentVO.License{
-		LicenseKey: req.LicenseKey,
-		Plan:       plan,
-		Activated:  false,
-		IssueDate:  now.UnixMilli(),
-		ExpiryDate: now.Add(time.Duration(expiryDays) * 24 * time.Hour).UnixMilli(),
-		MaxDevices: contentVO.GetPlanFeatures(plan).MaxDevices,
-		MaxIPs:     contentVO.GetPlanFeatures(plan).MaxIPs,
-	}
-
-	if err := h.contentApp.CreateLicense(license); err != nil {
-		h.jsonError(w, "Failed to create license: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	h.jsonResponse(w, map[string]interface{}{
-		"success":     true,
-		"message":     "License created successfully",
-		"license_key": license.LicenseKey,
-		"plan":        license.Plan,
-		"issue_date":  license.IssueDate,
-		"expires_at":  license.ExpiryDate,
-		"features":    license.GetFeatures(),
-	})
-}
-
 // ActivateLicenseHandler 激活 License (公开接口)
 // POST /api/license/activate
 // 注意：只能激活已存在的 License，不会自动创建
-func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req struct {
-		LicenseKey string `json:"license_key"`
-		DeviceID   string `json:"device_id"`
-		DeviceName string `json:"device_name"`
-		DeviceType string `json:"device_type"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		h.jsonError(w, "Invalid request body", http.StatusBadRequest)
+	err := req.ParseMultipartForm(apiFrom.MaxMemory) // maxMemory 4MB
+	if err != nil {
+		s.log.Errorf("Error parsing multipart form: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if req.LicenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
+	licenseKey := req.PostForm.Get("license_key")
+	deviceID := req.PostForm.Get("device_id")
+	//deviceName := req.PostForm.Get("device_name")
+	deviceType := req.PostForm.Get("device_type")
+	if deviceType == "" {
+		deviceType = "desktop"
+	}
+
+	if licenseKey == "" {
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	if req.DeviceID == "" {
-		h.jsonError(w, "Device ID is required", http.StatusBadRequest)
+	if deviceID == "" {
+		s.log.Errorf("Device ID is required")
+		s.jsonError(res, "Device ID is required", http.StatusBadRequest)
 		return
 	}
 
 	// 获取客户端 IP
-	ipAddress := h.getClientIP(r)
+	//ipAddress := s.getClientIP(req)
 
 	// 查找 License (必须已存在)
-	license, err := h.contentApp.GetLicenseByKey(req.LicenseKey)
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		// License 不存在，返回错误
-		h.jsonError(w, "Invalid license key: License not found", http.StatusNotFound)
+		s.log.Errorf("Invalid license key: %s", licenseKey)
+		s.jsonError(res, "Invalid license key: License not found", http.StatusNotFound)
 		return
 	}
 
 	// 验证 License 是否过期
 	if license.IsExpired() {
-		h.jsonError(w, "License has expired", http.StatusForbidden)
+		s.jsonError(res, "License has expired", http.StatusForbidden)
 		return
 	}
 
@@ -133,42 +70,37 @@ func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request)
 	if !license.Activated {
 		license.Activated = true
 		license.ActivatedAt = time.Now().UnixMilli()
-		if err := h.contentApp.UpdateLicense(license); err != nil {
-			h.jsonError(w, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
+		if err := s.contentApp.UpdateLicense(license); err != nil {
+			s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
 	}
 
-	// 设置默认设备类型
-	if req.DeviceType == "" {
-		req.DeviceType = "desktop"
-	}
-
-	// 验证设备和 IP
-	if h.syncManager != nil {
-		if err := h.syncManager.ValidateAndRecordAccess(
-			req.LicenseKey, req.DeviceID, req.DeviceName, req.DeviceType, ipAddress,
-		); err != nil {
-			h.jsonError(w, err.Error(), http.StatusForbidden)
-			return
-		}
-	}
-
-	// 创建 Sync 账号 (如果支持)
-	var syncInfo map[string]interface{}
-	if h.syncManager != nil && license.GetFeatures().SyncEnabled {
-		syncAccount, err := h.syncManager.CreateSyncAccount(license)
-		if err != nil {
-			h.log.Errorf("Failed to create sync account for license %s: %v", license.LicenseKey, err)
-		} else if syncAccount != nil {
-			syncInfo = map[string]interface{}{
-				"email":       syncAccount.Email,
-				"db_name":     syncAccount.DBName,
-				"db_endpoint": syncAccount.DBEndpoint,
-				"status":      syncAccount.Status,
-			}
-		}
-	}
+	//// 验证设备和 IP
+	//if h.syncManager != nil {
+	//	if err := h.syncManager.ValidateAndRecordAccess(
+	//		req.LicenseKey, req.DeviceID, req.DeviceName, req.DeviceType, ipAddress,
+	//	); err != nil {
+	//		h.jsonError(w, err.Error(), http.StatusForbidden)
+	//		return
+	//	}
+	//}
+	//
+	//// 创建 Sync 账号 (如果支持)
+	//var syncInfo map[string]interface{}
+	//if h.syncManager != nil && license.GetFeatures().SyncEnabled {
+	//	syncAccount, err := h.syncManager.CreateSyncAccount(license)
+	//	if err != nil {
+	//		h.log.Errorf("Failed to create sync account for license %s: %v", license.LicenseKey, err)
+	//	} else if syncAccount != nil {
+	//		syncInfo = map[string]interface{}{
+	//			"email":       syncAccount.Email,
+	//			"db_name":     syncAccount.DBName,
+	//			"db_endpoint": syncAccount.DBEndpoint,
+	//			"status":      syncAccount.Status,
+	//		}
+	//	}
+	//}
 
 	// 返回响应
 	response := map[string]interface{}{
@@ -184,11 +116,11 @@ func (h *Handler) ActivateLicenseHandler(w http.ResponseWriter, r *http.Request)
 		},
 	}
 
-	if syncInfo != nil {
-		response["sync"] = syncInfo
-	}
+	//if syncInfo != nil {
+	//	response["sync"] = syncInfo
+	//}
 
-	h.jsonResponse(w, response)
+	s.jsonResponse(res, response)
 }
 
 // GetLicenseInfoHandler 获取 License 信息

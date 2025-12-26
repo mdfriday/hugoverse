@@ -8,18 +8,24 @@ import (
 	"net/http"
 	"time"
 
-	adminVO "github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
 	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
 )
 
+type Config struct {
+	URL       string `json:"url"`        // CouchDB 服务器地址 (如 http://localhost:5984)
+	AdminUser string `json:"admin_user"` // 管理员用户名
+	AdminPass string `json:"admin_pass"` // 管理员密码
+	DBPrefix  string `json:"db_prefix"`  // 用户数据库前缀 (如 userdb-)
+}
+
 // Client CouchDB HTTP 客户端
 type Client struct {
-	config     *adminVO.CouchDBConfig
+	config     *Config
 	httpClient *http.Client
 }
 
 // NewClient 创建 CouchDB 客户端
-func NewClient(config *adminVO.CouchDBConfig) *Client {
+func NewClient(config *Config) *Client {
 	return &Client{
 		config: config,
 		httpClient: &http.Client{
@@ -215,4 +221,3 @@ func (c *Client) setBasicAuth(req *http.Request) {
 
 // 确保实现接口
 var _ syncEntity.CouchDBClient = (*Client)(nil)
-

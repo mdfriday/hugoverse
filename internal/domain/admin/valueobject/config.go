@@ -37,6 +37,11 @@ type Config struct {
 	CacheInvalidate         []string `json:"cache"`
 	BackupBasicAuthUser     string   `json:"backup_basic_auth_user"`
 	BackupBasicAuthPassword string   `json:"backup_basic_auth_password"`
+
+	URL       string `json:"url"`        // CouchDB 服务器地址 (如 http://localhost:5984)
+	AdminUser string `json:"admin_user"` // 管理员用户名
+	AdminPass string `json:"admin_pass"` // 管理员密码
+	DBPrefix  string `json:"db_prefix"`  // 用户数据库前缀 (如 userdb-)
 }
 
 func (c *Config) IsCacheInvalidate() bool {
@@ -124,6 +129,33 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 			View: editor.Input("Netlify", c, map[string]string{
 				"label":       "Netlify Token (required for deployment)",
 				"placeholder": "e.g. nfp_Z4c2Defcv57ddXcJHd626rNQKBk9VT1rbf43",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("URL", c, map[string]string{
+				"label":       "CouchDB URL",
+				"type":        "text",
+				"placeholder": "http://localhost:5984",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("AdminUser", c, map[string]string{
+				"label":       "Admin Username",
+				"type":        "text",
+				"placeholder": "admin",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("AdminPass", c, map[string]string{
+				"label": "Admin Password",
+				"type":  "password",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("DBPrefix", c, map[string]string{
+				"label":       "Database Prefix",
+				"type":        "text",
+				"placeholder": "userdb-",
 			}),
 		},
 		editor.Field{
