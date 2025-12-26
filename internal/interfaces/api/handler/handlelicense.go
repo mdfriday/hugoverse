@@ -8,6 +8,7 @@ import (
 	"github.com/mdfriday/hugoverse/pkg/timestamp"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // ========== License API Handlers ==========
@@ -57,21 +58,34 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		return
 	}
 
-	// 验证 License 是否过期
-	if license.IsExpired() {
-		s.jsonError(res, "License has expired", http.StatusForbidden)
-		return
-	}
-
 	now := timestamp.CurrentTimeMillis()
-	// 首次激活
+	
+	// 首次激活 - 设置日期
 	if !license.Activated {
 		license.Activated = true
 		license.ActivatedAt = now
+		
+		// 设置 IssueDate 为当前时间
+		if license.IssueDate == 0 {
+			license.IssueDate = now
+		}
+		
+		// 设置 ExpiryDate 为一年后
+		if license.ExpiryDate == 0 {
+			oneYearLater := time.Now().Add(365 * 24 * time.Hour)
+			license.ExpiryDate = oneYearLater.UnixMilli()
+		}
+		
 		if err := s.contentApp.UpdateLicense(license); err != nil {
 			s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
+	}
+
+	// 验证 License 是否过期
+	if license.IsExpired() {
+		s.jsonError(res, "License has expired", http.StatusForbidden)
+		return
 	}
 
 	if !license.IsValid() {
@@ -200,10 +214,11 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 	if license.GetFeatures().SyncEnabled {
 		syncAccount, _ := s.contentApp.GetSyncAccountByLicense(license.LicenseKey)
 		if syncAccount != nil {
+			// 账号已存在，返回信息（密码从 License 生成）
 			syncInfo = map[string]interface{}{
 				"email":       syncAccount.Email,
 				"db_name":     syncAccount.DBName,
-				"db_password": syncAccount.DBPassword,
+				"db_password": license.ToPassword(),
 				"db_endpoint": syncAccount.DBEndpoint,
 				"status":      syncAccount.Status,
 			}
@@ -235,36 +250,37 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 				return
 			}
 
-			account := &contentVO.SyncAccount{
-				License:    license.LicenseKey,
-				Email:      email,
-				DBName:     dbName,
-				DBEndpoint: fmt.Sprintf("%s/%s", s.adminApp.CouchDBURL(), dbName),
-				Status:     "active",
-				CreatedAt:  now,
-				Item: contentVO.Item{
-					Timestamp: now,
-					Updated:   now,
-					Namespace: "SyncAccount",
-				},
-			}
-
-			if _, err := s.contentApp.CreateSyncAccount(account); err != nil {
-				s.log.Errorf("Failed to save sync account: %v", err)
-				s.jsonError(res, "Failed to save sync account: "+err.Error(), http.StatusInternalServerError)
-				return
-			}
-
-			syncInfo = map[string]interface{}{
-				"email":       syncAccount.Email,
-				"db_name":     syncAccount.DBName,
-				"db_password": syncAccount.DBPassword,
-				"db_endpoint": syncAccount.DBEndpoint,
-				"status":      syncAccount.Status,
-			}
-			response["sync"] = syncInfo
+		account := &contentVO.SyncAccount{
+			License:    license.LicenseKey,
+			Email:      email,
+			DBName:     dbName,
+			DBPassword: password,
+			DBEndpoint: fmt.Sprintf("%s/%s", s.adminApp.CouchDBURL(), dbName),
+			Status:     "active",
+			CreatedAt:  now,
+			Item: contentVO.Item{
+				Timestamp: now,
+				Updated:   now,
+				Namespace: "SyncAccount",
+			},
 		}
+
+		if _, err := s.contentApp.CreateSyncAccount(account); err != nil {
+			s.log.Errorf("Failed to save sync account: %v", err)
+			s.jsonError(res, "Failed to save sync account: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		syncInfo = map[string]interface{}{
+			"email":       account.Email,
+			"db_name":     account.DBName,
+			"db_password": password,
+			"db_endpoint": account.DBEndpoint,
+			"status":      account.Status,
+		}
+		response["sync"] = syncInfo
 	}
+}
 
 	s.jsonResponse(res, response)
 }

@@ -9,22 +9,23 @@ import (
 
 func (s *Server) registerLicenseHandler() {
 	// Register License API endpoints
+	// 所有 License API 都需要认证 (需要 TOKEN)
 
-	// 公开接口 - License 激活 (任何人都可以访问，POST 方法)
-	s.mux.HandleFunc("/api/license/activate", s.wrapContentHandler(s.handler.ActivateLicenseHandler))
+	// License 激活 (需要认证)
+	s.mux.HandleFunc("/api/license/activate", s.wrapLicenseAuthHandler(s.handler.ActivateLicenseHandler))
 
-	// 需要认证的接口 - 管理员功能 (需要 TOKEN)
-	s.mux.HandleFunc("/api/license/info", s.wrapContentHandler(s.handler.GetLicenseInfoHandler))
+	// License 信息查询 (需要认证)
+	s.mux.HandleFunc("/api/license/info", s.wrapLicenseAuthHandler(s.handler.GetLicenseInfoHandler))
 
 	// 设备和 IP 管理 (需要认证)
-	s.mux.HandleFunc("/api/license/devices", s.wrapContentHandler(s.handler.GetDevicesHandler))
-	s.mux.HandleFunc("/api/license/ips", s.wrapContentHandler(s.handler.GetIPsHandler))
-	s.mux.HandleFunc("/api/license/device/block", s.wrapContentHandler(s.handler.BlockDeviceHandler))
-	s.mux.HandleFunc("/api/license/ip/block", s.wrapContentHandler(s.handler.BlockIPHandler))
+	s.mux.HandleFunc("/api/license/devices", s.wrapLicenseAuthHandler(s.handler.GetDevicesHandler))
+	s.mux.HandleFunc("/api/license/ips", s.wrapLicenseAuthHandler(s.handler.GetIPsHandler))
+	s.mux.HandleFunc("/api/license/device/block", s.wrapLicenseAuthHandler(s.handler.BlockDeviceHandler))
+	s.mux.HandleFunc("/api/license/ip/block", s.wrapLicenseAuthHandler(s.handler.BlockIPHandler))
 
 	// Sync 和 Publish 服务 (需要认证)
-	s.mux.HandleFunc("/api/license/sync", s.wrapContentHandler(s.handler.GetSyncInfoHandler))
-	s.mux.HandleFunc("/api/license/publish", s.wrapContentHandler(s.handler.GetPublishInfoHandler))
+	s.mux.HandleFunc("/api/license/sync", s.wrapLicenseAuthHandler(s.handler.GetSyncInfoHandler))
+	s.mux.HandleFunc("/api/license/publish", s.wrapLicenseAuthHandler(s.handler.GetPublishInfoHandler))
 
 	fmt.Println("License API registered successfully")
 }

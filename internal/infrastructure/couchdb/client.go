@@ -7,8 +7,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	syncEntity "github.com/mdfriday/hugoverse/internal/domain/sync/entity"
 )
 
 type Config struct {
@@ -138,39 +136,6 @@ func (c *Client) SetDatabasePermission(dbName, email string) error {
 	return nil
 }
 
-// GetDatabaseInfo 获取数据库信息
-func (c *Client) GetDatabaseInfo(name string) (*syncEntity.DatabaseInfo, error) {
-	url := fmt.Sprintf("%s/%s", c.config.URL, name)
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	c.setBasicAuth(req)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get database info: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("database not found: %s", name)
-	}
-
-	var info struct {
-		DocCount int   `json:"doc_count"`
-		DiskSize int64 `json:"disk_size"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return nil, fmt.Errorf("failed to decode database info: %w", err)
-	}
-
-	return &syncEntity.DatabaseInfo{
-		DocCount: info.DocCount,
-		DiskSize: info.DiskSize,
-	}, nil
-}
-
 // DeleteDatabase 删除数据库 (可选)
 func (c *Client) DeleteDatabase(name string) error {
 	url := fmt.Sprintf("%s/%s", c.config.URL, name)
@@ -218,6 +183,3 @@ func (c *Client) Ping() error {
 func (c *Client) setBasicAuth(req *http.Request) {
 	req.SetBasicAuth(c.config.AdminUser, c.config.AdminPass)
 }
-
-// 确保实现接口
-var _ syncEntity.CouchDBClient = (*Client)(nil)
