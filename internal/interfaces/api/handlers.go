@@ -12,20 +12,20 @@ func (s *Server) registerLicenseHandler() {
 	// 所有 License API 都需要认证 (需要 TOKEN)
 
 	// License 激活 (需要认证)
-	s.mux.HandleFunc("/api/license/activate", s.wrapLicenseAuthHandler(s.handler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/activate", s.wrapContentHandler(s.handler.ActivateLicenseHandler))
 
 	// License 信息查询 (需要认证)
-	s.mux.HandleFunc("/api/license/info", s.wrapLicenseAuthHandler(s.handler.GetLicenseInfoHandler))
+	s.mux.HandleFunc("/api/license/info", s.wrapContentHandler(s.handler.GetLicenseInfoHandler))
 
 	// 设备和 IP 管理 (需要认证)
-	s.mux.HandleFunc("/api/license/devices", s.wrapLicenseAuthHandler(s.handler.GetDevicesHandler))
-	s.mux.HandleFunc("/api/license/ips", s.wrapLicenseAuthHandler(s.handler.GetIPsHandler))
-	s.mux.HandleFunc("/api/license/device/block", s.wrapLicenseAuthHandler(s.handler.BlockDeviceHandler))
-	s.mux.HandleFunc("/api/license/ip/block", s.wrapLicenseAuthHandler(s.handler.BlockIPHandler))
+	s.mux.HandleFunc("/api/license/devices", s.wrapContentHandler(s.handler.GetDevicesHandler))
+	s.mux.HandleFunc("/api/license/ips", s.wrapContentHandler(s.handler.GetIPsHandler))
+	s.mux.HandleFunc("/api/license/device/block", s.wrapContentHandler(s.handler.BlockDeviceHandler))
+	s.mux.HandleFunc("/api/license/ip/block", s.wrapContentHandler(s.handler.BlockIPHandler))
 
 	// Sync 和 Publish 服务 (需要认证)
-	s.mux.HandleFunc("/api/license/sync", s.wrapLicenseAuthHandler(s.handler.GetSyncInfoHandler))
-	s.mux.HandleFunc("/api/license/publish", s.wrapLicenseAuthHandler(s.handler.GetPublishInfoHandler))
+	s.mux.HandleFunc("/api/license/sync", s.wrapContentHandler(s.handler.GetSyncInfoHandler))
+	s.mux.HandleFunc("/api/license/publish", s.wrapContentHandler(s.handler.GetPublishInfoHandler))
 
 	fmt.Println("License API registered successfully")
 }
@@ -99,10 +99,6 @@ func (s *Server) wrapSignatureHandler(handler http.HandlerFunc) http.HandlerFunc
 
 func (s *Server) wrapPublicHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(s.cors.Handle(s.auth.CheckGetMethod(handler)))
-}
-
-func (s *Server) wrapLicensePostHandler(handler http.HandlerFunc) http.HandlerFunc {
-	return s.record.Collect(s.cors.Handle(s.auth.CheckPostMethod(handler)))
 }
 
 // wrapLicenseAuthHandler wraps handlers that require authentication (TOKEN)
