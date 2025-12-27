@@ -665,15 +665,44 @@ func (h *Handler) detectPlanFromKey(key string) contentVO.LicensePlan {
 }
 
 func (h *Handler) jsonResponse(w http.ResponseWriter, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		h.log.Errorf("Error marshalling JSON: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	j, err := h.res.FmtJSON(jsonBytes)
+	if err != nil {
+		h.log.Errorf("Error formatting JSON: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	h.res.Json(w, j)
 }
 
 func (h *Handler) jsonError(w http.ResponseWriter, message string, status int) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	errorData := map[string]interface{}{
 		"success": false,
 		"error":   message,
-	})
+	}
+
+	jsonBytes, err := json.Marshal(errorData)
+	if err != nil {
+		h.log.Errorf("Error marshalling error JSON: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	j, err := h.res.FmtJSON(jsonBytes)
+	if err != nil {
+		h.log.Errorf("Error formatting error JSON: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(status)
+	h.res.Json(w, j)
 }
