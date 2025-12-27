@@ -53,10 +53,10 @@ func prepareUserTypes(c *entity.Content) {
 	//c.UserTypes["SiteResource"] = func() interface{} { return new(valueobject.SiteResource) }
 	//c.UserTypes["Deployment"] = func() interface{} { return new(valueobject.Deployment) }
 	c.UserTypes["CTA"] = func() interface{} { return new(valueobject.CTA) }
+	c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
 }
 
 func prepareAdminTypes(c *entity.Content) {
-	//c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
 	c.AdminTypes["Preview"] = func() interface{} { return new(valueobject.Preview) }
 	c.AdminTypes["MDFPreview"] = func() interface{} { return new(valueobject.MDFPreview) }
 	c.AdminTypes["Image"] = func() interface{} { return new(valueobject.Image) }

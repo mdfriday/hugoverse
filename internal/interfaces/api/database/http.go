@@ -62,7 +62,7 @@ func (d *Database) StartUserDatabase(email string) error {
 	buckets = append(buckets, d.contentBuckets...)
 	buckets = append(buckets, userBuckets...)
 
-	ud := hash.MD5(email)
+	ud := hash.MD5(email)[:10]
 	s, err := db.OpenUserStore(ud, d.dataDir, buckets)
 	if err != nil {
 		return err
