@@ -135,11 +135,11 @@ if lsof -i:1314 > /dev/null 2>&1; then
 fi
 
 print_step "清理旧数据并编译服务器"
-rm -rf data hugoverse_test
-go build -o hugoverse_test main.go 2>&1 | head -5
+rm -rf data hugov
+go build -o hugov main.go 2>&1 | head -5
 
 print_info "启动服务器..."
-nohup ./hugoverse_test serve -port 1314 > /tmp/hugoverse-real-test.log 2>&1 &
+nohup ./hugov serve -port 1314 > /tmp/hugoverse-real-test.log 2>&1 &
 SERVER_PID=$!
 print_info "服务器 PID: $SERVER_PID"
 
