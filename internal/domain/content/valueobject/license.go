@@ -195,18 +195,20 @@ func (l *License) GetFeatures() *LicenseFeatures {
 
 // CanAddDevice 检查是否可以添加新设备
 func (l *License) CanAddDevice() bool {
-	if l.MaxDevices == -1 { // 无限制
-		return true
+	if l.CurrentDevices > l.MaxDevices {
+		logger.Errorf("License %s has exceeded max devices: %d > %d", l.LicenseKey, l.CurrentDevices, l.MaxDevices)
 	}
-	return l.CurrentDevices < l.MaxDevices
+
+	return true
 }
 
 // CanAddIP 检查是否可以添加新 IP
 func (l *License) CanAddIP() bool {
-	if l.MaxIPs == -1 { // 无限制
-		return true
+	if l.CurrentIPs > l.MaxIPs {
+		logger.Errorf("License %s has exceeded max IPs: %d > %d", l.LicenseKey, l.CurrentIPs, l.MaxIPs)
 	}
-	return l.CurrentIPs < l.MaxIPs
+
+	return true
 }
 
 // ========== LicenseFeatures 权限定义 ==========
@@ -226,6 +228,9 @@ type LicenseFeatures struct {
 	MaxSites       int  `json:"max_sites"`
 	MaxStorageMB   int  `json:"max_storage"`
 	CustomDomain   bool `json:"custom_domain"`
+
+	// 有效期（天数）
+	ValidityDays int `json:"validity_days"`
 }
 
 // GetPlanFeatures 根据套餐类型获取功能特性
@@ -233,14 +238,15 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 	switch plan {
 	case PlanFree:
 		return &LicenseFeatures{
-			MaxDevices:     1,
-			MaxIPs:         1,
-			SyncEnabled:    false,
-			SyncQuotaMB:    0,
-			PublishEnabled: false,
-			MaxSites:       0,
-			MaxStorageMB:   100,
+			MaxDevices:     3,
+			MaxIPs:         3,
+			SyncEnabled:    true,
+			SyncQuotaMB:    500,
+			PublishEnabled: true,
+			MaxSites:       3,
+			MaxStorageMB:   500,
 			CustomDomain:   false,
+			ValidityDays:   30, // Free Plan: 30 天有效期
 		}
 	case PlanStarter:
 		return &LicenseFeatures{
@@ -252,6 +258,7 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 			MaxSites:       3,
 			MaxStorageMB:   1024,
 			CustomDomain:   false,
+			ValidityDays:   365, // Starter Plan: 365 天有效期
 		}
 	case PlanCreator:
 		return &LicenseFeatures{
@@ -263,6 +270,7 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 			MaxSites:       10,
 			MaxStorageMB:   5120,
 			CustomDomain:   true,
+			ValidityDays:   365, // Creator Plan: 365 天有效期
 		}
 	case PlanPro:
 		return &LicenseFeatures{
@@ -274,6 +282,7 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 			MaxSites:       50,
 			MaxStorageMB:   20480,
 			CustomDomain:   true,
+			ValidityDays:   365, // Pro Plan: 365 天有效期
 		}
 	case PlanEnterprise:
 		return &LicenseFeatures{
@@ -285,8 +294,11 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 			MaxSites:       -1, // 无限制
 			MaxStorageMB:   102400,
 			CustomDomain:   true,
+			ValidityDays:   365, // Enterprise Plan: 365 天有效期
 		}
 	default:
-		return &LicenseFeatures{}
+		return &LicenseFeatures{
+			ValidityDays: 365, // 默认 365 天
+		}
 	}
 }

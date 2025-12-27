@@ -13,7 +13,7 @@ import (
 
 // ========== License API Handlers ==========
 
-// ActivateLicenseHandler 激活 License (公开接口)
+// ActivateLicenseHandler 激活 License
 // POST /api/license/activate
 // 注意：只能激活已存在的 License，不会自动创建
 func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Request) {
@@ -59,23 +59,25 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 	}
 
 	now := timestamp.CurrentTimeMillis()
-	
+
 	// 首次激活 - 设置日期
 	if !license.Activated {
 		license.Activated = true
 		license.ActivatedAt = now
-		
+
 		// 设置 IssueDate 为当前时间
 		if license.IssueDate == 0 {
 			license.IssueDate = now
 		}
-		
-		// 设置 ExpiryDate 为一年后
+
+		// 根据 License Plan 设置 ExpiryDate
 		if license.ExpiryDate == 0 {
-			oneYearLater := time.Now().Add(365 * 24 * time.Hour)
-			license.ExpiryDate = oneYearLater.UnixMilli()
+			features := contentVO.GetPlanFeatures(license.Plan)
+			validityDays := features.ValidityDays
+			expiryTime := time.Now().Add(time.Duration(validityDays) * 24 * time.Hour)
+			license.ExpiryDate = expiryTime.UnixMilli()
 		}
-		
+
 		if err := s.contentApp.UpdateLicense(license); err != nil {
 			s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
 			return
@@ -250,37 +252,37 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 				return
 			}
 
-		account := &contentVO.SyncAccount{
-			License:    license.LicenseKey,
-			Email:      email,
-			DBName:     dbName,
-			DBPassword: password,
-			DBEndpoint: fmt.Sprintf("%s/%s", s.adminApp.CouchDBURL(), dbName),
-			Status:     "active",
-			CreatedAt:  now,
-			Item: contentVO.Item{
-				Timestamp: now,
-				Updated:   now,
-				Namespace: "SyncAccount",
-			},
-		}
+			account := &contentVO.SyncAccount{
+				License:    license.LicenseKey,
+				Email:      email,
+				DBName:     dbName,
+				DBPassword: password,
+				DBEndpoint: fmt.Sprintf("%s/%s", s.adminApp.CouchDBURL(), dbName),
+				Status:     "active",
+				CreatedAt:  now,
+				Item: contentVO.Item{
+					Timestamp: now,
+					Updated:   now,
+					Namespace: "SyncAccount",
+				},
+			}
 
-		if _, err := s.contentApp.CreateSyncAccount(account); err != nil {
-			s.log.Errorf("Failed to save sync account: %v", err)
-			s.jsonError(res, "Failed to save sync account: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
+			if _, err := s.contentApp.CreateSyncAccount(account); err != nil {
+				s.log.Errorf("Failed to save sync account: %v", err)
+				s.jsonError(res, "Failed to save sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
 
-		syncInfo = map[string]interface{}{
-			"email":       account.Email,
-			"db_name":     account.DBName,
-			"db_password": password,
-			"db_endpoint": account.DBEndpoint,
-			"status":      account.Status,
+			syncInfo = map[string]interface{}{
+				"email":       account.Email,
+				"db_name":     account.DBName,
+				"db_password": password,
+				"db_endpoint": account.DBEndpoint,
+				"status":      account.Status,
+			}
+			response["sync"] = syncInfo
 		}
-		response["sync"] = syncInfo
 	}
-}
 
 	s.jsonResponse(res, response)
 }
