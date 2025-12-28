@@ -10,8 +10,10 @@ import (
 
 var cachedHugoverseDir string
 
-const folderPreview = "preview"
+const folderPreview = "s"
 const folderPublish = "publish"
+const folderSubDomain = "mdf_sub_domain"
+const folderCustomDomain = "mdf_custom_domain"
 
 func init() {
 	cachedHugoverseDir = hugoverseDir()
@@ -55,6 +57,14 @@ func PreviewDir() string {
 
 func PreviewFolder() string {
 	return folderPreview
+}
+
+func SubDomainFolder() string {
+	return folderSubDomain
+}
+
+func CustomDomainFolder() string {
+	return folderCustomDomain
 }
 
 // PublishDir 返回用户发布内容的根目录

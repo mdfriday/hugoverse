@@ -11,6 +11,7 @@ type MDFPreview struct {
 	Item
 
 	Name  string `json:"name"`
+	Type  string `json:"type"`
 	Asset string `json:"asset"`
 	Size  string `json:"size"`
 }
@@ -24,6 +25,13 @@ func (s *MDFPreview) MarshalEditor() ([]byte, error) {
 				"label":       "Name",
 				"type":        "text",
 				"placeholder": "Enter the name here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("Type", s, map[string]string{
+				"label":       "Type",
+				"type":        "text",
+				"placeholder": "Enter the type here",
 			}),
 		},
 		editor.Field{
@@ -61,6 +69,7 @@ func (s *MDFPreview) Create(res http.ResponseWriter, req *http.Request) error {
 	// do form data validation for required fields
 	required := []string{
 		"name",
+		"type",
 		"asset",
 	}
 

@@ -7,8 +7,8 @@ import (
 	"github.com/nilslice/jwt"
 )
 
-func NewAdminServer(db repository.Repository) (*entity.Admin, error) {
-	a, err := NewAdmin(db)
+func NewAdminServer(env string, db repository.Repository) (*entity.Admin, error) {
+	a, err := NewAdmin(env, db)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +24,7 @@ func NewAdminServer(db repository.Repository) (*entity.Admin, error) {
 	return a, nil
 }
 
-func NewAdmin(repo repository.Repository) (*entity.Admin, error) {
+func NewAdmin(env string, repo repository.Repository) (*entity.Admin, error) {
 	log := loggers.NewDefault()
 
 	a := &entity.Admin{
@@ -43,7 +43,7 @@ func NewAdmin(repo repository.Repository) (*entity.Admin, error) {
 		return nil, err
 	}
 
-	a.Http = &entity.Http{Conf: a.Conf}
+	a.Http = &entity.Http{Env: env, Conf: a.Conf}
 	a.Cache = &entity.Cache{Conf: a.Conf}
 	a.Controller = &entity.Controller{Conf: a.Conf}
 	a.Client = &entity.Client{Conf: a.Conf}

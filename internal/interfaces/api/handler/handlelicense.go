@@ -3,10 +3,12 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/mdfriday/hugoverse/internal/application"
 	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	apiFrom "github.com/mdfriday/hugoverse/internal/interfaces/api/form"
 	"github.com/mdfriday/hugoverse/pkg/timestamp"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -81,6 +83,54 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		if err := s.contentApp.UpdateLicense(license); err != nil {
 			s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
 			return
+		}
+
+		// Allocate publish subdomain by default upon first activation
+		if license.GetFeatures().PublishEnabled {
+			_, err := s.contentApp.GetSubDomainByKey(s.db.UserDir())
+			if err != nil {
+				sd := &contentVO.SubDomain{
+					License: license.LicenseKey,
+					Sub:     s.db.UserDir(),
+					Item: contentVO.Item{
+						Timestamp: now,
+						Updated:   now,
+						Namespace: "SubDomain",
+					},
+				}
+
+				if _, err := s.contentApp.CreateSubDomain(sd); err != nil {
+					s.log.Errorf("Failed to create subdomain for license %s: %v", license.LicenseKey, err)
+					s.jsonError(res, "Failed to create subdomain: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				pd := &contentVO.PublishDomain{
+					License:   license.LicenseKey,
+					SubDomain: sd.Sub,
+					Folder:    s.db.UserDir(),
+					CusDomain: "",
+					Item: contentVO.Item{
+						Timestamp: now,
+						Updated:   now,
+						Namespace: "PublishDomain",
+					},
+				}
+
+				if _, err := s.contentApp.CreatePublishDomain(pd); err != nil {
+					s.log.Errorf("Failed to create publish domain for license %s: %v", license.LicenseKey, err)
+					s.jsonError(res, "Failed to create publish domain: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				if err := s.caddyClient.AddStaticSite(
+					fmt.Sprintf("%s.%s", sd.Sub, s.adminApp.Domain()),
+					filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder())); err != nil {
+					s.log.Errorf("Failed to add static site to Caddy for subdomain %s: %v", sd.Sub, err)
+					s.jsonError(res, "Failed to add static site to Caddy: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
 		}
 	}
 

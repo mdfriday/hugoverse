@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"github.com/mdfriday/hugoverse/internal/infrastructure/caddy"
 	"github.com/mdfriday/hugoverse/internal/infrastructure/couchdb"
 	"html/template"
 	"os"
@@ -44,6 +45,9 @@ type Handler struct {
 	// CouchDB client for License management
 	couchClient *couchdb.Client
 
+	// Caddy client for publish deployments
+	caddyClient *caddy.Client
+
 	deployments sync.Map // stores deployment sessions
 }
 
@@ -65,6 +69,8 @@ func New(log loggers.Logger, db *database.Database,
 		DBPrefix:  adminApp.CouchDBPrefix(),
 	})
 
+	caddyClient := caddy.NewClient(&caddy.Config{})
+
 	// 创建基本Handler结构
 	h := &Handler{
 		res: NewResponse(adminView),
@@ -82,6 +88,8 @@ func New(log loggers.Logger, db *database.Database,
 
 		// CouchDB client
 		couchClient: couchClient,
+		// Caddy client
+		caddyClient: caddyClient,
 	}
 
 	// 初始化图像处理器

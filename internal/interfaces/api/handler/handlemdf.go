@@ -80,7 +80,18 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 		return
 	}
 
-	previewDir := filepath.Join(application.PreviewDir(), preview.Name)
+	previewDir := ""
+	switch preview.Type {
+	case "share":
+		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), preview.Name)
+	case "sud":
+		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder(), preview.Name)
+	case "custom":
+		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder(), preview.Name)
+	default:
+		s.log.Error().WithFields(loggers.GetGlobalFields()).WithError(fmt.Errorf("unknown preview type: %s", preview.Type)).Logf("t: %s, id: %s", t, id)
+	}
+
 	if err := application.EnsureDirExists(previewDir); err != nil {
 		s.log.Error().
 			WithFields(loggers.GetGlobalFields()).
@@ -99,7 +110,17 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 		return
 	}
 
-	jsonBytes, err := json.Marshal("/preview/" + preview.Name)
+	link := ""
+	switch preview.Type {
+	case "share":
+		link = fmt.Sprintf("%s/%s/%s/%s", s.adminApp.BaseURL(), application.PreviewDir(), s.db.UserDir(), preview.Name)
+	case "sud":
+		link = fmt.Sprintf("%s/%s", s.adminApp.SubBaseURL(s.db.UserDir()), preview.Name) // TODO: default sub changed
+	case "custom":
+		link = s.adminApp.BaseURL() // TODO: we need to add path
+	}
+
+	jsonBytes, err := json.Marshal(link)
 	if err != nil {
 		s.log.Errorf("Error marshalling token: %v", err)
 		return

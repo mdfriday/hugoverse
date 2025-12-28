@@ -37,6 +37,17 @@ const BindAddress = "bind_addr"
 
 type ENV int
 
+func (s ENV) String() string {
+	switch s {
+	case DEV:
+		return "dev"
+	case PROD:
+		return "prod"
+	default:
+		return "unknown"
+	}
+}
+
 const (
 	DEV ENV = iota
 	PROD
@@ -102,7 +113,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 		return nil, err
 	}
 
-	server, err := factory.NewAdminServer(s.db)
+	server, err := factory.NewAdminServer(s.Env.String(), s.db)
 	if err != nil {
 		return nil, err
 	}
@@ -151,17 +162,14 @@ func (s *Server) registerHandler() {
 	s.registerUserHandler()
 }
 
-func (s *Server) ListenAndServe(env ENV, enableHttps bool) error {
-	// 保存环境变量到 Server
-	s.Env = env
-	
+func (s *Server) ListenAndServe(enableHttps bool) error {
 	if err := s.saveConfig(); err != nil {
 		s.Log.Errorln("System failed to save config. Please try to run again.", err)
 		return err
 	}
 
 	if enableHttps {
-		if err := s.enableTLS(env); err != nil {
+		if err := s.enableTLS(s.Env); err != nil {
 			s.Log.Errorln("System failed to enable TLS. Please try to run again.", err)
 			return err
 		}

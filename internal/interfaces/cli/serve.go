@@ -52,20 +52,27 @@ func (c *serverCmd) Run() error {
 	if *c.env == "prod" {
 		env = api.PROD
 	}
-	s, err := api.NewServer(setupLogger(env), setupPort(*c.port))
+	s, err := api.NewServer(setupEnv(env), setupLogger(env), setupPort(*c.port))
 	if err != nil {
 		return fmt.Errorf("error creating server: %v", err)
 	}
 	defer s.Close()
 
 	// 启动服务器并等待它完成（现在ListenAndServe会阻塞直到收到终止信号）
-	err = s.ListenAndServe(env, *c.https)
+	err = s.ListenAndServe(*c.https)
 	if err != nil {
 		s.Log.Errorf("Error with server: %v", err)
 		return err
 	}
 
 	return nil
+}
+
+func setupEnv(env api.ENV) func(s *api.Server) error {
+	return func(s *api.Server) error {
+		s.Env = env
+		return nil
+	}
 }
 
 func setupLogger(env api.ENV) func(s *api.Server) error {

@@ -27,6 +27,9 @@ func (s *Server) registerLicenseHandler() {
 	s.mux.HandleFunc("/api/license/sync", s.wrapContentHandler(s.handler.GetSyncInfoHandler))
 	s.mux.HandleFunc("/api/license/publish", s.wrapContentHandler(s.handler.GetPublishInfoHandler))
 
+	s.mux.HandleFunc("/api/mdf/preview", s.wrapContentHandler(s.handler.MDFPreviewHandler))
+	s.mux.HandleFunc("/api/mdf/preview/deploy", s.wrapContentHandler(s.handler.DeployMDFridayPreviewHandler))
+
 	fmt.Println("License API registered successfully")
 }
 
@@ -67,9 +70,6 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/theme/search", s.wrapPublicHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/theme/tags", s.wrapPublicHandler(s.handler.ContentsTagsHandler))
 	s.mux.HandleFunc("/api/theme/hash", s.wrapPublicHandler(s.handler.ThemeHashHandler))
-
-	s.mux.HandleFunc("/api/mdf/preview", s.wrapPreviewHandler(s.handler.MDFPreviewHandler))
-	s.mux.HandleFunc("/api/mdf/preview/deploy", s.wrapPreviewHandler(s.handler.DeployMDFridayPreviewHandler))
 
 	s.mux.HandleFunc("/api/search", s.wrapContentHandler(s.handler.SearchContentHandler))
 	s.mux.HandleFunc("/api/search2", s.wrapContentHandler(s.handler.SearchContentHandler2))
