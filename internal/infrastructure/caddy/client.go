@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -18,6 +19,8 @@ type Config struct {
 	BinaryPath     string `json:"binary_path"`      // Caddy 二进制文件路径
 	DefaultBackend string `json:"default_backend"`  // 默认后端服务地址 (如 127.0.0.1:1314)
 	CoreDomain     string `json:"core_domain"`      // 核心域名 (如 mdfriday.site)
+	PidFile        string `json:"pid_file"`         // PID 文件路径 (用于后台运行)
+	LogFile        string `json:"log_file"`         // 日志文件路径
 }
 
 // Client Caddy HTTP 客户端
@@ -41,6 +44,12 @@ func NewClient(config *Config) *Client {
 	}
 	if config.CoreDomain == "" {
 		config.CoreDomain = "mdfriday.site"
+	}
+	if config.PidFile == "" {
+		config.PidFile = "/tmp/caddy.pid"
+	}
+	if config.LogFile == "" {
+		config.LogFile = "/tmp/caddy.log"
 	}
 
 	return &Client{
@@ -239,6 +248,185 @@ func (c *Client) StartServer() error {
 	return fmt.Errorf("Caddy started but Admin API not responding after %d retries", maxRetries)
 }
 
+// StartServerBackground 后台启动 Caddy 服务器
+// 启动后立即返回，将 PID 写入 PidFile
+func (c *Client) StartServerBackground() error {
+	// 判断是否已经在运行
+	if c.IsRunning() {
+		return fmt.Errorf("Caddy is already running (PID file exists: %s)", c.config.PidFile)
+	}
+
+	// 配置文件路径
+	configFile := c.config.ConfigPath
+	if configFile == "" {
+		configFile = "/tmp/caddy-config.json"
+	}
+
+	// 检查是否使用现有配置文件
+	var useExistingConfig bool
+	if c.config.ConfigPath != "" && c.config.ConfigPath != "/tmp/caddy-config.json" {
+		// 用户指定了配置文件，检查是否存在
+		if _, err := os.Stat(c.config.ConfigPath); err == nil {
+			useExistingConfig = true
+		}
+	}
+
+	// 如果不使用现有配置，生成新配置
+	if !useExistingConfig {
+		// 判断是否为开发环境
+		isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
+		
+		// 开发环境配置
+		var serverConfig *ServerConfig
+		if isDev {
+			serverConfig = &ServerConfig{
+				Listen: []string{":8080"},
+				Routes: []Route{
+					{
+						ID: "core-localhost",
+						Match: []MatchHost{
+							{Host: []string{c.config.CoreDomain}},
+						},
+						Handle: []HandleConfig{
+							{
+								Handler: "reverse_proxy",
+								Upstreams: []Upstream{
+									{Dial: c.config.DefaultBackend},
+								},
+							},
+						},
+					},
+				},
+				AutoHTTPS: &AutoHTTPSConfig{
+					Disable: true,
+				},
+			}
+		} else {
+			serverConfig = &ServerConfig{
+				Listen: []string{":80", ":443"},
+				Routes: []Route{
+					{
+						ID: fmt.Sprintf("core-%s", c.config.CoreDomain),
+						Match: []MatchHost{
+							{Host: []string{c.config.CoreDomain}},
+						},
+						Handle: []HandleConfig{
+							{
+								Handler: "reverse_proxy",
+								Upstreams: []Upstream{
+									{Dial: c.config.DefaultBackend},
+								},
+							},
+						},
+					},
+				},
+			}
+		}
+		
+		// 生成配置
+		config := &CaddyConfig{
+			Admin: &AdminConfig{
+				Listen: "127.0.0.1:2019",
+			},
+			Apps: &AppsConfig{
+				HTTP: &HTTPConfig{
+					Servers: map[string]*ServerConfig{
+						"main": serverConfig,
+					},
+				},
+			},
+		}
+
+		// 配置文件
+		configJSON, err := json.MarshalIndent(config, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal config: %w", err)
+		}
+
+		// 保存配置到文件
+		if err := os.WriteFile(configFile, configJSON, 0644); err != nil {
+			return fmt.Errorf("failed to write config file: %w", err)
+		}
+	}
+
+	// 打开日志文件
+	logFile, err := os.OpenFile(c.config.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file: %w", err)
+	}
+	defer logFile.Close()
+
+	// 启动后台进程
+	cmd := exec.Command(c.config.BinaryPath, "run", "--config", configFile)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
+	
+	// 启动进程
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("failed to start Caddy: %w", err)
+	}
+
+	// 写入 PID 文件
+	pid := cmd.Process.Pid
+	if err := os.WriteFile(c.config.PidFile, []byte(fmt.Sprintf("%d", pid)), 0644); err != nil {
+		return fmt.Errorf("failed to write PID file: %w", err)
+	}
+
+	// 等待服务器就绪
+	time.Sleep(2 * time.Second)
+
+	// 验证服务器是否运行
+	maxRetries := 10
+	for i := 0; i < maxRetries; i++ {
+		if err := c.Ping(); err == nil {
+			return nil
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	
+	return fmt.Errorf("Caddy started but Admin API not responding after %d retries", maxRetries)
+}
+
+// IsRunning 检查 Caddy 是否正在运行
+func (c *Client) IsRunning() bool {
+	// 检查 PID 文件是否存在
+	pidBytes, err := os.ReadFile(c.config.PidFile)
+	if err != nil {
+		return false
+	}
+
+	// 解析 PID
+	var pid int
+	if _, err := fmt.Sscanf(string(pidBytes), "%d", &pid); err != nil {
+		return false
+	}
+
+	// 检查进程是否存在
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+
+	// 在 Unix 系统上，发送信号 0 来检查进程是否存在
+	err = process.Signal(syscall.Signal(0))
+	return err == nil
+}
+
+// GetPID 获取 Caddy 进程的 PID
+func (c *Client) GetPID() (int, error) {
+	pidBytes, err := os.ReadFile(c.config.PidFile)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read PID file: %w", err)
+	}
+
+	var pid int
+	if _, err := fmt.Sscanf(string(pidBytes), "%d", &pid); err != nil {
+		return 0, fmt.Errorf("failed to parse PID: %w", err)
+	}
+
+	return pid, nil
+}
+
 // AddStaticSite 动态添加自定义域名的静态站点
 // domain: 自定义域名 (如 example.com)
 // sitePath: 静态站点文件路径 (如 /web/sites/example-com)
@@ -426,31 +614,96 @@ func (c *Client) Ping() error {
 
 // Stop 停止 Caddy 服务器
 func (c *Client) Stop() error {
-	if c.cmd == nil || c.cmd.Process == nil {
-		return fmt.Errorf("Caddy server is not running")
+	// 先尝试从 PID 文件读取
+	pid, err := c.GetPID()
+	if err != nil {
+		// 如果没有 PID 文件，尝试使用 cmd
+		if c.cmd == nil || c.cmd.Process == nil {
+			return fmt.Errorf("Caddy server is not running (no PID file found)")
+		}
+		pid = c.cmd.Process.Pid
+	}
+
+	// 查找进程
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("failed to find Caddy process (PID: %d): %w", pid, err)
 	}
 
 	// 发送 SIGTERM 信号，优雅关闭
-	if err := c.cmd.Process.Signal(os.Interrupt); err != nil {
-		return fmt.Errorf("failed to stop Caddy: %w", err)
+	if err := process.Signal(os.Interrupt); err != nil {
+		return fmt.Errorf("failed to stop Caddy (PID: %d): %w", pid, err)
 	}
 
 	// 等待进程结束
-	done := make(chan error, 1)
-	go func() {
-		done <- c.cmd.Wait()
-	}()
+	timeout := time.After(10 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
 
-	select {
-	case <-done:
-		return nil
-	case <-time.After(10 * time.Second):
-		// 如果 10 秒后还没结束，强制杀死
-		if err := c.cmd.Process.Kill(); err != nil {
-			return fmt.Errorf("failed to kill Caddy: %w", err)
+	for {
+		select {
+		case <-timeout:
+			// 如果 10 秒后还没结束，强制杀死
+			if err := process.Kill(); err != nil {
+				return fmt.Errorf("failed to kill Caddy (PID: %d): %w", pid, err)
+			}
+			// 删除 PID 文件
+			os.Remove(c.config.PidFile)
+			return nil
+		case <-ticker.C:
+			// 检查进程是否还存在
+			if err := process.Signal(syscall.Signal(0)); err != nil {
+				// 进程已经结束
+				os.Remove(c.config.PidFile)
+				return nil
+			}
 		}
-		return nil
 	}
+}
+
+// ExportConfig 导出当前 Caddy 的配置到文件
+func (c *Client) ExportConfig(outputPath string) error {
+	// 从 Admin API 获取当前配置
+	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)
+	
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to get config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to get config (status %d)", resp.StatusCode)
+	}
+
+	// 读取配置
+	configData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read config: %w", err)
+	}
+
+	// 格式化 JSON
+	var config interface{}
+	if err := json.Unmarshal(configData, &config); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	formattedConfig, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to format config: %w", err)
+	}
+
+	// 写入文件
+	if err := os.WriteFile(outputPath, formattedConfig, 0644); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+
+	return nil
 }
 
 // GetConfig 获取当前 Caddy 配置
