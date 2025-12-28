@@ -51,6 +51,7 @@ type Server struct {
 	HttpsPort    int
 	HttpPort     int
 	DevHttpsPort int
+	Env          ENV // 环境变量：DEV 或 PROD
 
 	db       *database.Database
 	adminApp *entity.Admin
@@ -151,6 +152,9 @@ func (s *Server) registerHandler() {
 }
 
 func (s *Server) ListenAndServe(env ENV, enableHttps bool) error {
+	// 保存环境变量到 Server
+	s.Env = env
+	
 	if err := s.saveConfig(); err != nil {
 		s.Log.Errorln("System failed to save config. Please try to run again.", err)
 		return err
@@ -197,7 +201,8 @@ func (s *Server) ListenAndServe(env ENV, enableHttps bool) error {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("X-Forwarded-Proto") == "http" {
+	// 只在生产环境才强制重定向到 HTTPS
+	if s.Env == PROD && r.Header.Get("X-Forwarded-Proto") == "http" {
 		r.URL.Scheme = "https"
 		r.URL.Host = r.Host
 		http.Redirect(w, r, r.URL.String(), http.StatusFound)

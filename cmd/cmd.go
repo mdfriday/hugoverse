@@ -17,11 +17,14 @@ func New() error {
 		fmt.Println("    serve:   start the headless CMS server")
 		fmt.Println("  version:   show hugoverse command version")
 		fmt.Println("  license:   manage license keys and generation")
+		fmt.Println("    caddy:   manage Caddy web server")
 
 		fmt.Println("\nExample:")
 		fmt.Println("  hugov version")
 		fmt.Println("  hugov license keygen")
 		fmt.Println("  hugov license generate -plan lifetime -count 5")
+		fmt.Println("  hugov caddy start")
+		fmt.Println("  hugov caddy add -domain example.com -path /web/sites/example")
 	}
 
 	err := topLevel.Parse(os.Args[1:])
@@ -93,6 +96,14 @@ func New() error {
 				return err
 			}
 			if err := licenseCmd.Run(); err != nil {
+				return err
+			}
+		case "caddy":
+			caddyCmd, err := cli.NewCaddyCmd(topLevel)
+			if err != nil {
+				return err
+			}
+			if err := caddyCmd.Run(); err != nil {
 				return err
 			}
 
