@@ -16,13 +16,12 @@ func New() error {
 		fmt.Println("\nCommands:")
 		fmt.Println("    serve:   start the headless CMS server")
 		fmt.Println("  version:   show hugoverse command version")
-		fmt.Println("  license:   manage license keys and generation")
+		fmt.Println("  license:   batch generate license keys")
 		fmt.Println("    caddy:   manage Caddy web server")
 
 		fmt.Println("\nExample:")
 		fmt.Println("  hugov version")
-		fmt.Println("  hugov license keygen")
-		fmt.Println("  hugov license generate -plan lifetime -count 5")
+		fmt.Println("  hugov license generate -email admin@example.com -password 123 -plan starter -count 5")
 		fmt.Println("  hugov caddy start")
 		fmt.Println("  hugov caddy add -domain example.com -path /web/sites/example")
 	}
