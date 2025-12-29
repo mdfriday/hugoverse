@@ -53,7 +53,7 @@ func prepareUserTypes(c *entity.Content) {
 	//c.UserTypes["SiteResource"] = func() interface{} { return new(valueobject.SiteResource) }
 	//c.UserTypes["Deployment"] = func() interface{} { return new(valueobject.Deployment) }
 	c.UserTypes["CTA"] = func() interface{} { return new(valueobject.CTA) }
-	c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
+	//c.AdminTypes["Domain"] = func() interface{} { return new(valueobject.Domain) }
 }
 
 func prepareAdminTypes(c *entity.Content) {
@@ -76,6 +76,7 @@ func prepareAdminTypes(c *entity.Content) {
 	// Publish 相关
 	c.AdminTypes["PublishSite"] = func() interface{} { return new(valueobject.PublishSite) }
 	c.AdminTypes["PublishUsage"] = func() interface{} { return new(valueobject.PublishUsage) }
+	c.AdminTypes["SubDomain"] = func() interface{} { return new(valueobject.SubDomain) }
 	c.AdminTypes["PublishDomain"] = func() interface{} { return new(valueobject.PublishDomain) }
 }
 

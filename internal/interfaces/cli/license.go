@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -143,6 +144,14 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	successCount := 0
 	failCount := 0
 	generatedKeys := []string{}
+	
+	// 记录用户创建信息
+	type LicenseInfo struct {
+		Key      string
+		Email    string
+		Password string
+	}
+	licenseInfos := []LicenseInfo{}
 
 	for i := 0; i < *count; i++ {
 		// 生成 license key
@@ -150,22 +159,42 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 		
 		fmt.Printf("   [%d/%d] Creating: %s\n", i+1, *count, licenseKey)
 		
-		// 创建 license
-		err := cmd.createLicense(*apiBase, token, licenseKey, *plan, 
+		// 生成邮箱和密码
+		email := cmd.licenseKeyToEmail(licenseKey)
+		password := cmd.licenseKeyToPassword(licenseKey)
+		
+		// 步骤 1: 创建用户
+		fmt.Printf("        → Creating user: %s\n", email)
+		userErr := cmd.createUser(*apiBase, email, password)
+		if userErr != nil {
+			fmt.Printf("        ❌ User creation failed: %v\n", userErr)
+			failCount++
+			continue // 用户创建失败，跳过 license 创建
+		}
+		fmt.Printf("        ✅ User created\n")
+		
+		// 步骤 2: 创建 license
+		fmt.Printf("        → Creating license\n")
+		licenseErr := cmd.createLicense(*apiBase, token, licenseKey, *plan, 
 			planConfig.ExpiryDays, planConfig.MaxDevices, planConfig.MaxIPs)
 		
-		if err != nil {
-			fmt.Printf("        ❌ Failed: %v\n", err)
+		if licenseErr != nil {
+			fmt.Printf("        ❌ License creation failed: %v\n", licenseErr)
 			failCount++
 		} else {
-			fmt.Printf("        ✅ Created successfully\n")
+			fmt.Printf("        ✅ License created\n")
 			successCount++
 			generatedKeys = append(generatedKeys, licenseKey)
+			licenseInfos = append(licenseInfos, LicenseInfo{
+				Key:      licenseKey,
+				Email:    email,
+				Password: password,
+			})
 		}
+		fmt.Println() // 空行分隔每个 license
 	}
 
 	// 第三步：显示结果
-	fmt.Println()
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Println("📊 Generation Summary")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -174,21 +203,26 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	fmt.Printf("   Failed: %d\n", failCount)
 	fmt.Println()
 
-	if len(generatedKeys) > 0 {
-		fmt.Println("✅ Generated License Keys:")
+	if len(licenseInfos) > 0 {
+		fmt.Println("✅ Generated Licenses:")
 		fmt.Println()
-		for i, key := range generatedKeys {
-			fmt.Printf("   %d. %s\n", i+1, key)
+		for i, info := range licenseInfos {
+			fmt.Printf("   %d. License Key: %s\n", i+1, info.Key)
+			fmt.Printf("      Email:       %s\n", info.Email)
+			fmt.Printf("      Password:    %s\n", info.Password)
+			fmt.Println()
 		}
-		fmt.Println()
-		fmt.Println("💡 Tip: Save these keys in a secure location")
+		fmt.Println("💡 Tips:")
+		fmt.Println("   - Save these credentials in a secure location")
+		fmt.Println("   - Users can login with Email + Password")
+		fmt.Println("   - License Key is used for activation")
 	}
 
 	if failCount > 0 {
 		return fmt.Errorf("%d license(s) failed to create", failCount)
 	}
 
-	fmt.Println("🎉 All licenses created successfully!")
+	fmt.Println("🎉 All licenses and users created successfully!")
 	return nil
 }
 
@@ -232,6 +266,20 @@ func (cmd *licenseCmd) getPlanConfig(plan string) PlanConfig {
 	return configs[plan]
 }
 
+// licenseKeyToEmail 将 License Key 转换为邮箱
+// 规则：去掉 "MDF-" 前缀，转小写，加上 @mdfriday.com
+func (cmd *licenseCmd) licenseKeyToEmail(licenseKey string) string {
+	key := strings.ToLower(strings.TrimPrefix(licenseKey, "MDF-"))
+	return fmt.Sprintf("%s@mdfriday.com", key)
+}
+
+// licenseKeyToPassword 将 License Key 转换为密码
+// 规则：去掉 "MDF-" 前缀，转小写，base64 编码
+func (cmd *licenseCmd) licenseKeyToPassword(licenseKey string) string {
+	key := strings.ToLower(strings.TrimPrefix(licenseKey, "MDF-"))
+	return base64.StdEncoding.EncodeToString([]byte(key))
+}
+
 // generateLicenseKey 生成 license key
 // 格式：MDF-XXXX-XXXX-XXXX（全随机，避免被猜测）
 func (cmd *licenseCmd) generateLicenseKey(plan string) string {
@@ -255,6 +303,40 @@ func (cmd *licenseCmd) generateRandomString(length int) string {
 	}
 	
 	return string(result)
+}
+
+// createUser 创建用户
+func (cmd *licenseCmd) createUser(apiBase, email, password string) error {
+	userURL := fmt.Sprintf("%s/api/user", apiBase)
+	
+	// 构造表单数据
+	data := fmt.Sprintf("email=%s&password=%s", email, password)
+	
+	req, err := http.NewRequest("POST", userURL, strings.NewReader(data))
+	if err != nil {
+		return err
+	}
+	
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	
+	// 接受 200 OK 或 201 Created
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
+	}
+	
+	return nil
 }
 
 // login 登录获取 token
