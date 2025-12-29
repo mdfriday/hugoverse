@@ -307,7 +307,7 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 				Email:      email,
 				DBName:     dbName,
 				DBPassword: password,
-				DBEndpoint: fmt.Sprintf("%s/%s", s.adminApp.CouchDBURL(), dbName),
+				DBEndpoint: s.adminApp.CouchDBURL(),
 				Status:     "active",
 				CreatedAt:  now,
 				Item: contentVO.Item{
