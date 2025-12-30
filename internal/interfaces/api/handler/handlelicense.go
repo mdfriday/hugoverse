@@ -61,11 +61,13 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 	}
 
 	now := timestamp.CurrentTimeMillis()
+	firstTimeActivation := false
 
 	// 首次激活 - 设置日期
 	if !license.Activated {
 		license.Activated = true
 		license.ActivatedAt = now
+		firstTimeActivation = true
 
 		// 设置 IssueDate 为当前时间
 		if license.IssueDate == 0 {
@@ -250,6 +252,7 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 	// 返回响应
 	response := map[string]interface{}{
 		"success":     true,
+		"first_time":  firstTimeActivation,
 		"license_key": license.LicenseKey,
 		"plan":        license.Plan,
 		"activated":   license.Activated,

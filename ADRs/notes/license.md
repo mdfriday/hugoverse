@@ -18,7 +18,7 @@ curl -X POST http://127.0.0.1:1314/api/user \
 
 curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
--d "email=mdf_public@mdfriday.com&password=987123"
+-d "email=sz6f-dzl7-3rkg@mdfriday.com&password=c3o2Zi1kemw3LTNya2c="
 ```
 
 **响应示例**:
@@ -59,8 +59,8 @@ curl -v -X POST "http://127.0.0.1:1314/api/content?type=License" \
 
 ```bash
 curl -X POST http://127.0.0.1:1314/api/license/activate \
--H "Authorization: Bearer YOUR_TOKEN" \
--F "license_key=MDF-STARTER-TEST-001" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMjlUMTE6MTg6MDcuNDM2ODAyKzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJzejZmLWR6bDctM3JrZ0BtZGZyaWRheS5jb20ifQ.ZsQ-fwxHCsxgBF3G4ysG7uuGTBey2Cx-QRJm3WYjHtA" \
+-F "license_key=MDF-SZ6F-DZL7-3RKG" \
 -F "device_id=device-001" \
 -F "device_name=MacBook Pro" \
 -F "device_type=desktop"
