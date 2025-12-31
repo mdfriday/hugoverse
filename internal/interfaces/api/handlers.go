@@ -30,6 +30,9 @@ func (s *Server) registerLicenseHandler() {
 	// 硬盘用量查询 (需要认证)
 	s.mux.HandleFunc("/api/license/disks", s.wrapContentHandler(s.handler.GetDisksHandler))
 
+	// 使用量汇总查询 (需要认证)
+	s.mux.HandleFunc("/api/license/usage", s.wrapContentHandler(s.handler.GetUsageHandler))
+
 	s.mux.HandleFunc("/api/mdf/preview", s.wrapContentHandler(s.handler.MDFPreviewHandler))
 	s.mux.HandleFunc("/api/mdf/preview/deploy", s.wrapContentHandler(s.handler.DeployMDFridayPreviewHandler))
 }

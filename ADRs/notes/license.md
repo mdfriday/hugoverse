@@ -40,6 +40,11 @@ curl -X GET "http://127.0.0.1:1314/api/license/disks?key=MDF-LW2Y-WPSL-GDRJ" \
 -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMzBUMDk6MTk6NTUuNDEwOTgrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6Imx3Mnktd3BzbC1nZHJqQG1kZnJpZGF5LmNvbSJ9.dxYYdbXUPkDPCKfq-kBlwQfhN0kRFUWaFE2c4swSy4E"
 ```
 
+```bash
+curl -X GET "http://127.0.0.1:1314/api/license/usage?key=MDF-LW2Y-WPSL-GDRJ" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMzBUMDk6MTk6NTUuNDEwOTgrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6Imx3Mnktd3BzbC1nZHJqQG1kZnJpZGF5LmNvbSJ9.dxYYdbXUPkDPCKfq-kBlwQfhN0kRFUWaFE2c4swSy4E"
+```
+
 ## 2. 创建 License (使用真实 API)
 
 使用 `/api/content?type=License` 端点创建 License，需要 TOKEN 认证。

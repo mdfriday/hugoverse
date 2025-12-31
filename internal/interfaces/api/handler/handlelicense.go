@@ -594,11 +594,16 @@ func (s *Handler) GetDisksHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	s.jsonResponse(res, s.getDisksUsage(license.LicenseKey))
+}
+
+// getDisksUsage 内部方法：获取硬盘用量信息
+func (s *Handler) getDisksUsage(licenseKey string) map[string]interface{} {
 	var couchDBDiskUsageMB float64 = 0
 	var publishDiskUsageMB float64 = 0
 
 	// 获取 CouchDB 磁盘用量
-	syncAccount, err := s.contentApp.GetSyncAccountByLicense(license.LicenseKey)
+	syncAccount, err := s.contentApp.GetSyncAccountByLicense(licenseKey)
 	if err == nil && syncAccount != nil {
 		// 获取 CouchDB 数据库磁盘用量
 		diskUsageBytes, err := s.couchClient.GetDiskUsage(syncAccount.DBName)
@@ -623,14 +628,121 @@ func (s *Handler) GetDisksHandler(res http.ResponseWriter, req *http.Request) {
 	// 计算总用量
 	totalDiskUsageMB := couchDBDiskUsageMB + publishDiskUsageMB
 
-	response := map[string]interface{}{
+	return map[string]interface{}{
 		"couchdb_disk_usage": fmt.Sprintf("%.2f", couchDBDiskUsageMB),
 		"publish_disk_usage": fmt.Sprintf("%.2f", publishDiskUsageMB),
 		"total_disk_usage":   fmt.Sprintf("%.2f", totalDiskUsageMB),
 		"unit":               "MB",
 	}
+}
+
+// GetUsageHandler 获取 License 使用量汇总
+// GET /api/license/usage?key=xxx
+// 汇总 devices, ips, disks 三个接口的信息
+func (s *Handler) GetUsageHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
+	if licenseKey == "" {
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+
+	// 获取设备信息
+	devicesInfo := s.getDevicesInfo(license.LicenseKey)
+
+	// 获取 IP 信息
+	ipsInfo := s.getIPsInfo(license.LicenseKey)
+
+	// 获取硬盘用量信息
+	disksInfo := s.getDisksUsage(license.LicenseKey)
+
+	// 汇总响应
+	response := map[string]interface{}{
+		"license_key": license.LicenseKey,
+		"plan":        license.Plan,
+		"features":    license.GetFeatures(),
+		"devices":     devicesInfo,
+		"ips":         ipsInfo,
+		"disks":       disksInfo,
+	}
 
 	s.jsonResponse(res, response)
+}
+
+// getDevicesInfo 内部方法：获取设备信息
+func (s *Handler) getDevicesInfo(licenseKey string) map[string]interface{} {
+	devices, err := s.contentApp.GetDevicesByLicense(licenseKey)
+	if err != nil {
+		s.log.Errorf("Failed to get devices for license %s: %v", licenseKey, err)
+		return map[string]interface{}{
+			"devices": []map[string]interface{}{},
+			"count":   0,
+			"error":   err.Error(),
+		}
+	}
+
+	deviceList := make([]map[string]interface{}, 0, len(devices))
+	for _, device := range devices {
+		deviceList = append(deviceList, map[string]interface{}{
+			"device_id":     device.DeviceID,
+			"device_name":   device.DeviceName,
+			"device_type":   device.DeviceType,
+			"first_seen_at": device.FirstSeenAt,
+			"last_seen_at":  device.LastSeenAt,
+			"access_count":  device.AccessCount,
+			"status":        device.Status,
+		})
+	}
+
+	return map[string]interface{}{
+		"devices": deviceList,
+		"count":   len(deviceList),
+	}
+}
+
+// getIPsInfo 内部方法：获取 IP 信息
+func (s *Handler) getIPsInfo(licenseKey string) map[string]interface{} {
+	ips, err := s.contentApp.GetIPsByLicense(licenseKey)
+	if err != nil {
+		s.log.Errorf("Failed to get IPs for license %s: %v", licenseKey, err)
+		return map[string]interface{}{
+			"ips":   []map[string]interface{}{},
+			"count": 0,
+			"error": err.Error(),
+		}
+	}
+
+	ipList := make([]map[string]interface{}, 0, len(ips))
+	for _, ip := range ips {
+		ipList = append(ipList, map[string]interface{}{
+			"ip_address":    ip.IPAddress,
+			"country":       ip.Country,
+			"region":        ip.Region,
+			"city":          ip.City,
+			"first_seen_at": ip.FirstSeenAt,
+			"last_seen_at":  ip.LastSeenAt,
+			"access_count":  ip.AccessCount,
+			"status":        ip.Status,
+		})
+	}
+
+	return map[string]interface{}{
+		"ips":   ipList,
+		"count": len(ipList),
+	}
 }
 
 // dirSizeByDU 使用 du 命令获取目录大小（字节）
