@@ -29,8 +29,6 @@ func (s *Server) registerLicenseHandler() {
 
 	s.mux.HandleFunc("/api/mdf/preview", s.wrapContentHandler(s.handler.MDFPreviewHandler))
 	s.mux.HandleFunc("/api/mdf/preview/deploy", s.wrapContentHandler(s.handler.DeployMDFridayPreviewHandler))
-
-	fmt.Println("License API registered successfully")
 }
 
 func (s *Server) registerContentHandler() {
