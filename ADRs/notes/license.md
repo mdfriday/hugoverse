@@ -18,16 +18,26 @@ curl -X POST http://127.0.0.1:1314/api/user \
 
 curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
--d "email=sz6f-dzl7-3rkg@mdfriday.com&password=c3o2Zi1kemw3LTNya2c="
+-d "email=lw2y-wpsl-gdrj@mdfriday.com&password=bHcyeS13cHNsLWdkcmo="
 ```
 
 **响应示例**:
 ```json
 {
   "data": [
-    "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9..."
+    "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMzBUMDk6MTk6NTUuNDEwOTgrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6Imx3Mnktd3BzbC1nZHJqQG1kZnJpZGF5LmNvbSJ9.dxYYdbXUPkDPCKfq-kBlwQfhN0kRFUWaFE2c4swSy4E"
   ]
 }
+```
+
+```bash
+curl -X GET "http://127.0.0.1:1314/api/license/devices?key=MDF-LW2Y-WPSL-GDRJ" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMzBUMDk6MTk6NTUuNDEwOTgrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6Imx3Mnktd3BzbC1nZHJqQG1kZnJpZGF5LmNvbSJ9.dxYYdbXUPkDPCKfq-kBlwQfhN0kRFUWaFE2c4swSy4E"
+```
+
+```bash
+curl -X GET "http://127.0.0.1:1314/api/license/disks?key=MDF-LW2Y-WPSL-GDRJ" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMzBUMDk6MTk6NTUuNDEwOTgrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6Imx3Mnktd3BzbC1nZHJqQG1kZnJpZGF5LmNvbSJ9.dxYYdbXUPkDPCKfq-kBlwQfhN0kRFUWaFE2c4swSy4E"
 ```
 
 ## 2. 创建 License (使用真实 API)

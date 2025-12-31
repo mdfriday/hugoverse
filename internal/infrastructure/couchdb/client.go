@@ -180,6 +180,68 @@ func (c *Client) Ping() error {
 	return nil
 }
 
+// DatabaseInfo CouchDB 数据库信息
+type DatabaseInfo struct {
+	DBName       string `json:"db_name"`
+	DocCount     int64  `json:"doc_count"`
+	DocDelCount  int64  `json:"doc_del_count"`
+	DiskSize     int64  `json:"sizes_file"`     // 文件大小（字节）
+	ExternalSize int64  `json:"sizes_external"` // 外部大小（字节）
+	ActiveSize   int64  `json:"sizes_active"`   // 活跃大小（字节）
+}
+
+// GetDiskUsage 获取数据库磁盘使用量（返回字节数）
+func (c *Client) GetDiskUsage(dbName string) (int64, error) {
+	url := fmt.Sprintf("%s/%s", c.config.URL, dbName)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+	c.setBasicAuth(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get database info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return 0, fmt.Errorf("failed to get database info (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	// CouchDB 返回的 JSON 格式
+	// {
+	//   "db_name": "...",
+	//   "sizes": {
+	//     "file": 12345,
+	//     "external": 12345,
+	//     "active": 12345
+	//   },
+	//   ...
+	// }
+	var result struct {
+		DBName string `json:"db_name"`
+		Sizes  struct {
+			File     int64 `json:"file"`
+			External int64 `json:"external"`
+			Active   int64 `json:"active"`
+		} `json:"sizes"`
+	}
+
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// 返回文件大小作为磁盘使用量
+	return result.Sizes.File, nil
+}
+
 func (c *Client) setBasicAuth(req *http.Request) {
 	req.SetBasicAuth(c.config.AdminUser, c.config.AdminPass)
 }

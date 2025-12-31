@@ -3,14 +3,18 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/mdfriday/hugoverse/internal/application"
 	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	apiFrom "github.com/mdfriday/hugoverse/internal/interfaces/api/form"
 	"github.com/mdfriday/hugoverse/pkg/timestamp"
 	"net/http"
-	"path/filepath"
-	"strings"
-	"time"
 )
 
 // ========== License API Handlers ==========
@@ -565,6 +569,103 @@ func (s *Handler) GetPublishInfoHandler(res http.ResponseWriter, req *http.Reque
 	}
 
 	s.jsonResponse(res, response)
+}
+
+// GetDisksHandler 获取硬盘用量信息
+// GET /api/license/disks?key=xxx
+func (s *Handler) GetDisksHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodGet {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
+	if licenseKey == "" {
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+
+	var couchDBDiskUsageMB float64 = 0
+	var publishDiskUsageMB float64 = 0
+
+	// 获取 CouchDB 磁盘用量
+	syncAccount, err := s.contentApp.GetSyncAccountByLicense(license.LicenseKey)
+	if err == nil && syncAccount != nil {
+		// 获取 CouchDB 数据库磁盘用量
+		diskUsageBytes, err := s.couchClient.GetDiskUsage(syncAccount.DBName)
+		if err != nil {
+			s.log.Errorf("Failed to get CouchDB disk usage for %s: %v", syncAccount.DBName, err)
+			// 不返回错误，继续获取其他信息
+		} else {
+			couchDBDiskUsageMB = float64(diskUsageBytes) / (1024 * 1024)
+		}
+	}
+
+	// 获取 Publish 目录磁盘用量
+	publishDir := filepath.Join(application.PreviewDir(), s.db.UserDir())
+	publishDiskUsageBytes, err := dirSizeByDU(publishDir)
+	if err != nil {
+		s.log.Errorf("Failed to get publish disk usage for %s: %v", publishDir, err)
+		// 不返回错误，继续
+	} else {
+		publishDiskUsageMB = float64(publishDiskUsageBytes) / (1024 * 1024)
+	}
+
+	// 计算总用量
+	totalDiskUsageMB := couchDBDiskUsageMB + publishDiskUsageMB
+
+	response := map[string]interface{}{
+		"couchdb_disk_usage": fmt.Sprintf("%.2f", couchDBDiskUsageMB),
+		"publish_disk_usage": fmt.Sprintf("%.2f", publishDiskUsageMB),
+		"total_disk_usage":   fmt.Sprintf("%.2f", totalDiskUsageMB),
+		"unit":               "MB",
+	}
+
+	s.jsonResponse(res, response)
+}
+
+// dirSizeByDU 使用 du 命令获取目录大小（字节）
+func dirSizeByDU(path string) (int64, error) {
+	var cmd *exec.Cmd
+
+	switch runtime.GOOS {
+	case "linux":
+		cmd = exec.Command("du", "-sb", path)
+	case "darwin":
+		cmd = exec.Command("du", "-sk", path)
+	default:
+		return 0, fmt.Errorf("unsupported OS: %s", runtime.GOOS)
+	}
+
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, err
+	}
+
+	fields := strings.Fields(string(out))
+	if len(fields) == 0 {
+		return 0, fmt.Errorf("unexpected du output: %s", out)
+	}
+
+	size, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	if runtime.GOOS == "darwin" {
+		size *= 1024
+	}
+
+	return size, nil
 }
 
 // BlockDeviceHandler 封禁设备
