@@ -264,7 +264,7 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		"features":    license.GetFeatures(),
 		"user": map[string]interface{}{
 			"email":    license.ToEmail(),
-			"user_dir": license.ToUserDir(),
+			"user_dir": s.db.UserDir(),
 		},
 	}
 
