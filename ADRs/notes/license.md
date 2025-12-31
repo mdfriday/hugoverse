@@ -45,6 +45,63 @@ curl -X GET "http://127.0.0.1:1314/api/license/usage?key=MDF-LW2Y-WPSL-GDRJ" \
 -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDEtMzBUMDk6MTk6NTUuNDEwOTgrMDg6MDAiLCJpYXQiOm51bGwsImlzcyI6bnVsbCwianRpIjpudWxsLCJuYmYiOm51bGwsInN1YiI6bnVsbCwidXNlciI6Imx3Mnktd3BzbC1nZHJqQG1kZnJpZGF5LmNvbSJ9.dxYYdbXUPkDPCKfq-kBlwQfhN0kRFUWaFE2c4swSy4E"
 ```
 
+```json
+{
+  "data": [
+    {
+      "devices": {
+        "count": 1,
+        "devices": [
+          {
+            "access_count": 1,
+            "device_id": "07b01e5863e18ef3509b495cf9e163024062a8762be89f2f3cb4b35741c9f7ec",
+            "device_name": "Obsidian on macOS",
+            "device_type": "desktop",
+            "first_seen_at": 1767077775108,
+            "last_seen_at": 1767077775108,
+            "status": "active"
+          }
+        ]
+      },
+      "disks": {
+        "couchdb_disk_usage": "0.16",
+        "publish_disk_usage": "6.00",
+        "total_disk_usage": "6.16",
+        "unit": "MB"
+      },
+      "features": {
+        "max_devices": 3,
+        "max_ips": 3,
+        "sync_enabled": true,
+        "sync_quota": 500,
+        "publish_enabled": true,
+        "max_sites": 3,
+        "max_storage": 1024,
+        "custom_domain": false,
+        "validity_days": 365
+      },
+      "ips": {
+        "count": 1,
+        "ips": [
+          {
+            "access_count": 1,
+            "city": "",
+            "country": "",
+            "first_seen_at": 1767077775108,
+            "ip_address": "127.0.0.1",
+            "last_seen_at": 1767077775108,
+            "region": "",
+            "status": "active"
+          }
+        ]
+      },
+      "license_key": "MDF-LW2Y-WPSL-GDRJ",
+      "plan": "starter"
+    }
+  ]
+}
+```
+
 ## 2. 创建 License (使用真实 API)
 
 使用 `/api/content?type=License` 端点创建 License，需要 TOKEN 认证。
