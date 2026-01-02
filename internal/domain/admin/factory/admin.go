@@ -49,6 +49,7 @@ func NewAdmin(env string, repo repository.Repository) (*entity.Admin, error) {
 	a.Client = &entity.Client{Conf: a.Conf}
 	a.Netlify = &entity.Netlify{Conf: a.Conf}
 	a.CouchDB = &entity.CouchDB{Conf: a.Conf}
+	a.Caddy = &entity.Caddy{Env: env, Conf: a.Conf}
 
 	return a, nil
 }

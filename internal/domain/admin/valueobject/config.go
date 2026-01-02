@@ -38,10 +38,15 @@ type Config struct {
 	BackupBasicAuthUser     string   `json:"backup_basic_auth_user"`
 	BackupBasicAuthPassword string   `json:"backup_basic_auth_password"`
 
+	// CouchDB 配置
 	URL       string `json:"url"`        // CouchDB 服务器地址 (如 http://localhost:5984)
 	AdminUser string `json:"admin_user"` // 管理员用户名
 	AdminPass string `json:"admin_pass"` // 管理员密码
 	DBPrefix  string `json:"db_prefix"`  // 用户数据库前缀 (如 userdb-)
+
+	// Caddy 配置
+	CaddyHost string `json:"caddy_host"` // Caddy 服务器地址 (如 localhost)
+	CaddyPort string `json:"caddy_port"` // Caddy 服务器端口 (如 8080)
 }
 
 func (c *Config) IsCacheInvalidate() bool {
@@ -132,6 +137,21 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
+			View: editor.Input("BindAddress", c, map[string]string{
+				"type": "hidden",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("HTTPPort", c, map[string]string{
+				"type": "hidden",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("HTTPSPort", c, map[string]string{
+				"type": "hidden",
+			}),
+		},
+		editor.Field{
 			View: editor.Input("URL", c, map[string]string{
 				"label":       "CouchDB URL",
 				"type":        "text",
@@ -159,18 +179,17 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
-			View: editor.Input("BindAddress", c, map[string]string{
-				"type": "hidden",
+			View: editor.Input("CaddyHost", c, map[string]string{
+				"label":       "Caddy Service Host",
+				"type":        "text",
+				"placeholder": "localhost",
 			}),
 		},
 		editor.Field{
-			View: editor.Input("HTTPPort", c, map[string]string{
-				"type": "hidden",
-			}),
-		},
-		editor.Field{
-			View: editor.Input("HTTPSPort", c, map[string]string{
-				"type": "hidden",
+			View: editor.Input("CaddyPort", c, map[string]string{
+				"label":       "Caddy Service Port",
+				"type":        "text",
+				"placeholder": "8080",
 			}),
 		},
 		editor.Field{

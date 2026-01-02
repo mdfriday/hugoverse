@@ -7,32 +7,32 @@ type Http struct {
 	Conf *valueobject.Config
 }
 
-func (a *Admin) Host() string {
-	if a.Env == "dev" {
+func (h *Http) Host() string {
+	if h.Env == "dev" {
 		return "site.test"
 	}
-	return a.Conf.Domain
+	return h.Conf.Domain
 }
 
-func (a *Admin) Domain() string       { return a.Conf.Domain }
-func (a *Admin) HttpPort() string     { return a.Conf.HTTPPort }
-func (a *Admin) DevHttpsPort() string { return a.Conf.DevHTTPSPort }
-func (a *Admin) BindAddress() string  { return a.Conf.BindAddress }
+func (h *Http) Domain() string       { return h.Conf.Domain }
+func (h *Http) HttpPort() string     { return h.Conf.HTTPPort }
+func (h *Http) DevHttpsPort() string { return h.Conf.DevHTTPSPort }
+func (h *Http) BindAddress() string  { return h.Conf.BindAddress }
 
-func (a *Admin) DevPort() string {
+func (h *Http) DevPort() string {
 	return "8080"
 }
 
-func (a *Admin) SubBaseURL(sub string) string {
-	if a.Env == "dev" {
-		return "http://" + sub + "." + a.Host() + ":" + a.DevPort()
+func (h *Http) SubBaseURL(sub string) string {
+	if h.Env == "dev" {
+		return "http://" + sub + "." + h.Host() + ":" + h.DevPort()
 	}
-	return "https://" + sub + "." + a.Host()
+	return "https://" + sub + "." + h.Host()
 }
 
-func (a *Admin) BaseURL() string {
-	if a.Env == "dev" {
-		return "http://" + a.Host() + ":" + a.DevPort()
+func (h *Http) BaseURL() string {
+	if h.Env == "dev" {
+		return "http://" + h.Host() + ":" + h.DevPort()
 	}
-	return "https://" + a.Host()
+	return "https://" + h.Host()
 }

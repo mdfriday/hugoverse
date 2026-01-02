@@ -21,6 +21,7 @@ type Admin struct {
 	*Client
 	*Netlify
 	*CouchDB
+	*Caddy
 
 	Log loggers.Logger
 }
