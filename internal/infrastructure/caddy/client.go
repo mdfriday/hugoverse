@@ -18,6 +18,7 @@ type Config struct {
 	ConfigPath     string `json:"config_path"`      // Caddy 配置文件路径
 	BinaryPath     string `json:"binary_path"`      // Caddy 二进制文件路径
 	DefaultBackend string `json:"default_backend"`  // 默认后端服务地址 (如 127.0.0.1:1314)
+	CouchDBBackend string `json:"couchdb_backend"`  // CouchDB 服务地址 (如 127.0.0.1:5984)
 	CoreDomain     string `json:"core_domain"`      // 核心域名 (如 mdfriday.site)
 	PidFile        string `json:"pid_file"`         // PID 文件路径 (用于后台运行)
 	LogFile        string `json:"log_file"`         // 日志文件路径
@@ -41,6 +42,9 @@ func NewClient(config *Config) *Client {
 	}
 	if config.DefaultBackend == "" {
 		config.DefaultBackend = "127.0.0.1:1314"
+	}
+	if config.CouchDBBackend == "" {
+		config.CouchDBBackend = "127.0.0.1:5984"
 	}
 	if config.CoreDomain == "" {
 		config.CoreDomain = "mdfriday.site"
@@ -128,7 +132,7 @@ type CertificateInfo struct {
 }
 
 // StartServer 启动 Caddy 服务器
-// 使用默认配置启动，包含核心域名的反向代理
+// 使用默认配置启动，包含核心域名和 CouchDB 的反向代理
 func (c *Client) StartServer() error {
 	// 判断是否为开发环境（localhost 或 127.0.0.1）
 	isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
@@ -154,6 +158,20 @@ func (c *Client) StartServer() error {
 						},
 					},
 				},
+				{
+					ID: "couchdb-localhost",
+					Match: []MatchHost{
+						{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+					},
+					Handle: []HandleConfig{
+						{
+							Handler: "reverse_proxy",
+							Upstreams: []Upstream{
+								{Dial: c.config.CouchDBBackend},
+							},
+						},
+					},
+				},
 			},
 			AutoHTTPS: &AutoHTTPSConfig{
 				Disable: true, // 开发环境禁用自动 HTTPS
@@ -174,6 +192,20 @@ func (c *Client) StartServer() error {
 							Handler: "reverse_proxy",
 							Upstreams: []Upstream{
 								{Dial: c.config.DefaultBackend},
+							},
+						},
+					},
+				},
+				{
+					ID: fmt.Sprintf("couchdb-%s", c.config.CoreDomain),
+					Match: []MatchHost{
+						{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+					},
+					Handle: []HandleConfig{
+						{
+							Handler: "reverse_proxy",
+							Upstreams: []Upstream{
+								{Dial: c.config.CouchDBBackend},
 							},
 						},
 					},
@@ -296,6 +328,20 @@ func (c *Client) StartServerBackground() error {
 							},
 						},
 					},
+					{
+						ID: "couchdb-localhost",
+						Match: []MatchHost{
+							{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+						},
+						Handle: []HandleConfig{
+							{
+								Handler: "reverse_proxy",
+								Upstreams: []Upstream{
+									{Dial: c.config.CouchDBBackend},
+								},
+							},
+						},
+					},
 				},
 				AutoHTTPS: &AutoHTTPSConfig{
 					Disable: true,
@@ -315,6 +361,20 @@ func (c *Client) StartServerBackground() error {
 								Handler: "reverse_proxy",
 								Upstreams: []Upstream{
 									{Dial: c.config.DefaultBackend},
+								},
+							},
+						},
+					},
+					{
+						ID: fmt.Sprintf("couchdb-%s", c.config.CoreDomain),
+						Match: []MatchHost{
+							{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+						},
+						Handle: []HandleConfig{
+							{
+								Handler: "reverse_proxy",
+								Upstreams: []Upstream{
+									{Dial: c.config.CouchDBBackend},
 								},
 							},
 						},

@@ -32,11 +32,27 @@ func NewCaddyCmd(parent *flag.FlagSet) (*caddyCmd, error) {
 		fmt.Println("  cert     Check SSL certificate status")
 		fmt.Println("  export   Export current Caddy configuration to file")
 		fmt.Println("\nExamples:")
+		fmt.Println("  # Start in development mode (localhost, HTTP only)")
 		fmt.Println("  hugov caddy start")
+		fmt.Println("  hugov caddy start -domain localhost -backend 127.0.0.1:1314 -couchdb 127.0.0.1:5984")
+		fmt.Println("")
+		fmt.Println("  # Start in production mode (HTTPS auto-enabled)")
+		fmt.Println("  hugov caddy start -domain mdfriday.site")
+		fmt.Println("")
+		fmt.Println("  # Add a static site")
 		fmt.Println("  hugov caddy add -domain example.com -path /web/sites/example-com")
+		fmt.Println("")
+		fmt.Println("  # Check certificate status")
 		fmt.Println("  hugov caddy cert -domain example.com")
+		fmt.Println("")
+		fmt.Println("  # Export configuration")
 		fmt.Println("  hugov caddy export -output /tmp/caddy-backup.json")
+		fmt.Println("")
+		fmt.Println("  # Stop server")
 		fmt.Println("  hugov caddy stop")
+		fmt.Println("\nDefault Routes:")
+		fmt.Println("  - {domain}       → Default backend (Hugo/App server)")
+		fmt.Println("  - cdb.{domain}   → CouchDB service")
 	}
 
 	err := nCmd.cmd.Parse(parent.Args()[1:])
@@ -86,6 +102,7 @@ func (c *caddyCmd) runStart(args []string) error {
 	startCmd := flag.NewFlagSet("start", flag.ExitOnError)
 	adminAPI := startCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
 	backend := startCmd.String("backend", "127.0.0.1:1314", "Default backend service")
+	couchdb := startCmd.String("couchdb", "127.0.0.1:5984", "CouchDB backend service")
 	domain := startCmd.String("domain", "localhost", "Core domain (use localhost for dev)")
 	configPath := startCmd.String("config", "/tmp/caddy-config.json", "Caddy config file path")
 	pidFile := startCmd.String("pid", "/tmp/caddy.pid", "PID file path")
@@ -98,6 +115,7 @@ func (c *caddyCmd) runStart(args []string) error {
 	fmt.Println("🚀 Starting Caddy server in background...")
 	fmt.Printf("   Admin API: %s\n", *adminAPI)
 	fmt.Printf("   Backend: %s\n", *backend)
+	fmt.Printf("   CouchDB: %s\n", *couchdb)
 	fmt.Printf("   Domain: %s\n", *domain)
 	fmt.Printf("   Config: %s\n", *configPath)
 	fmt.Printf("   PID File: %s\n", *pidFile)
@@ -116,6 +134,7 @@ func (c *caddyCmd) runStart(args []string) error {
 		AdminAPI:       *adminAPI,
 		BinaryPath:     "caddy",
 		DefaultBackend: *backend,
+		CouchDBBackend: *couchdb,
 		CoreDomain:     *domain,
 		ConfigPath:     *configPath,
 		PidFile:        *pidFile,
@@ -145,11 +164,17 @@ func (c *caddyCmd) runStart(args []string) error {
 	
 	// 根据环境显示不同的访问信息
 	if isDev {
-		fmt.Printf("   Access via: http://%s:8080\n", *domain)
-		fmt.Println("   Note: Development mode uses port 8080 (no sudo required)")
+		fmt.Println("\n📡 Access URLs:")
+		fmt.Printf("   Core Service:  http://%s:8080\n", *domain)
+		fmt.Printf("   CouchDB:       http://cdb.%s:8080\n", *domain)
+		fmt.Println("\n   Note: Development mode uses port 8080 (no sudo required)")
 	} else {
-		fmt.Printf("   HTTP: http://%s\n", *domain)
-		fmt.Printf("   HTTPS: https://%s (certificate will be auto-issued)\n", *domain)
+		fmt.Println("\n📡 Access URLs:")
+		fmt.Printf("   Core Service (HTTP):   http://%s\n", *domain)
+		fmt.Printf("   Core Service (HTTPS):  https://%s (certificate will be auto-issued)\n", *domain)
+		fmt.Printf("   CouchDB (HTTP):        http://cdb.%s\n", *domain)
+		fmt.Printf("   CouchDB (HTTPS):       https://cdb.%s (certificate will be auto-issued)\n", *domain)
+		fmt.Println("\n   Note: SSL certificates will be automatically issued by Let's Encrypt")
 	}
 	
 	fmt.Println("\n💡 Tips:")
