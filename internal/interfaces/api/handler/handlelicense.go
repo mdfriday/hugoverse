@@ -314,7 +314,7 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 				Email:      email,
 				DBName:     dbName,
 				DBPassword: password,
-				DBEndpoint: s.adminApp.CouchDBURL(),
+				DBEndpoint: fmt.Sprintf("https://cdb.%s", s.adminApp.Domain()),
 				Status:     "active",
 				CreatedAt:  now,
 				Item: contentVO.Item{
