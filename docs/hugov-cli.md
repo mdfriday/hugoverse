@@ -8,6 +8,7 @@
 []: go/bin/hugoverse caddy start -domain mdfriday.sunwei.xyz
 []: go/bin/hugoverse caddy add -domain sunwei.xyz -path /web/sunwei-xyz-raw
 []: go/bin/hugoverse caddy add -domain notes.sunwei.xyz -path /web/sunwei-xyz-raw/notes
+[]: go/bin/hugoverse license generate -email email@sunwei.xyz -password pwd -plan starter -count 5
 
 
 ```shell
