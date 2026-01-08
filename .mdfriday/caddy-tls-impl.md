@@ -114,10 +114,14 @@ DomainChecker --> DomainCheckResult : produces
    - 支持 DNS-01（平台域名）和 HTTP-01（用户域名）两种 challenge 类型
 
 3. **业务逻辑**:
-   - 平台域名在启动时预置 DNS-01 策略
-   - 用户自定义域名添加前必须通过预检测
-   - 单域名处理模式（每个 License 最多一个自定义域名）
-   - 每个自定义域名独立的 TLS policy（policy ID = `custom-{domain}`）
+   - **平台域名（Wildcard 证书）**:
+     - 启动时预置 DNS-01 策略（mdfriday.com + *.mdfriday.com）
+     - 所有 subdomain 自动使用 Wildcard 证书，无需单独申请
+     - subdomain 只需添加 route（AddStaticSite）
+   - **用户自定义域名（HTTP-01 证书）**:
+     - 添加前必须通过域名预检测（DNS + HTTP）
+     - 每个 License 最多一个自定义域名
+     - 需要单独的 TLS policy（policy ID = `custom-{domain}`）
 
 ### Structure
 
@@ -272,10 +276,41 @@ type DomainCheckResult struct {
 2. **File**: `internal/infrastructure/caddy/client.go`
 3. **Modify**: `StartServerBackground` 方法
 4. **Logic**:
-   - 如果非开发环境且配置了 DNSPodToken:
-     - 生成平台域名策略 (CoreDomain + *.CoreDomain)
-     - 使用 DNS-01 challenge
-     - 包含在初始配置中
+   ```
+   生产环境启动流程（CoreDomain != localhost/127.0.0.1）：
+   
+   1. 生成 HTTP 配置（routes）
+   2. 检查是否配置了 DNSPodToken
+   3. 如果配置了 DNSPodToken：
+      a. 调用 tls.GeneratePlatformTLSConfig(coreDomain, dnspodToken) 生成 TLS 配置
+      b. 将 TLS 配置包含在 AppsConfig 中
+   4. 生成完整的 CaddyConfig（含 TLS）
+   5. 写入配置文件并启动 Caddy
+   
+   TLS 配置包含：
+   - policy ID: "platform-wildcard"
+   - subjects: ["{coreDomain}", "*.{coreDomain}"]
+   - issuers: ACME with DNS-01 challenge (dnspod provider)
+   
+   效果：
+   - mdfriday.com 和 *.mdfriday.com 自动获取 Wildcard 证书
+   - 所有 subdomain（如 user123.mdfriday.com）使用 Wildcard 证书
+   - 无需为 subdomain 单独申请证书
+   - 只有用户自定义域名（如 hello.com）需要单独申请 HTTP-01 证书
+   ```
+
+#### 扩展 tls.go - TLS 配置生成函数
+1. **Responsibility**: 提供 TLS 配置生成的统一入口
+2. **File**: `internal/infrastructure/caddy/tls.go`
+3. **New Functions**:
+   ```go
+   // GeneratePlatformTLSConfig 生成平台域名的 TLS 配置
+   // 用于启动时配置 Wildcard 证书
+   func GeneratePlatformTLSConfig(coreDomain, dnspodToken string) *TLSConfig
+   
+   // IsPlatformDomain 判断域名是否为平台域名（使用 Wildcard 证书）
+   func IsPlatformDomain(domain, coreDomain string) bool
+   ```
 
 #### 扩展 AppsConfig 结构体
 1. **Responsibility**: 支持 TLS App 配置
@@ -498,4 +533,69 @@ internal/interfaces/cli/
 - [ ] 单元测试：DomainChecker
 - [ ] 集成测试：TLS 策略管理
 - [ ] 端到端测试：完整域名添加流程
+
+---
+
+## 域名分类与处理逻辑
+
+### 域名类型判断
+
+```
+IsPlatformDomain(domain, coreDomain) -> bool
+
+示例（coreDomain = "mdfriday.com"）：
+- "mdfriday.com"           -> true  (平台主域名)
+- "user123.mdfriday.com"   -> true  (平台 subdomain)
+- "cdb.mdfriday.com"       -> true  (平台服务域名)
+- "hello.com"              -> false (用户自定义域名)
+- "www.hello.com"          -> false (用户自定义域名)
+```
+
+### 证书获取方式
+
+| 域名类型 | 示例 | 证书获取方式 | TLS Policy |
+|---------|------|------------|-----------|
+| 平台主域名 | mdfriday.com | Wildcard 证书 (DNS-01) | platform-wildcard |
+| 平台 subdomain | user123.mdfriday.com | Wildcard 证书 (DNS-01) | platform-wildcard |
+| 用户自定义域名 | hello.com | 单域名证书 (HTTP-01) | custom-hello-com |
+
+### 添加域名的处理流程
+
+```
+AddStaticSite(domain, sitePath)
+  - 仅添加 HTTP route
+  - 用于平台 subdomain（使用 Wildcard 证书）
+  - 不创建 TLS policy
+
+AddCustomDomain(domain, sitePath, skipCheck)
+  - 检查 IsPlatformDomain(domain, coreDomain)
+  - 如果是平台域名：调用 AddStaticSite（无需 TLS policy）
+  - 如果是自定义域名：
+    1. 域名预检测（DNS + HTTP）
+    2. 添加 HTTP route
+    3. 创建 HTTP-01 TLS policy
+```
+
+### 启动时的 TLS 配置
+
+```
+StartServerBackground()
+  - 开发环境 (localhost/127.0.0.1)：不配置 TLS
+  - 生产环境：
+    1. 检查 DNSPodToken 是否配置
+    2. 如果配置了：调用 GeneratePlatformTLSConfig()
+    3. 生成包含 TLS 的完整 CaddyConfig
+    4. Wildcard 证书覆盖：{coreDomain} + *.{coreDomain}
+```
+
+### 关键代码位置
+
+| 功能 | 文件 | 函数 |
+|-----|------|-----|
+| TLS 配置结构 | tls.go | TLSConfig, AutomationPolicy |
+| 平台 TLS 配置生成 | tls.go | GeneratePlatformTLSConfig() |
+| 平台域名判断 | tls.go | IsPlatformDomain() |
+| 启动时配置 TLS | client.go | StartServerBackground() |
+| 添加自定义域名 | client.go | AddCustomDomain() |
+| 域名预检测 | domain_checker.go | CheckAll() |
 

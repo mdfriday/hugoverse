@@ -27,8 +27,10 @@ func NewCaddyCmd(parent *flag.FlagSet) (*caddyCmd, error) {
 		fmt.Println("  start    Start Caddy server in background")
 		fmt.Println("  stop     Stop Caddy server")
 		fmt.Println("  status   Check Caddy server status")
-		fmt.Println("  add      Add a static site")
-		fmt.Println("  remove   Remove a static site")
+		fmt.Println("  add      Add a static site (subdomain)")
+		fmt.Println("  remove   Remove a static site (subdomain)")
+		fmt.Println("  domain   Custom domain management (with TLS)")
+		fmt.Println("  tls      TLS policy management")
 		fmt.Println("  cert     Check SSL certificate status")
 		fmt.Println("  export   Export current Caddy configuration to file")
 		fmt.Println("\nExamples:")
@@ -36,11 +38,21 @@ func NewCaddyCmd(parent *flag.FlagSet) (*caddyCmd, error) {
 		fmt.Println("  hugov caddy start")
 		fmt.Println("  hugov caddy start -domain localhost -backend 127.0.0.1:1314 -couchdb 127.0.0.1:5984")
 		fmt.Println("")
-		fmt.Println("  # Start in production mode (HTTPS auto-enabled)")
-		fmt.Println("  hugov caddy start -domain mdfriday.site")
+		fmt.Println("  # Start in production mode (HTTPS with Wildcard certificate)")
+		fmt.Println("  hugov caddy start -domain mdfriday.site -dnspod-token $DNSPOD_API_TOKEN -server-ip 1.2.3.4")
 		fmt.Println("")
-		fmt.Println("  # Add a static site")
-		fmt.Println("  hugov caddy add -domain example.com -path /web/sites/example-com")
+		fmt.Println("  # Add a subdomain static site")
+		fmt.Println("  hugov caddy add -domain user123.mdfriday.site -path /web/sites/user123")
+		fmt.Println("")
+		fmt.Println("  # Custom domain management (with TLS)")
+		fmt.Println("  hugov caddy domain check -domain hello.com -server-ip 1.2.3.4")
+		fmt.Println("  hugov caddy domain add -domain hello.com -path /web/sites/hello-com")
+		fmt.Println("  hugov caddy domain remove -domain hello.com")
+		fmt.Println("")
+		fmt.Println("  # TLS policy management")
+		fmt.Println("  hugov caddy tls policies")
+		fmt.Println("  hugov caddy tls add-policy -domain hello.com")
+		fmt.Println("  hugov caddy tls remove-policy -id custom-hello-com")
 		fmt.Println("")
 		fmt.Println("  # Check certificate status")
 		fmt.Println("  hugov caddy cert -domain example.com")
@@ -87,6 +99,10 @@ func (c *caddyCmd) Run() error {
 		return c.runAdd(args[1:])
 	case "remove":
 		return c.runRemove(args[1:])
+	case "domain":
+		return c.runDomain(args[1:])
+	case "tls":
+		return c.runTLS(args[1:])
 	case "cert":
 		return c.runCert(args[1:])
 	case "export":
@@ -107,6 +123,8 @@ func (c *caddyCmd) runStart(args []string) error {
 	configPath := startCmd.String("config", "/tmp/caddy-config.json", "Caddy config file path")
 	pidFile := startCmd.String("pid", "/tmp/caddy.pid", "PID file path")
 	logFile := startCmd.String("log", "/tmp/caddy.log", "Log file path")
+	dnspodToken := startCmd.String("dnspod-token", "", "DNSPod API token for wildcard certificate")
+	serverIP := startCmd.String("server-ip", "", "Server public IP for domain verification")
 
 	if err := startCmd.Parse(args); err != nil {
 		return err
@@ -120,13 +138,23 @@ func (c *caddyCmd) runStart(args []string) error {
 	fmt.Printf("   Config: %s\n", *configPath)
 	fmt.Printf("   PID File: %s\n", *pidFile)
 	fmt.Printf("   Log File: %s\n", *logFile)
+	if *serverIP != "" {
+		fmt.Printf("   Server IP: %s\n", *serverIP)
+	}
+	if *dnspodToken != "" {
+		fmt.Println("   DNSPod Token: ***configured***")
+	}
 
 	// 判断是否为开发环境
 	isDev := *domain == "localhost" || *domain == "127.0.0.1"
 	if isDev {
 		fmt.Println("   Mode: Development (HTTP only, no sudo required)")
 	} else {
-		fmt.Println("   Mode: Production (HTTPS auto-enabled)")
+		if *dnspodToken != "" {
+			fmt.Println("   Mode: Production (HTTPS with Wildcard certificate)")
+		} else {
+			fmt.Println("   Mode: Production (HTTPS auto-enabled)")
+		}
 	}
 
 	// 创建 Caddy 客户端配置
@@ -139,6 +167,8 @@ func (c *caddyCmd) runStart(args []string) error {
 		ConfigPath:     *configPath,
 		PidFile:        *pidFile,
 		LogFile:        *logFile,
+		DNSPodToken:    *dnspodToken,
+		ServerIP:       *serverIP,
 	}
 
 	client := caddy.NewClient(config)
@@ -474,6 +504,369 @@ func (c *caddyCmd) runExport(args []string) error {
 	fmt.Println("   - Use this file to restore configuration later")
 	fmt.Printf("   - Start with config: hugov caddy start -config %s\n", *output)
 	fmt.Printf("   - Or use: caddy run --config %s\n", *output)
+
+	return nil
+}
+
+// ==================== Domain 子命令 ====================
+
+// runDomain 处理 domain 子命令
+func (c *caddyCmd) runDomain(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("Usage: hugov caddy domain [subcommand]")
+		fmt.Println("\nSubcommands:")
+		fmt.Println("  check   Check domain readiness (DNS + HTTP)")
+		fmt.Println("  add     Add custom domain with TLS")
+		fmt.Println("  remove  Remove custom domain")
+		fmt.Println("  list    List all custom domains")
+		return fmt.Errorf("please specify a subcommand")
+	}
+
+	subCommand := args[0]
+	switch subCommand {
+	case "check":
+		return c.runDomainCheck(args[1:])
+	case "add":
+		return c.runDomainAdd(args[1:])
+	case "remove":
+		return c.runDomainRemove(args[1:])
+	case "list":
+		return c.runDomainList(args[1:])
+	default:
+		return fmt.Errorf("unknown domain subcommand: %s", subCommand)
+	}
+}
+
+// runDomainCheck 检查域名就绪状态
+func (c *caddyCmd) runDomainCheck(args []string) error {
+	checkCmd := flag.NewFlagSet("check", flag.ExitOnError)
+	domain := checkCmd.String("domain", "", "Domain name to check (required)")
+	serverIP := checkCmd.String("server-ip", "", "Server public IP for verification")
+
+	if err := checkCmd.Parse(args); err != nil {
+		return err
+	}
+
+	if *domain == "" {
+		return fmt.Errorf("domain is required. Use: hugov caddy domain check -domain hello.com")
+	}
+
+	fmt.Printf("🔍 Checking domain readiness: %s\n", *domain)
+	if *serverIP != "" {
+		fmt.Printf("   Expected IP: %s\n", *serverIP)
+	}
+
+	// 创建域名检查器
+	checker := caddy.NewDomainChecker(*serverIP)
+	result := checker.CheckAll(*domain)
+
+	// 显示结果
+	fmt.Println("\n📋 Check Results:")
+	
+	// DNS 检查
+	if result.DNSValid {
+		fmt.Printf("   ✅ DNS Valid: true\n")
+		fmt.Printf("      Resolved IPs: %v\n", result.ResolvedIPs)
+	} else {
+		fmt.Printf("   ❌ DNS Valid: false\n")
+		if len(result.ResolvedIPs) > 0 {
+			fmt.Printf("      Resolved IPs: %v\n", result.ResolvedIPs)
+		}
+	}
+
+	// HTTP 检查
+	if result.HTTPReachable {
+		fmt.Printf("   ✅ HTTP Reachable: true\n")
+	} else {
+		fmt.Printf("   ❌ HTTP Reachable: false\n")
+	}
+
+	// 总体结果
+	if result.Ready {
+		fmt.Println("\n✅ Domain is ready for HTTPS certificate issuance")
+		fmt.Println("   You can now add this domain: hugov caddy domain add -domain " + *domain + " -path /path/to/site")
+	} else {
+		fmt.Printf("\n❌ Domain is not ready: %s\n", result.Error)
+		fmt.Println("\n💡 Tips:")
+		if !result.DNSValid {
+			fmt.Println("   1. Configure your domain DNS to point to this server")
+			if *serverIP != "" {
+				fmt.Printf("      Add an A record: %s -> %s\n", *domain, *serverIP)
+			}
+			fmt.Println("   2. Wait for DNS propagation (may take a few minutes)")
+		}
+		if !result.HTTPReachable {
+			fmt.Println("   - Ensure the server is accessible on port 80")
+			fmt.Println("   - Check firewall settings")
+		}
+	}
+
+	return nil
+}
+
+// runDomainAdd 添加自定义域名
+func (c *caddyCmd) runDomainAdd(args []string) error {
+	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
+	adminAPI := addCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+	domain := addCmd.String("domain", "", "Custom domain name (required)")
+	path := addCmd.String("path", "", "Static site path (required)")
+	serverIP := addCmd.String("server-ip", "", "Server public IP for verification")
+	skipCheck := addCmd.Bool("skip-check", false, "Skip domain readiness check (dev only)")
+
+	if err := addCmd.Parse(args); err != nil {
+		return err
+	}
+
+	if *domain == "" {
+		return fmt.Errorf("domain is required. Use: hugov caddy domain add -domain hello.com -path /path/to/site")
+	}
+	if *path == "" {
+		return fmt.Errorf("path is required. Use: hugov caddy domain add -domain hello.com -path /path/to/site")
+	}
+
+	fmt.Printf("🌐 Adding custom domain: %s -> %s\n", *domain, *path)
+	if *skipCheck {
+		fmt.Println("   ⚠️  Skipping domain readiness check (development mode)")
+	}
+
+	config := &caddy.Config{
+		AdminAPI: *adminAPI,
+		ServerIP: *serverIP,
+	}
+	client := caddy.NewClient(config)
+
+	// 添加自定义域名（包含 TLS 策略）
+	if err := client.AddCustomDomain(*domain, *path, *skipCheck); err != nil {
+		return fmt.Errorf("failed to add custom domain: %w", err)
+	}
+
+	fmt.Println("✅ Custom domain added successfully")
+	fmt.Printf("   Domain: %s\n", *domain)
+	fmt.Printf("   Path: %s\n", *path)
+	fmt.Println("\n⏳ SSL certificate will be auto-issued by Let's Encrypt")
+	fmt.Println("   This usually takes a few seconds to a minute.")
+	fmt.Println("   Check status with: hugov caddy cert -domain " + *domain)
+
+	return nil
+}
+
+// runDomainRemove 移除自定义域名
+func (c *caddyCmd) runDomainRemove(args []string) error {
+	removeCmd := flag.NewFlagSet("remove", flag.ExitOnError)
+	adminAPI := removeCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+	domain := removeCmd.String("domain", "", "Custom domain name (required)")
+
+	if err := removeCmd.Parse(args); err != nil {
+		return err
+	}
+
+	if *domain == "" {
+		return fmt.Errorf("domain is required. Use: hugov caddy domain remove -domain hello.com")
+	}
+
+	fmt.Printf("🗑️  Removing custom domain: %s\n", *domain)
+
+	config := &caddy.Config{
+		AdminAPI: *adminAPI,
+	}
+	client := caddy.NewClient(config)
+
+	// 移除自定义域名（包含 TLS 策略）
+	if err := client.RemoveCustomDomain(*domain); err != nil {
+		return fmt.Errorf("failed to remove custom domain: %w", err)
+	}
+
+	fmt.Println("✅ Custom domain removed successfully")
+
+	return nil
+}
+
+// runDomainList 列出所有自定义域名
+func (c *caddyCmd) runDomainList(args []string) error {
+	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
+	adminAPI := listCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+
+	if err := listCmd.Parse(args); err != nil {
+		return err
+	}
+
+	fmt.Println("📋 Custom domains (TLS policies):")
+
+	config := &caddy.Config{
+		AdminAPI: *adminAPI,
+	}
+	client := caddy.NewClient(config)
+
+	policies, err := client.GetTLSPolicies()
+	if err != nil {
+		return fmt.Errorf("failed to get TLS policies: %w", err)
+	}
+
+	if len(policies) == 0 {
+		fmt.Println("   No TLS policies configured")
+		return nil
+	}
+
+	customCount := 0
+	for _, policy := range policies {
+		// 只显示自定义域名的策略（ID 以 custom- 开头）
+		if len(policy.ID) > 7 && policy.ID[:7] == "custom-" {
+			customCount++
+			fmt.Printf("\n   %d. Policy: %s\n", customCount, policy.ID)
+			fmt.Printf("      Domains: %v\n", policy.Subjects)
+		}
+	}
+
+	if customCount == 0 {
+		fmt.Println("   No custom domains configured")
+		fmt.Println("\n💡 Add a custom domain:")
+		fmt.Println("   hugov caddy domain add -domain hello.com -path /path/to/site")
+	} else {
+		fmt.Printf("\n   Total: %d custom domain(s)\n", customCount)
+	}
+
+	return nil
+}
+
+// ==================== TLS 子命令 ====================
+
+// runTLS 处理 tls 子命令
+func (c *caddyCmd) runTLS(args []string) error {
+	if len(args) == 0 {
+		fmt.Println("Usage: hugov caddy tls [subcommand]")
+		fmt.Println("\nSubcommands:")
+		fmt.Println("  policies       List all TLS policies")
+		fmt.Println("  add-policy     Add a TLS policy")
+		fmt.Println("  remove-policy  Remove a TLS policy")
+		return fmt.Errorf("please specify a subcommand")
+	}
+
+	subCommand := args[0]
+	switch subCommand {
+	case "policies":
+		return c.runTLSPolicies(args[1:])
+	case "add-policy":
+		return c.runTLSAddPolicy(args[1:])
+	case "remove-policy":
+		return c.runTLSRemovePolicy(args[1:])
+	default:
+		return fmt.Errorf("unknown tls subcommand: %s", subCommand)
+	}
+}
+
+// runTLSPolicies 查看所有 TLS 策略
+func (c *caddyCmd) runTLSPolicies(args []string) error {
+	policiesCmd := flag.NewFlagSet("policies", flag.ExitOnError)
+	adminAPI := policiesCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+
+	if err := policiesCmd.Parse(args); err != nil {
+		return err
+	}
+
+	fmt.Println("📜 TLS Automation Policies:")
+
+	config := &caddy.Config{
+		AdminAPI: *adminAPI,
+	}
+	client := caddy.NewClient(config)
+
+	policies, err := client.GetTLSPolicies()
+	if err != nil {
+		return fmt.Errorf("failed to get TLS policies: %w", err)
+	}
+
+	if len(policies) == 0 {
+		fmt.Println("   No TLS policies configured")
+		return nil
+	}
+
+	for i, policy := range policies {
+		fmt.Printf("\n   %d. ID: %s\n", i+1, policy.ID)
+		fmt.Printf("      Subjects: %v\n", policy.Subjects)
+		if len(policy.Issuers) > 0 {
+			issuer := policy.Issuers[0]
+			fmt.Printf("      Module: %s\n", issuer.Module)
+			if issuer.Challenges != nil {
+				if issuer.Challenges.DNS != nil {
+					fmt.Printf("      Challenge: DNS-01 (%s)\n", issuer.Challenges.DNS.Provider.Name)
+				} else if issuer.Challenges.HTTP != nil {
+					fmt.Println("      Challenge: HTTP-01")
+				}
+			}
+		}
+	}
+
+	fmt.Printf("\n   Total: %d policy/policies\n", len(policies))
+
+	return nil
+}
+
+// runTLSAddPolicy 添加 TLS 策略
+func (c *caddyCmd) runTLSAddPolicy(args []string) error {
+	addCmd := flag.NewFlagSet("add-policy", flag.ExitOnError)
+	adminAPI := addCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+	domain := addCmd.String("domain", "", "Domain name (required)")
+	challenge := addCmd.String("challenge", "http", "Challenge type: http or dns")
+
+	if err := addCmd.Parse(args); err != nil {
+		return err
+	}
+
+	if *domain == "" {
+		return fmt.Errorf("domain is required. Use: hugov caddy tls add-policy -domain hello.com")
+	}
+
+	fmt.Printf("➕ Adding TLS policy for: %s\n", *domain)
+	fmt.Printf("   Challenge: %s\n", *challenge)
+
+	config := &caddy.Config{
+		AdminAPI: *adminAPI,
+	}
+	client := caddy.NewClient(config)
+
+	var policy caddy.AutomationPolicy
+	if *challenge == "http" {
+		policy = caddy.NewSingleDomainHTTP01Policy(*domain)
+	} else {
+		return fmt.Errorf("DNS challenge requires dnspod-token configuration. Use 'domain add' instead")
+	}
+
+	if err := client.AddTLSPolicy(policy); err != nil {
+		return fmt.Errorf("failed to add TLS policy: %w", err)
+	}
+
+	fmt.Println("✅ TLS policy added successfully")
+	fmt.Printf("   Policy ID: %s\n", policy.ID)
+
+	return nil
+}
+
+// runTLSRemovePolicy 移除 TLS 策略
+func (c *caddyCmd) runTLSRemovePolicy(args []string) error {
+	removeCmd := flag.NewFlagSet("remove-policy", flag.ExitOnError)
+	adminAPI := removeCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+	policyID := removeCmd.String("id", "", "Policy ID (required)")
+
+	if err := removeCmd.Parse(args); err != nil {
+		return err
+	}
+
+	if *policyID == "" {
+		return fmt.Errorf("policy ID is required. Use: hugov caddy tls remove-policy -id custom-hello-com")
+	}
+
+	fmt.Printf("🗑️  Removing TLS policy: %s\n", *policyID)
+
+	config := &caddy.Config{
+		AdminAPI: *adminAPI,
+	}
+	client := caddy.NewClient(config)
+
+	if err := client.RemoveTLSPolicy(*policyID); err != nil {
+		return fmt.Errorf("failed to remove TLS policy: %w", err)
+	}
+
+	fmt.Println("✅ TLS policy removed successfully")
 
 	return nil
 }

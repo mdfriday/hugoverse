@@ -22,13 +22,16 @@ type Config struct {
 	CoreDomain     string `json:"core_domain"`      // 核心域名 (如 mdfriday.site)
 	PidFile        string `json:"pid_file"`         // PID 文件路径 (用于后台运行)
 	LogFile        string `json:"log_file"`         // 日志文件路径
+	DNSPodToken    string `json:"dnspod_token"`     // DNSPod API Token (用于 DNS-01 challenge)
+	ServerIP       string `json:"server_ip"`        // 服务器公网 IP (用于域名检查)
 }
 
 // Client Caddy HTTP 客户端
 type Client struct {
 	config     *Config
 	httpClient *http.Client
-	cmd        *exec.Cmd // 用于管理 Caddy 进程
+	cmd        *exec.Cmd       // 用于管理 Caddy 进程
+	checker    *DomainChecker  // 域名检查器
 }
 
 // NewClient 创建 Caddy 客户端
@@ -56,12 +59,19 @@ func NewClient(config *Config) *Client {
 		config.LogFile = "/tmp/caddy.log"
 	}
 
-	return &Client{
+	client := &Client{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
 	}
+
+	// 如果配置了 ServerIP，初始化域名检查器
+	if config.ServerIP != "" {
+		client.checker = NewDomainChecker(config.ServerIP)
+	}
+
+	return client
 }
 
 // CaddyConfig Caddy 完整配置结构
@@ -78,6 +88,7 @@ type AdminConfig struct {
 // AppsConfig Caddy Apps 配置
 type AppsConfig struct {
 	HTTP *HTTPConfig `json:"http"`
+	TLS  *TLSConfig  `json:"tls,omitempty"`
 }
 
 // HTTPConfig HTTP App 配置
@@ -395,6 +406,15 @@ func (c *Client) StartServerBackground() error {
 					},
 				},
 			},
+		}
+
+		// 生产环境：添加平台域名的 Wildcard TLS 配置
+		// 这样所有 subdomain（如 user123.mdfriday.com）都会使用 Wildcard 证书
+		if !isDev && c.config.DNSPodToken != "" {
+			tlsConfig := GeneratePlatformTLSConfig(c.config.CoreDomain, c.config.DNSPodToken)
+			if tlsConfig != nil {
+				config.Apps.TLS = tlsConfig
+			}
 		}
 
 		// 配置文件
@@ -811,5 +831,215 @@ func sanitizeDomainForID(domain string) string {
 		}
 	}
 	return result
+}
+
+// ==================== TLS 策略管理方法 ====================
+
+// AddTLSPolicy 添加 TLS 证书策略
+func (c *Client) AddTLSPolicy(policy AutomationPolicy) error {
+	url := fmt.Sprintf("%s/config/apps/tls/automation/policies", c.config.AdminAPI)
+
+	data, err := json.Marshal(policy)
+	if err != nil {
+		return fmt.Errorf("failed to marshal policy: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to add TLS policy: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to add TLS policy (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// GetTLSPolicies 获取所有 TLS 证书策略
+func (c *Client) GetTLSPolicies() ([]AutomationPolicy, error) {
+	url := fmt.Sprintf("%s/config/apps/tls/automation/policies", c.config.AdminAPI)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get TLS policies: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// TLS 配置可能不存在
+		return []AutomationPolicy{}, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("failed to get TLS policies (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	var policies []AutomationPolicy
+	if err := json.Unmarshal(body, &policies); err != nil {
+		return nil, fmt.Errorf("failed to parse policies: %w", err)
+	}
+
+	return policies, nil
+}
+
+// RemoveTLSPolicy 移除 TLS 证书策略
+func (c *Client) RemoveTLSPolicy(policyID string) error {
+	url := fmt.Sprintf("%s/id/%s", c.config.AdminAPI, policyID)
+
+	req, err := http.NewRequest(http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to remove TLS policy: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to remove TLS policy (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// ==================== 域名检查方法 ====================
+
+// CheckDomainReadiness 检查域名是否就绪（供 API 层调用）
+func (c *Client) CheckDomainReadiness(domain string) (*DomainCheckResult, error) {
+	if c.checker == nil {
+		// 如果没有配置 ServerIP，创建临时检查器
+		checker := NewDomainChecker("")
+		return checker.CheckAll(domain), nil
+	}
+	return c.checker.CheckAll(domain), nil
+}
+
+// ==================== 自定义域名管理方法 ====================
+
+// AddCustomDomain 添加用户自定义域名（单域名模式）
+// 每个 License 只能有一个自定义域名，因此每次只处理单个域名
+// skipCheck: 是否跳过域名预检测（仅开发环境使用）
+//
+// 注意：此方法仅用于用户自定义域名（如 hello.com），不适用于平台 subdomain。
+// 平台 subdomain（如 user123.mdfriday.com）应使用 AddStaticSite，因为它们使用 Wildcard 证书。
+func (c *Client) AddCustomDomain(domain, sitePath string, skipCheck bool) error {
+	// 0. 检查是否为平台域名（使用 Wildcard 证书）
+	// 平台 subdomain 应使用 AddStaticSite，不需要单独的 TLS policy
+	if IsPlatformDomain(domain, c.config.CoreDomain) {
+		// 如果是平台域名，只添加 route，不添加 TLS policy
+		return c.AddStaticSite(domain, sitePath)
+	}
+
+	// 1. 域名预检测（如果启用）
+	if !skipCheck && c.checker != nil {
+		result := c.checker.CheckAll(domain)
+		if !result.Ready {
+			return fmt.Errorf("domain not ready: %s", result.Error)
+		}
+	}
+
+	// 2. 添加 HTTP route
+	if err := c.AddStaticSite(domain, sitePath); err != nil {
+		return fmt.Errorf("failed to add static site: %w", err)
+	}
+
+	// 3. 创建并添加 TLS policy（单域名，使用 HTTP-01 challenge）
+	policy := NewSingleDomainHTTP01Policy(domain)
+
+	if err := c.AddTLSPolicy(policy); err != nil {
+		// 回滚：移除已添加的 route
+		c.RemoveStaticSite(domain)
+		return fmt.Errorf("failed to add TLS policy: %w", err)
+	}
+
+	return nil
+}
+
+// RemoveCustomDomain 移除用户自定义域名
+// 注意：平台 subdomain 应使用 RemoveStaticSite
+func (c *Client) RemoveCustomDomain(domain string) error {
+	// 检查是否为平台域名
+	if IsPlatformDomain(domain, c.config.CoreDomain) {
+		// 平台域名只需移除 route，没有单独的 TLS policy
+		return c.RemoveStaticSite(domain)
+	}
+
+	var lastErr error
+
+	// 1. 移除 HTTP route
+	if err := c.RemoveStaticSite(domain); err != nil {
+		// 记录错误但继续尝试移除 TLS policy
+		lastErr = fmt.Errorf("failed to remove static site: %w", err)
+	}
+
+	// 2. 移除 TLS policy（仅非平台域名需要）
+	policyID := "custom-" + sanitizeDomainForID(domain)
+	if err := c.RemoveTLSPolicy(policyID); err != nil {
+		if lastErr != nil {
+			return fmt.Errorf("multiple errors: %v; %w", lastErr, err)
+		}
+		lastErr = fmt.Errorf("failed to remove TLS policy: %w", err)
+	}
+
+	return lastErr
+}
+
+// ==================== 平台域名 Wildcard 证书 ====================
+
+// SetupPlatformWildcard 设置平台域名的 Wildcard 证书
+// 使用 DNS-01 challenge
+func (c *Client) SetupPlatformWildcard() error {
+	if c.config.DNSPodToken == "" {
+		return fmt.Errorf("DNSPodToken is required for wildcard certificate")
+	}
+	if c.config.CoreDomain == "" || c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1" {
+		return fmt.Errorf("valid CoreDomain is required for wildcard certificate")
+	}
+
+	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "dnspod", c.config.DNSPodToken)
+	return c.AddTLSPolicy(policy)
+}
+
+// ==================== 配置生成辅助方法 ====================
+
+// GenerateTLSConfig 生成 TLS 配置（用于启动时）
+func (c *Client) GenerateTLSConfig() *TLSConfig {
+	// 如果没有配置 DNSPodToken 或是开发环境，不生成 TLS 配置
+	isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
+	if c.config.DNSPodToken == "" || isDev {
+		return nil
+	}
+
+	// 生成平台域名的 Wildcard 策略
+	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "dnspod", c.config.DNSPodToken)
+
+	return &TLSConfig{
+		Automation: &AutomationConfig{
+			Policies: []AutomationPolicy{wildcardPolicy},
+		},
+	}
 }
 
