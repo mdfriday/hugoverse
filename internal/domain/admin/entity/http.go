@@ -18,6 +18,7 @@ func (h *Http) Domain() string       { return h.Conf.Domain }
 func (h *Http) HttpPort() string     { return h.Conf.HTTPPort }
 func (h *Http) DevHttpsPort() string { return h.Conf.DevHTTPSPort }
 func (h *Http) BindAddress() string  { return h.Conf.BindAddress }
+func (h *Http) ServerIP() string     { return h.Conf.ServerIP }
 
 func (h *Http) DevPort() string {
 	return "8080"

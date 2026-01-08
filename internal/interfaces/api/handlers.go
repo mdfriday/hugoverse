@@ -35,6 +35,17 @@ func (s *Server) registerLicenseHandler() {
 
 	s.mux.HandleFunc("/api/mdf/preview", s.wrapContentHandler(s.handler.MDFPreviewHandler))
 	s.mux.HandleFunc("/api/mdf/preview/deploy", s.wrapContentHandler(s.handler.DeployMDFridayPreviewHandler))
+
+	// SubDomain 管理
+	s.mux.HandleFunc("/api/license/subdomain", s.wrapContentHandler(s.handler.GetSubDomainHandler))
+	s.mux.HandleFunc("/api/license/subdomain/check", s.wrapContentHandler(s.handler.CheckSubDomainHandler))
+	s.mux.HandleFunc("/api/license/subdomain/update", s.wrapContentHandler(s.handler.UpdateSubDomainHandler))
+
+	// 自定义域名管理
+	s.mux.HandleFunc("/api/license/domain/check", s.wrapContentHandler(s.handler.CheckDomainHandler))
+	s.mux.HandleFunc("/api/license/domain/add", s.wrapContentHandler(s.handler.AddDomainHandler))
+	s.mux.HandleFunc("/api/license/domain/remove", s.wrapContentHandler(s.handler.RemoveDomainHandler))
+	s.mux.HandleFunc("/api/license/domains", s.wrapContentHandler(s.handler.GetDomainsHandler))
 }
 
 func (s *Server) registerContentHandler() {

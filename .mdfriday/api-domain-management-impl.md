@@ -5,6 +5,18 @@
 ### Requirements Anchoring
 基于已实现的 `caddy-tls-impl.md` 功能，梳理和扩展 API 后端服务，支持用户修改 subdomain、添加/移除自定义域名，并确保与现有 License 激活流程的兼容性。
 
+### 已实现的 Caddy Client 方法（caddy-tls-impl.md）
+
+| 方法 | 说明 |
+|-----|-----|
+| `AddStaticSite(domain, sitePath)` | 添加静态站点路由（用于 subdomain） |
+| `RemoveStaticSite(domain)` | 移除静态站点路由 |
+| `AddCustomDomain(domain, sitePath, skipCheck)` | 添加自定义域名（自动判断是否为平台域名，含 TLS policy） |
+| `RemoveCustomDomain(domain)` | 移除自定义域名（自动判断是否为平台域名，含 TLS policy） |
+| `CheckDomainReadiness(domain)` | 检查域名就绪状态（DNS + HTTP） |
+| `GetCertificateStatus(domain)` | 获取域名证书状态 |
+| `IsPlatformDomain(domain, coreDomain)` | 判断是否为平台域名（使用 Wildcard 证书） |
+
 ---
 
 ## 1. 现有实现分析
@@ -83,11 +95,16 @@ caddyClient := caddy.NewClient(&caddy.Config{})  // 使用默认配置
 #### Handler 初始化调整
 
 ```go
-// handler.go - 需要从 adminApp 读取 ServerIP 配置
+// handler.go - 需要从 adminApp 读取 ServerIP 和 CoreDomain 配置
 caddyClient := caddy.NewClient(&caddy.Config{
-    ServerIP: adminApp.ServerIP(),  // 新增：用于域名预检测
+    ServerIP:   adminApp.ServerIP(),  // 用于域名预检测
+    CoreDomain: adminApp.Domain(),    // 用于 IsPlatformDomain 判断
 })
 ```
+
+**说明**:
+- `ServerIP`: 用于 `CheckDomainReadiness` 验证 DNS 解析是否指向服务器
+- `CoreDomain`: 用于 `IsPlatformDomain` 判断域名是否为平台 subdomain（使用 Wildcard 证书）
 
 **依赖**: `adminApp` 需要新增 `ServerIP()` 方法，从配置中读取服务器公网 IP。
 
@@ -100,6 +117,8 @@ type AdminConfig struct {
     ServerIP string `json:"server_ip"` // 服务器公网 IP，用于域名检测
 }
 ```
+
+**注意**: `Domain()` 方法已存在，返回平台核心域名（如 mdfriday.com）。
 
 ---
 
@@ -445,10 +464,11 @@ domain=hello.com
 1. 验证 License 有效性
 2. 获取 PublishDomain 记录
 3. 验证域名属于该用户 (CusDomain == domain)
-4. 调用 caddyClient.RemoveStaticSite(domain)
-5. 移除对应的 TLS policy（如果有）
-6. 更新 PublishDomain 记录 (CusDomain = "")
-7. 返回成功
+4. 调用 caddyClient.RemoveCustomDomain(domain)
+   - 自动移除 HTTP route
+   - 自动移除 TLS policy（如果是非平台域名）
+5. 更新 PublishDomain 记录 (CusDomain = "")
+6. 返回成功
 ```
 
 **响应**:
@@ -597,6 +617,7 @@ class CaddyClient {
     +AddStaticSite(domain, path): error
     +RemoveStaticSite(domain): error
     +AddCustomDomain(domain, path, skipCheck): error
+    +RemoveCustomDomain(domain): error
     +CheckDomainReadiness(domain): DomainCheckResult
     +GetCertificateStatus(domain): CertificateInfo
 }
@@ -708,7 +729,7 @@ License --> PlanFeatures : has
 2. **File**: `internal/interfaces/api/handler/handledomain.go`
 3. **Logic**:
    - 验证域名属于用户
-   - 移除 Caddy 路由和 TLS policy
+   - 调用 `caddyClient.RemoveCustomDomain(domain)`（自动处理路由和 TLS policy）
    - 清空 PublishDomain.CusDomain
    - **注意**：不删除文件夹
 
@@ -811,10 +832,17 @@ internal/domain/admin/
   - 自定义域名内容：`PreviewDir/UserDir/mdf_custom_domain/`
 
 ### Caddy 配置
-- 确保 `caddy start` 时已预置 Wildcard 策略
-- 子域名路由使用 `AddStaticSite`（无 TLS policy）
+- 确保 `caddy start` 时已预置 Wildcard 策略（`-dnspod-token` 参数）
+- 子域名路由使用 `AddStaticSite`（无 TLS policy，使用 Wildcard 证书）
 - 自定义域名使用 `AddCustomDomain`（含 HTTP-01 TLS policy）
 - sitePath 指向用户固定的文件夹
+
+### 平台域名自动检测
+`AddCustomDomain` 已内置 `IsPlatformDomain` 检测：
+- 如果域名是平台 subdomain（如 `user123.mdfriday.com`），自动降级为 `AddStaticSite`
+- 如果域名是用户自定义域名（如 `hello.com`），添加 HTTP route + HTTP-01 TLS policy
+
+这意味着 API 层无需额外判断，直接调用 `AddCustomDomain` 即可。
 
 ### 向后兼容
 - 现有 License 激活流程不变

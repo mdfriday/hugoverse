@@ -69,7 +69,10 @@ func New(log loggers.Logger, db *database.Database,
 		DBPrefix:  adminApp.CouchDBPrefix(),
 	})
 
-	caddyClient := caddy.NewClient(&caddy.Config{})
+	caddyClient := caddy.NewClient(&caddy.Config{
+		ServerIP:   adminApp.ServerIP(),
+		CoreDomain: adminApp.Domain(),
+	})
 
 	// 创建基本Handler结构
 	h := &Handler{

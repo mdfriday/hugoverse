@@ -47,6 +47,9 @@ type Config struct {
 	// Caddy 配置
 	CaddyHost string `json:"caddy_host"` // Caddy 服务器地址 (如 localhost)
 	CaddyPort string `json:"caddy_port"` // Caddy 服务器端口 (如 8080)
+
+	// 服务器 IP 配置
+	ServerIP string `json:"server_ip"` // 服务器公网 IP (用于域名检测)
 }
 
 func (c *Config) IsCacheInvalidate() bool {
@@ -190,6 +193,13 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 				"label":       "Caddy Service Port",
 				"type":        "text",
 				"placeholder": "8080",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("ServerIP", c, map[string]string{
+				"label":       "Server Public IP (for domain DNS check)",
+				"type":        "text",
+				"placeholder": "1.2.3.4",
 			}),
 		},
 		editor.Field{
