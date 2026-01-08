@@ -80,7 +80,8 @@ class Client {
     +Config config
     +http.Client httpClient
     +DomainChecker checker
-    +AddCustomDomain(domain, sitePath): error
+    +AddCustomDomain(domain, sitePath, skipCheck): error
+    +RemoveCustomDomain(domain): error
     +AddTLSPolicy(policy): error
     +CheckDomainReadiness(domain): DomainCheckResult
     +GetTLSPolicies(): []AutomationPolicy
@@ -115,8 +116,8 @@ DomainChecker --> DomainCheckResult : produces
 3. **业务逻辑**:
    - 平台域名在启动时预置 DNS-01 策略
    - 用户自定义域名添加前必须通过预检测
-   - 证书分组管理（10-20个域名一组）
-   - 失败域名记录和重试机制
+   - 单域名处理模式（每个 License 最多一个自定义域名）
+   - 每个自定义域名独立的 TLS policy（policy ID = `custom-{domain}`）
 
 ### Structure
 
@@ -146,11 +147,9 @@ DomainChecker --> DomainCheckResult : produces
 3. **New Fields**:
    - `DNSPodToken string`: DNSPod API Token（用于平台域名 DNS-01）
    - `ServerIP string`: 服务器公网 IP（用于 DNS 检查验证）
-   - `CertGroupSize int`: 证书分组大小（默认 10）
 4. **Default Values**:
    - DNSPodToken: 从环境变量 `DNSPOD_API_TOKEN` 读取
    - ServerIP: 自动检测或手动配置
-   - CertGroupSize: 10
 
 #### 创建 TLS 配置结构体
 1. **Responsibility**: 定义 Caddy TLS JSON 配置结构
@@ -254,9 +253,18 @@ type DomainCheckResult struct {
       a. 执行 DomainChecker.CheckAll(domain)
       b. 如果 !result.Ready, 返回详细错误
    2. 添加 HTTP route (使用现有 AddStaticSite)
-   3. 创建 HTTP-01 TLS policy
+   3. 创建单域名 HTTP-01 TLS policy
+      - policy ID: "custom-{sanitized_domain}"
+      - subjects: [domain]
    4. 添加 TLS policy
    5. 返回成功
+   ```
+5. **New Method**: `RemoveCustomDomain(domain string) error`
+6. **Logic**:
+   ```
+   1. 移除 HTTP route (使用现有 RemoveStaticSite)
+   2. 移除对应的 TLS policy (policy ID: "custom-{sanitized_domain}")
+   3. 返回成功
    ```
 
 #### 扩展 Client - 启动时预置平台域名策略
@@ -333,7 +341,7 @@ type AppsConfig struct {
 1. 平台域名（mdfriday.com, *.mdfriday.com）必须使用 DNS-01
 2. 用户自定义域名必须使用 HTTP-01
 3. 添加用户域名前必须通过 DNS 和 HTTP 检查
-4. 证书分组大小建议 10-20 个域名
+4. 每个 License 最多只能绑定一个自定义域名（单域名处理模式）
 
 #### Performance Constraints
 1. DNS 检查超时: 10 秒
@@ -374,11 +382,11 @@ hugov caddy domain remove -domain hello.com
 # 查看 TLS 策略
 hugov caddy tls policies
 
-# 手动添加 TLS 策略
-hugov caddy tls add-policy -domains "a.com,b.com,c.com" -challenge http
+# 手动添加单域名 TLS 策略
+hugov caddy tls add-policy -domain hello.com -challenge http
 
 # 移除 TLS 策略
-hugov caddy tls remove-policy -id custom-policy-1
+hugov caddy tls remove-policy -id custom-hello-com
 ```
 
 ### Expected Response Format
@@ -395,7 +403,7 @@ hugov caddy tls remove-policy -id custom-policy-1
 }
 ```
 
-#### TLS Policies Response
+#### TLS Policies Response（单域名模式）
 ```json
 {
   "policies": [
@@ -417,8 +425,20 @@ hugov caddy tls remove-policy -id custom-policy-1
       ]
     },
     {
-      "@id": "custom-domains-1",
-      "subjects": ["hello.com", "foo.com", "bar.com"],
+      "@id": "custom-hello-com",
+      "subjects": ["hello.com"],
+      "issuers": [
+        {
+          "module": "acme",
+          "challenges": {
+            "http": {}
+          }
+        }
+      ]
+    },
+    {
+      "@id": "custom-example-org",
+      "subjects": ["example.org"],
       "issuers": [
         {
           "module": "acme",
@@ -447,7 +467,7 @@ internal/interfaces/cli/
 ### Implementation Checklist
 
 #### Phase 1: 基础结构扩展
-- [ ] 扩展 Config 结构体，添加 DNSPodToken, ServerIP, CertGroupSize
+- [ ] 扩展 Config 结构体，添加 DNSPodToken, ServerIP
 - [ ] 创建 `tls.go`，定义 TLS 配置结构体
 - [ ] 扩展 AppsConfig，添加 TLS 字段
 
@@ -457,11 +477,12 @@ internal/interfaces/cli/
 - [ ] 实现 CheckHTTP 方法
 - [ ] 实现 CheckAll 方法
 
-#### Phase 3: Client TLS 管理
+#### Phase 3: Client TLS 管理（单域名模式）
 - [ ] 实现 AddTLSPolicy 方法
 - [ ] 实现 GetTLSPolicies 方法
 - [ ] 实现 RemoveTLSPolicy 方法
-- [ ] 实现 AddCustomDomain 方法（带预检测）
+- [ ] 实现 AddCustomDomain 方法（单域名 + 带预检测）
+- [ ] 实现 RemoveCustomDomain 方法
 
 #### Phase 4: 启动配置增强
 - [ ] 修改 StartServerBackground，添加平台域名 Wildcard 策略
