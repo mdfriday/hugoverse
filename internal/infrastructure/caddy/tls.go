@@ -46,6 +46,20 @@ type HTTPChallenge struct {
 }
 
 // NewDNS01Policy 创建 DNS-01 策略（用于平台域名的 Wildcard 证书）
+//
+// 前提条件：
+// 使用 DNS-01 challenge 需要 Caddy 在构建时包含对应的 DNS provider 插件。
+// 对于 DNSPod，需要使用 xcaddy 构建包含 caddy-dns/dnspod 插件的 Caddy 实例：
+//
+//	# 在 Ubuntu 上安装 xcaddy
+//	go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+//
+//	# 构建包含 DNSPod 插件的 Caddy
+//	xcaddy build --with github.com/caddy-dns/dnspod
+//
+//	# 构建后的 caddy 二进制文件将支持 DNSPod DNS-01 challenge
+//
+// 如果使用官方预编译的 Caddy 二进制文件，DNS-01 challenge 将无法工作。
 func NewDNS01Policy(id string, subjects []string, providerName, apiToken string) AutomationPolicy {
 	return AutomationPolicy{
 		ID:       id,
@@ -91,6 +105,8 @@ func NewSingleDomainHTTP01Policy(domain string) AutomationPolicy {
 
 // NewWildcardDNS01Policy 创建 Wildcard DNS-01 策略
 // 用于平台域名（如 mdfriday.com 和 *.mdfriday.com）
+//
+// 前提条件：需要构建包含 DNS provider 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
 func NewWildcardDNS01Policy(coreDomain, providerName, apiToken string) AutomationPolicy {
 	subjects := []string{coreDomain, "*." + coreDomain}
 	return NewDNS01Policy("platform-wildcard", subjects, providerName, apiToken)
@@ -101,6 +117,8 @@ func NewWildcardDNS01Policy(coreDomain, providerName, apiToken string) Automatio
 // GeneratePlatformTLSConfig 生成平台域名的 TLS 配置
 // 用于启动时配置 Wildcard 证书（mdfriday.com 和 *.mdfriday.com）
 // 所有 subdomain 将自动使用此 Wildcard 证书，无需单独申请
+//
+// 前提条件：需要构建包含 DNSPod 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
 func GeneratePlatformTLSConfig(coreDomain, dnspodToken string) *TLSConfig {
 	if coreDomain == "" || dnspodToken == "" {
 		return nil
