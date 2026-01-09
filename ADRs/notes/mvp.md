@@ -58,6 +58,45 @@ curl -s -X POST "http://127.0.0.1:1314/api/license/subdomain/update" \
     
 curl -s -X GET "http://127.0.0.1:1314/api/license/domains?key=MDF-CPJB-CJSG-2B7C" \
     -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18"
+
+
+#1. 检查自定义域名就绪状态 (DNS + HTTP 可达性)
+curl -s -X POST "http://127.0.0.1:1314/api/license/domain/check" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
+    -F "license_key=MDF-CPJB-CJSG-2B7C" \
+    -F "domain=hello.com"
+
+# 预期响应 (域名就绪):
+# {"data":[{"domain":"hello.com","dns_valid":true,"resolved_ips":["1.2.3.4"],"http_reachable":true,"ready":true,"message":"Domain is ready for HTTPS certificate issuance"}]}
+
+# 预期响应 (DNS 未配置):
+# {"data":[{"domain":"hello.com","dns_valid":false,"resolved_ips":["5.6.7.8"],"http_reachable":false,"ready":false,"error":"DNS does not point to server IP"}]}
+
+
+# 2. 添加自定义域名
+curl -s -X POST "http://127.0.0.1:1314/api/license/domain/add" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
+    -F "license_key=MDF-CPJB-CJSG-2B7C" \
+    -F "domain=hello.com"
+
+# 预期响应 (成功):
+# {"data":[{"domain":"hello.com","status":"pending_certificate","message":"Custom domain added. SSL certificate is being issued."}]}
+
+# 预期响应 (功能未启用):
+# {"data":[{"error":"Custom domain feature not enabled for this license plan","success":false}]}
+
+
+# 3. 移除自定义域名
+curl -s -X POST "http://127.0.0.1:1314/api/license/domain/remove" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
+    -F "license_key=MDF-CPJB-CJSG-2B7C" \
+    -F "domain=hello.com"
+
+# 预期响应 (成功):
+# {"data":[{"domain":"hello.com","message":"Custom domain removed successfully"}]}
+
+# 预期响应 (域名不属于该用户):
+# {"data":[{"error":"Domain does not belong to this license","success":false}]}
      
 ```
 
