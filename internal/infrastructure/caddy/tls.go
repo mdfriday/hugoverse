@@ -49,15 +49,19 @@ type HTTPChallenge struct {
 //
 // 前提条件：
 // 使用 DNS-01 challenge 需要 Caddy 在构建时包含对应的 DNS provider 插件。
-// 对于 DNSPod，需要使用 xcaddy 构建包含 caddy-dns/dnspod 插件的 Caddy 实例：
+// 对于腾讯云 DNS（DNSPod），需要使用 xcaddy 构建包含 caddy-dns/tencentcloud 插件的 Caddy 实例：
 //
 //	# 在 Ubuntu 上安装 xcaddy
 //	go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 //
-//	# 构建包含 DNSPod 插件的 Caddy
-//	xcaddy build --with github.com/caddy-dns/dnspod
+//	# 构建包含腾讯云 DNS 插件的 Caddy
+//	xcaddy build --with github.com/caddy-dns/tencentcloud
 //
-//	# 构建后的 caddy 二进制文件将支持 DNSPod DNS-01 challenge
+//	# 构建后的 caddy 二进制文件将支持 tencentcloud DNS-01 challenge
+//
+// 注意：DNSPod 已被腾讯云收购，原 github.com/caddy-dns/dnspod 已过时且不兼容新版 libdns。
+// 请使用 github.com/caddy-dns/tencentcloud，provider name 为 "tencentcloud"。
+// API Token 格式为 SecretId,SecretKey（用逗号分隔）
 //
 // 如果使用官方预编译的 Caddy 二进制文件，DNS-01 challenge 将无法工作。
 func NewDNS01Policy(id string, subjects []string, providerName, apiToken string) AutomationPolicy {
@@ -118,14 +122,15 @@ func NewWildcardDNS01Policy(coreDomain, providerName, apiToken string) Automatio
 // 用于启动时配置 Wildcard 证书（mdfriday.com 和 *.mdfriday.com）
 // 所有 subdomain 将自动使用此 Wildcard 证书，无需单独申请
 //
-// 前提条件：需要构建包含 DNSPod 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
-func GeneratePlatformTLSConfig(coreDomain, dnspodToken string) *TLSConfig {
-	if coreDomain == "" || dnspodToken == "" {
+// 前提条件：需要构建包含腾讯云 DNS 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
+// apiToken 格式：SecretId,SecretKey（用逗号分隔）
+func GeneratePlatformTLSConfig(coreDomain, apiToken string) *TLSConfig {
+	if coreDomain == "" || apiToken == "" {
 		return nil
 	}
 
-	// 创建平台域名的 Wildcard 策略
-	wildcardPolicy := NewWildcardDNS01Policy(coreDomain, "dnspod", dnspodToken)
+	// 创建平台域名的 Wildcard 策略（使用 tencentcloud provider）
+	wildcardPolicy := NewWildcardDNS01Policy(coreDomain, "tencentcloud", apiToken)
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{

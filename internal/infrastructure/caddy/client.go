@@ -14,24 +14,24 @@ import (
 
 // Config Caddy 配置
 type Config struct {
-	AdminAPI       string `json:"admin_api"`        // Caddy Admin API 地址 (如 http://127.0.0.1:2019)
-	ConfigPath     string `json:"config_path"`      // Caddy 配置文件路径
-	BinaryPath     string `json:"binary_path"`      // Caddy 二进制文件路径
-	DefaultBackend string `json:"default_backend"`  // 默认后端服务地址 (如 127.0.0.1:1314)
-	CouchDBBackend string `json:"couchdb_backend"`  // CouchDB 服务地址 (如 127.0.0.1:5984)
-	CoreDomain     string `json:"core_domain"`      // 核心域名 (如 mdfriday.site)
-	PidFile        string `json:"pid_file"`         // PID 文件路径 (用于后台运行)
-	LogFile        string `json:"log_file"`         // 日志文件路径
-	DNSPodToken    string `json:"dnspod_token"`     // DNSPod API Token (用于 DNS-01 challenge)
-	ServerIP       string `json:"server_ip"`        // 服务器公网 IP (用于域名检查)
+	AdminAPI       string `json:"admin_api"`       // Caddy Admin API 地址 (如 http://127.0.0.1:2019)
+	ConfigPath     string `json:"config_path"`     // Caddy 配置文件路径
+	BinaryPath     string `json:"binary_path"`     // Caddy 二进制文件路径
+	DefaultBackend string `json:"default_backend"` // 默认后端服务地址 (如 127.0.0.1:1314)
+	CouchDBBackend string `json:"couchdb_backend"` // CouchDB 服务地址 (如 127.0.0.1:5984)
+	CoreDomain     string `json:"core_domain"`     // 核心域名 (如 mdfriday.site)
+	PidFile        string `json:"pid_file"`        // PID 文件路径 (用于后台运行)
+	LogFile        string `json:"log_file"`        // 日志文件路径
+	DNSPodToken    string `json:"dnspod_token"`    // 腾讯云 DNS API Token (格式: SecretId,SecretKey，用于 DNS-01 challenge)
+	ServerIP       string `json:"server_ip"`       // 服务器公网 IP (用于域名检查)
 }
 
 // Client Caddy HTTP 客户端
 type Client struct {
 	config     *Config
 	httpClient *http.Client
-	cmd        *exec.Cmd       // 用于管理 Caddy 进程
-	checker    *DomainChecker  // 域名检查器
+	cmd        *exec.Cmd      // 用于管理 Caddy 进程
+	checker    *DomainChecker // 域名检查器
 }
 
 // NewClient 创建 Caddy 客户端
@@ -98,8 +98,8 @@ type HTTPConfig struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Listen    []string `json:"listen"`
-	Routes    []Route  `json:"routes"`
+	Listen    []string         `json:"listen"`
+	Routes    []Route          `json:"routes"`
 	AutoHTTPS *AutoHTTPSConfig `json:"automatic_https,omitempty"` // 自动 HTTPS 配置
 }
 
@@ -110,9 +110,9 @@ type AutoHTTPSConfig struct {
 
 // Route 路由配置
 type Route struct {
-	ID     string          `json:"@id,omitempty"`
-	Match  []MatchHost     `json:"match"`
-	Handle []HandleConfig  `json:"handle"`
+	ID     string         `json:"@id,omitempty"`
+	Match  []MatchHost    `json:"match"`
+	Handle []HandleConfig `json:"handle"`
 }
 
 // MatchHost 域名匹配
@@ -122,9 +122,9 @@ type MatchHost struct {
 
 // HandleConfig 处理器配置
 type HandleConfig struct {
-	Handler   string      `json:"handler"`
-	Upstreams []Upstream  `json:"upstreams,omitempty"` // for reverse_proxy
-	Root      string      `json:"root,omitempty"`      // for file_server
+	Handler   string     `json:"handler"`
+	Upstreams []Upstream `json:"upstreams,omitempty"` // for reverse_proxy
+	Root      string     `json:"root,omitempty"`      // for file_server
 }
 
 // Upstream 上游服务器
@@ -134,12 +134,12 @@ type Upstream struct {
 
 // CertificateInfo SSL 证书信息
 type CertificateInfo struct {
-	Domain     string    `json:"domain"`
-	Status     string    `json:"status"`      // "issued", "pending", "failed"
-	NotBefore  time.Time `json:"not_before"`
-	NotAfter   time.Time `json:"not_after"`
-	Issuer     string    `json:"issuer"`
-	Error      string    `json:"error,omitempty"`
+	Domain    string    `json:"domain"`
+	Status    string    `json:"status"` // "issued", "pending", "failed"
+	NotBefore time.Time `json:"not_before"`
+	NotAfter  time.Time `json:"not_after"`
+	Issuer    string    `json:"issuer"`
+	Error     string    `json:"error,omitempty"`
 }
 
 // StartServer 启动 Caddy 服务器
@@ -147,7 +147,7 @@ type CertificateInfo struct {
 func (c *Client) StartServer() error {
 	// 判断是否为开发环境（localhost 或 127.0.0.1）
 	isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
-	
+
 	// 开发环境配置
 	var serverConfig *ServerConfig
 	if isDev {
@@ -224,7 +224,7 @@ func (c *Client) StartServer() error {
 			},
 		}
 	}
-	
+
 	// 生成配置
 	config := &CaddyConfig{
 		Admin: &AdminConfig{
@@ -287,7 +287,7 @@ func (c *Client) StartServer() error {
 		}
 		time.Sleep(1 * time.Second)
 	}
-	
+
 	return fmt.Errorf("Caddy started but Admin API not responding after %d retries", maxRetries)
 }
 
@@ -318,7 +318,7 @@ func (c *Client) StartServerBackground() error {
 	if !useExistingConfig {
 		// 判断是否为开发环境
 		isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
-		
+
 		// 开发环境配置
 		var serverConfig *ServerConfig
 		if isDev {
@@ -393,7 +393,7 @@ func (c *Client) StartServerBackground() error {
 				},
 			}
 		}
-		
+
 		// 生成配置
 		config := &CaddyConfig{
 			Admin: &AdminConfig{
@@ -440,7 +440,7 @@ func (c *Client) StartServerBackground() error {
 	cmd := exec.Command(c.config.BinaryPath, "run", "--config", configFile)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
-	
+
 	// 启动进程
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start Caddy: %w", err)
@@ -463,7 +463,7 @@ func (c *Client) StartServerBackground() error {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
-	
+
 	return fmt.Errorf("Caddy started but Admin API not responding after %d retries", maxRetries)
 }
 
@@ -510,6 +510,8 @@ func (c *Client) GetPID() (int, error) {
 // AddStaticSite 动态添加自定义域名的静态站点
 // domain: 自定义域名 (如 example.com)
 // sitePath: 静态站点文件路径 (如 /web/sites/example-com)
+// A     mdfriday.com        →  <server-ip>
+// A     *.mdfriday.com      →  <server-ip>
 func (c *Client) AddStaticSite(domain, sitePath string) error {
 	route := Route{
 		ID: fmt.Sprintf("site-%s", sanitizeDomainForID(domain)),
@@ -600,7 +602,7 @@ func (c *Client) GetCertificateStatus(domain string) (*CertificateInfo, error) {
 					for _, subject := range subjects {
 						if subjectStr, ok := subject.(string); ok && subjectStr == domain {
 							certInfo.Status = "issued"
-							
+
 							// 解析证书时间
 							if notBefore, ok := certMap["not_before"].(string); ok {
 								if t, err := time.Parse(time.RFC3339, notBefore); err == nil {
@@ -615,7 +617,7 @@ func (c *Client) GetCertificateStatus(domain string) (*CertificateInfo, error) {
 							if issuer, ok := certMap["issuer"].(string); ok {
 								certInfo.Issuer = issuer
 							}
-							
+
 							return certInfo, nil
 						}
 					}
@@ -673,7 +675,7 @@ func (c *Client) RemoveStaticSite(domain string) error {
 // Ping 检查 Caddy Admin API 连接
 func (c *Client) Ping() error {
 	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)
-	
+
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -745,7 +747,7 @@ func (c *Client) Stop() error {
 func (c *Client) ExportConfig(outputPath string) error {
 	// 从 Admin API 获取当前配置
 	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)
-	
+
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
@@ -789,7 +791,7 @@ func (c *Client) ExportConfig(outputPath string) error {
 // GetConfig 获取当前 Caddy 配置
 func (c *Client) GetConfig() (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)
-	
+
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -1019,7 +1021,7 @@ func (c *Client) SetupPlatformWildcard() error {
 		return fmt.Errorf("valid CoreDomain is required for wildcard certificate")
 	}
 
-	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "dnspod", c.config.DNSPodToken)
+	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", c.config.DNSPodToken)
 	return c.AddTLSPolicy(policy)
 }
 
@@ -1034,7 +1036,7 @@ func (c *Client) GenerateTLSConfig() *TLSConfig {
 	}
 
 	// 生成平台域名的 Wildcard 策略
-	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "dnspod", c.config.DNSPodToken)
+	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", c.config.DNSPodToken)
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{
@@ -1042,4 +1044,3 @@ func (c *Client) GenerateTLSConfig() *TLSConfig {
 		},
 	}
 }
-

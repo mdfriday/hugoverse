@@ -5,12 +5,18 @@
 ### Requirements Anchoring
 基于现有的 Caddy 基础设施实现，扩展 TLS 证书管理功能，支持平台域名（Wildcard 证书，DNS-01）和用户自定义域名（HTTP-01），并实现域名预检测机制确保证书签发成功率。
 
-### 前提条件：构建包含 DNSPod 插件的 Caddy
+### 前提条件：构建包含腾讯云 DNS 插件的 Caddy
 
 使用 DNS-01 challenge 获取 Wildcard 证书需要 Caddy 在构建时包含对应的 DNS provider 插件。
 官方预编译的 Caddy 二进制文件**不支持** DNS-01 challenge。
 
-**在 Ubuntu 上构建包含 DNSPod 插件的 Caddy：**
+**重要说明：**
+- DNSPod 已被腾讯云收购，原 `github.com/caddy-dns/dnspod` 已过时且与新版 libdns 不兼容
+- 请使用 `github.com/caddy-dns/tencentcloud` 插件
+- Provider name 为 `tencentcloud`
+- API Token 格式：`SecretId,SecretKey`（用逗号分隔）
+
+**在 Ubuntu 上构建包含腾讯云 DNS 插件的 Caddy：**
 
 ```bash
 # 1. 安装 Go (如果尚未安装)
@@ -20,15 +26,15 @@ sudo apt install golang-go
 # 2. 安装 xcaddy
 go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
 
-# 3. 构建包含 DNSPod 插件的 Caddy
-~/go/bin/xcaddy build --with github.com/caddy-dns/dnspod
+# 3. 构建包含腾讯云 DNS 插件的 Caddy
+~/go/bin/xcaddy build --with github.com/caddy-dns/tencentcloud
 
 # 4. 将构建好的 caddy 移动到 PATH
 sudo mv caddy /usr/local/bin/
 
 # 5. 验证安装
 caddy list-modules | grep dns.providers
-# 应输出: dns.providers.dnspod
+# 应输出: dns.providers.tencentcloud
 ```
 
 **注意：** 如果不需要 Wildcard 证书（开发环境或只使用 HTTP-01），可以使用官方预编译版本。

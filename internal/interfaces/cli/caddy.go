@@ -123,7 +123,7 @@ func (c *caddyCmd) runStart(args []string) error {
 	configPath := startCmd.String("config", "/tmp/caddy-config.json", "Caddy config file path")
 	pidFile := startCmd.String("pid", "/tmp/caddy.pid", "PID file path")
 	logFile := startCmd.String("log", "/tmp/caddy.log", "Log file path")
-	dnspodToken := startCmd.String("dnspod-token", "", "DNSPod API token for wildcard certificate")
+	dnspodToken := startCmd.String("dnspod-token", "", "腾讯云 DNS API token (格式: SecretId,SecretKey) for wildcard certificate")
 	serverIP := startCmd.String("server-ip", "", "Server public IP for domain verification")
 
 	if err := startCmd.Parse(args); err != nil {
@@ -828,7 +828,7 @@ func (c *caddyCmd) runTLSAddPolicy(args []string) error {
 	if *challenge == "http" {
 		policy = caddy.NewSingleDomainHTTP01Policy(*domain)
 	} else {
-		return fmt.Errorf("DNS challenge requires dnspod-token configuration. Use 'domain add' instead")
+		return fmt.Errorf("DNS challenge requires dnspod-token (腾讯云 SecretId,SecretKey) configuration. Use 'domain add' instead")
 	}
 
 	if err := client.AddTLSPolicy(policy); err != nil {
