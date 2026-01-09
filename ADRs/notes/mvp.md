@@ -9,6 +9,58 @@
 			- 查询主题是否已经存在
 		- 创建站点
 
+### 创建 License
+
+```shell
+./hugov serve
+
+export PATH="$HOME/go/bin:$PATH"
+./hugov caddy start
+
+./hugov license generate -email me@sunwei.xyz -password 123456 -plan starter -count 1
+
+#   1. License Key: MDF-CPJB-CJSG-2B7C
+#      Email:       cpjb-cjsg-2b7c@mdfriday.com
+#      Password:    Y3BqYi1janNnLTJiN2M=
+
+
+curl -X POST http://127.0.0.1:1314/api/login \
+-H "Content-Type: application/x-www-form-urlencoded" \
+-d "email=cpjb-cjsg-2b7c@mdfriday.com&password=Y3BqYi1janNnLTJiN2M="
+
+# eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18
+
+curl -s -X POST "http://127.0.0.1:1314/api/license/activate" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
+    -F "license_key=MDF-CPJB-CJSG-2B7C" \
+    -F "device_id=DID_11223344" \
+    -F "device_name=Test Device" \
+    -F "device_type=desktop"
+
+# {"data":[{"activated":true,"expires_at":1799480892903,"features":{"max_devices":3,"max_ips":3,"sync_enabled":true,"sync_quota":500,"publish_enabled":true,"max_sites":3,"max_storage":1024,"custom_domain":false,"validity_days":365},"first_time":false,"license_key":"MDF-CPJB-CJSG-2B7C","plan":"starter","success":true,"sync":{"db_endpoint":"https://cdb.127.0.0.1","db_name":"userdb-6873577151b0b6e2","db_password":"Y3BqYi1janNnLTJiN2M=","email":"cpjb-cjsg-2b7c@mdfriday.com","status":"active"},"user":{"email":"cpjb-cjsg-2b7c@mdfriday.com","user_dir":"6873577151"}}]}
+
+curl -s -X GET "http://127.0.0.1:1314/api/license/subdomain?key=MDF-CPJB-CJSG-2B7C" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18"
+
+# {"data":[{"created_at":1767944892903,"folder":"6873577151","full_domain":"6873577151.127.0.0.1","subdomain":"6873577151"}]}
+
+
+curl -s -X POST "http://127.0.0.1:1314/api/license/subdomain/check" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
+    -F "license_key=MDF-CPJB-CJSG-2B7C" \
+    -F "subdomain=td66e65ad75"
+    
+    
+curl -s -X POST "http://127.0.0.1:1314/api/license/subdomain/update" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
+    -F "license_key=MDF-CPJB-CJSG-2B7C" \
+    -F "new_subdomain=td66e65ad75"
+    
+curl -s -X GET "http://127.0.0.1:1314/api/license/domains?key=MDF-CPJB-CJSG-2B7C" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18"
+     
+```
+
 ### 创建用户
 
 curl -X POST http://127.0.0.1:1314/api/user \
