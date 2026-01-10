@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -767,6 +768,99 @@ func (s *Handler) GetUsageHandler(res http.ResponseWriter, req *http.Request) {
 		"devices":     devicesInfo,
 		"ips":         ipsInfo,
 		"disks":       disksInfo,
+	}
+
+	s.jsonResponse(res, response)
+}
+
+// ResetUsageHandler 重置用户存储使用量
+// POST /api/license/usage/reset?key=xxx
+// 1. 删除并重建 CouchDB 数据库 (清空 sync 数据)
+// 2. 删除 publish 目录 (清空 publish 数据)
+func (s *Handler) ResetUsageHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	licenseKey := req.URL.Query().Get("key")
+	if licenseKey == "" {
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.log.Errorf("License not found: %s", licenseKey)
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+
+	var syncReset, publishReset bool
+	var syncErr, publishErr error
+
+	// 1. 重置 CouchDB 数据库
+	syncAccount, err := s.contentApp.GetSyncAccountByLicense(license.LicenseKey)
+	if err == nil && syncAccount != nil {
+		dbName := syncAccount.DBName
+
+		// 删除数据库
+		if err := s.couchClient.DeleteDatabase(dbName); err != nil {
+			s.log.Errorf("Failed to delete CouchDB database %s: %v", dbName, err)
+			syncErr = err
+		} else {
+			email := license.ToEmail()
+
+			// 创建 CouchDB 数据库
+			if err := s.couchClient.CreateDatabase(dbName); err != nil {
+				s.log.Errorf("Failed to create database for sync account: %v", err)
+				s.jsonError(res, "Failed to create database for sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+
+			// 设置数据库权限
+			if err := s.couchClient.SetDatabasePermission(dbName, email); err != nil {
+				s.log.Errorf("Failed to set database permission for sync account: %v", err)
+				s.jsonError(res, "Failed to set database permission for sync account: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	} else {
+		s.log.Warnf("No sync account found for license %s", license.LicenseKey)
+	}
+
+	// 2. 删除 publish 目录
+	publishDir := filepath.Join(application.PreviewDir(), s.db.UserDir())
+	if err := os.RemoveAll(publishDir); err != nil {
+		s.log.Errorf("Failed to delete publish directory %s: %v", publishDir, err)
+		publishErr = err
+	} else {
+		publishReset = true
+		s.log.Infof("Successfully deleted publish directory %s for license %s", publishDir, license.LicenseKey)
+	}
+
+	// 构建响应
+	response := map[string]interface{}{
+		"license_key":   license.LicenseKey,
+		"sync_reset":    syncReset,
+		"publish_reset": publishReset,
+	}
+
+	if syncErr != nil {
+		response["sync_error"] = syncErr.Error()
+	}
+	if publishErr != nil {
+		response["publish_error"] = publishErr.Error()
+	}
+
+	if syncReset || publishReset {
+		response["success"] = true
+		response["message"] = "Storage usage has been reset"
+	} else {
+		response["success"] = false
+		response["message"] = "Failed to reset storage usage"
 	}
 
 	s.jsonResponse(res, response)
