@@ -29,3 +29,32 @@ func (c *Content) GetLicenseByKey(licenseKey string) (*valueobject.License, erro
 func (c *Content) UpdateLicense(license *valueobject.License) error {
 	return c.UpdateContentObject(license)
 }
+
+// ========== LicenseUsage Operations ==========
+
+// GetLicenseUsageByKey 通过 LicenseKey 获取 LicenseUsage
+func (c *Content) GetLicenseUsageByKey(licenseKey string) (*valueobject.LicenseUsage, error) {
+	hashKey := hash.MD5(licenseKey)
+
+	data, err := c.GetContentByHash("LicenseUsage", hashKey, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var licenseUsage valueobject.LicenseUsage
+	if err := json.Unmarshal(data, &licenseUsage); err != nil {
+		return nil, err
+	}
+
+	return &licenseUsage, nil
+}
+
+// UpdateLicenseUsage 更新 LicenseUsage
+func (c *Content) UpdateLicenseUsage(licenseUsage *valueobject.LicenseUsage) error {
+	return c.UpdateContentObject(licenseUsage)
+}
+
+// CreateLicenseUsage 创建 LicenseUsage
+func (c *Content) CreateLicenseUsage(licenseUsage *valueobject.LicenseUsage) (string, error) {
+	return c.newContent("LicenseUsage", licenseUsage)
+}

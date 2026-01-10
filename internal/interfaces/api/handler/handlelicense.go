@@ -666,14 +666,104 @@ func (s *Handler) GetUsageHandler(res http.ResponseWriter, req *http.Request) {
 	// 获取 IP 信息
 	ipsInfo := s.getIPsInfo(license.LicenseKey)
 
-	// 获取硬盘用量信息
+	// 获取硬盘用量信息 (返回值单位为 MB)
 	disksInfo := s.getDisksUsage(license.LicenseKey)
+
+	// 获取当前使用量
+	currentIPs := 0
+	currentDevices := 0
+	if count, ok := ipsInfo["count"].(int); ok {
+		currentIPs = count
+	}
+	if count, ok := devicesInfo["count"].(int); ok {
+		currentDevices = count
+	}
+
+	// 解析磁盘用量 (MB)
+	var syncDiskMB, publishDiskMB float64
+	if v, ok := disksInfo["couchdb_disk_usage"].(string); ok {
+		syncDiskMB, _ = strconv.ParseFloat(v, 64)
+	}
+	if v, ok := disksInfo["publish_disk_usage"].(string); ok {
+		publishDiskMB, _ = strconv.ParseFloat(v, 64)
+	}
+
+	// 获取配额限制 (单位也是 MB)
+	features := license.GetFeatures()
+
+	// 检查是否超过配额 (直接用 MB 对比)
+	exceededQuota := false
+	if features.MaxIPs > 0 && currentIPs > features.MaxIPs {
+		exceededQuota = true
+		s.log.Warnf("License %s exceeded IP quota: %d > %d", license.LicenseKey, currentIPs, features.MaxIPs)
+	}
+	if features.MaxDevices > 0 && currentDevices > features.MaxDevices {
+		exceededQuota = true
+		s.log.Warnf("License %s exceeded device quota: %d > %d", license.LicenseKey, currentDevices, features.MaxDevices)
+	}
+	if features.SyncQuotaMB > 0 && syncDiskMB > float64(features.SyncQuotaMB) {
+		exceededQuota = true
+		s.log.Warnf("License %s exceeded sync disk quota: %.2f > %d MB", license.LicenseKey, syncDiskMB, features.SyncQuotaMB)
+	}
+	if features.MaxStorageMB > 0 && publishDiskMB > float64(features.MaxStorageMB) {
+		exceededQuota = true
+		s.log.Warnf("License %s exceeded publish disk quota: %.2f > %d MB", license.LicenseKey, publishDiskMB, features.MaxStorageMB)
+	}
+
+	// 如果超过配额，更新或创建 LicenseUsage 记录
+	if exceededQuota {
+		now := timestamp.CurrentTimeMillis()
+
+		// 转换 MB 为 bytes 存储
+		syncDisk := int64(syncDiskMB)
+		publishDisk := int64(publishDiskMB)
+
+		existingUsage, err := s.contentApp.GetLicenseUsageByKey(license.LicenseKey)
+		if err == nil && existingUsage != nil {
+			// LicenseUsage 已存在，更新
+			existingUsage.CurrentIPs = currentIPs
+			existingUsage.CurrentDevices = currentDevices
+			existingUsage.SyncDiskUsage = syncDisk
+			existingUsage.PublishDiskUsage = publishDisk
+			existingUsage.LastUpdatedAt = now
+			existingUsage.Updated = now
+
+			if err := s.contentApp.UpdateLicenseUsage(existingUsage); err != nil {
+				s.log.Errorf("Failed to update LicenseUsage for %s: %v", license.LicenseKey, err)
+			} else {
+				s.log.Infof("Updated LicenseUsage for %s: IPs=%d, Devices=%d, SyncDisk=%.2fMB, PublishDisk=%.2fMB",
+					license.LicenseKey, currentIPs, currentDevices, syncDiskMB, publishDiskMB)
+			}
+		} else {
+			// LicenseUsage 不存在，创建新的
+			newUsage := &contentVO.LicenseUsage{
+				LicenseKey:       license.LicenseKey,
+				CurrentIPs:       currentIPs,
+				CurrentDevices:   currentDevices,
+				SyncDiskUsage:    syncDisk,
+				PublishDiskUsage: publishDisk,
+				LastUpdatedAt:    now,
+				Item: contentVO.Item{
+					Timestamp: now,
+					Updated:   now,
+					Namespace: "LicenseUsage",
+				},
+			}
+
+			if _, err := s.contentApp.CreateLicenseUsage(newUsage); err != nil {
+				s.log.Errorf("Failed to create LicenseUsage for %s: %v", license.LicenseKey, err)
+			} else {
+				s.log.Infof("Created LicenseUsage for %s: IPs=%d, Devices=%d, SyncDisk=%.2fMB, PublishDisk=%.2fMB",
+					license.LicenseKey, currentIPs, currentDevices, syncDiskMB, publishDiskMB)
+			}
+		}
+	}
 
 	// 汇总响应
 	response := map[string]interface{}{
 		"license_key": license.LicenseKey,
 		"plan":        license.Plan,
-		"features":    license.GetFeatures(),
+		"features":    features,
 		"devices":     devicesInfo,
 		"ips":         ipsInfo,
 		"disks":       disksInfo,

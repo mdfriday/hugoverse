@@ -228,9 +228,9 @@ func (c *Client) GetDiskUsage(dbName string) (int64, error) {
 	var result struct {
 		DBName string `json:"db_name"`
 		Sizes  struct {
-			File     int64 `json:"file"`
+			File     int64 `json:"file"` // 实际文件大小
 			External int64 `json:"external"`
-			Active   int64 `json:"active"`
+			Active   int64 `json:"active"` // 活跃数据大小 - 和 CouchDB Web（Fauxton）显示的一致
 		} `json:"sizes"`
 	}
 
@@ -239,7 +239,7 @@ func (c *Client) GetDiskUsage(dbName string) (int64, error) {
 	}
 
 	// 返回文件大小作为磁盘使用量
-	return result.Sizes.File, nil
+	return result.Sizes.Active, nil
 }
 
 func (c *Client) setBasicAuth(req *http.Request) {

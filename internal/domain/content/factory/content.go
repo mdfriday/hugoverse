@@ -68,14 +68,13 @@ func prepareAdminTypes(c *entity.Content) {
 	c.AdminTypes["License"] = func() interface{} { return new(valueobject.License) }
 	c.AdminTypes["LicenseDevice"] = func() interface{} { return new(valueobject.LicenseDevice) }
 	c.AdminTypes["LicenseIP"] = func() interface{} { return new(valueobject.LicenseIP) }
+	c.AdminTypes["LicenseUsage"] = func() interface{} { return new(valueobject.LicenseUsage) }
 
 	// Sync 相关
 	c.AdminTypes["SyncAccount"] = func() interface{} { return new(valueobject.SyncAccount) }
-	c.AdminTypes["SyncUsage"] = func() interface{} { return new(valueobject.SyncUsage) }
 
 	// Publish 相关
 	c.AdminTypes["PublishSite"] = func() interface{} { return new(valueobject.PublishSite) }
-	c.AdminTypes["PublishUsage"] = func() interface{} { return new(valueobject.PublishUsage) }
 	c.AdminTypes["SubDomain"] = func() interface{} { return new(valueobject.SubDomain) }
 	c.AdminTypes["PublishDomain"] = func() interface{} { return new(valueobject.PublishDomain) }
 }
