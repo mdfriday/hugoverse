@@ -411,13 +411,11 @@ func (c *Client) StartServerBackground() error {
 
 		// 生产环境：添加平台域名的 Wildcard TLS 配置
 		// 这样所有 subdomain（如 user123.mdfriday.com）都会使用 Wildcard 证书
+		// 凭据通过环境变量传递给 Caddy 进程
 		if !isDev && c.config.DNSPodToken != "" {
-			secretID, secretKey := c.parseDNSPodToken()
-			if secretID != "" && secretKey != "" {
-				tlsConfig := GeneratePlatformTLSConfig(c.config.CoreDomain, secretID, secretKey)
-				if tlsConfig != nil {
-					config.Apps.TLS = tlsConfig
-				}
+			tlsConfig := GeneratePlatformTLSConfig(c.config.CoreDomain)
+			if tlsConfig != nil {
+				config.Apps.TLS = tlsConfig
 			}
 		}
 
@@ -444,6 +442,18 @@ func (c *Client) StartServerBackground() error {
 	cmd := exec.Command(c.config.BinaryPath, "run", "--config", configFile)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
+
+	// 设置环境变量（继承当前进程的环境变量）
+	cmd.Env = os.Environ()
+
+	// 如果配置了 DNSPodToken，通过环境变量传递给 Caddy（用于 DNS-01 challenge）
+	if c.config.DNSPodToken != "" {
+		secretID, secretKey := c.parseDNSPodToken()
+		if secretID != "" && secretKey != "" {
+			cmd.Env = append(cmd.Env, "TENCENTCLOUD_SECRET_ID="+secretID)
+			cmd.Env = append(cmd.Env, "TENCENTCLOUD_SECRET_KEY="+secretKey)
+		}
+	}
 
 	// 启动进程
 	if err := cmd.Start(); err != nil {
@@ -1017,6 +1027,7 @@ func (c *Client) RemoveCustomDomain(domain string) error {
 
 // SetupPlatformWildcard 设置平台域名的 Wildcard 证书
 // 使用 DNS-01 challenge
+// 注意：凭据通过环境变量传递（TENCENTCLOUD_SECRET_ID, TENCENTCLOUD_SECRET_KEY）
 func (c *Client) SetupPlatformWildcard() error {
 	if c.config.DNSPodToken == "" {
 		return fmt.Errorf("DNSPodToken is required for wildcard certificate")
@@ -1030,13 +1041,14 @@ func (c *Client) SetupPlatformWildcard() error {
 		return fmt.Errorf("invalid DNSPodToken format, expected 'SecretId,SecretKey'")
 	}
 
-	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", secretID, secretKey)
+	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud")
 	return c.AddTLSPolicy(policy)
 }
 
 // ==================== 配置生成辅助方法 ====================
 
 // GenerateTLSConfig 生成 TLS 配置（用于启动时）
+// 凭据通过环境变量传递（TENCENTCLOUD_SECRET_ID, TENCENTCLOUD_SECRET_KEY）
 func (c *Client) GenerateTLSConfig() *TLSConfig {
 	// 如果没有配置 DNSPodToken 或是开发环境，不生成 TLS 配置
 	isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
@@ -1044,13 +1056,8 @@ func (c *Client) GenerateTLSConfig() *TLSConfig {
 		return nil
 	}
 
-	secretID, secretKey := c.parseDNSPodToken()
-	if secretID == "" || secretKey == "" {
-		return nil
-	}
-
 	// 生成平台域名的 Wildcard 策略
-	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", secretID, secretKey)
+	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud")
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{
