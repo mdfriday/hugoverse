@@ -26,7 +26,7 @@ export PATH="$HOME/go/bin:$PATH"
 
 curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
--d "email=cpjb-cjsg-2b7c@mdfriday.com&password=Y3BqYi1janNnLTJiN2M="
+-d "email=r3qn-3fnl-bn4x@mdfriday.com&password=cjNxbi0zZm5sLWJuNHg="
 
 # eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18
 

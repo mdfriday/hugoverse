@@ -1,6 +1,9 @@
 package entity
 
-import "github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
+import (
+	"fmt"
+	"github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
+)
 
 type Http struct {
 	Env  string
@@ -36,4 +39,11 @@ func (h *Http) BaseURL() string {
 		return "http://" + h.Host() + ":" + h.DevPort()
 	}
 	return "https://" + h.Host()
+}
+
+func (h *Http) CouchDBDomain() string {
+	if h.Env == "dev" {
+		return "http://localhost:5984"
+	}
+	return fmt.Sprintf("https://cdb.%s", h.Domain())
 }
