@@ -365,7 +365,7 @@ func (c *Client) StartServerBackground() error {
 					{
 						ID: fmt.Sprintf("core-%s", c.config.CoreDomain),
 						Match: []MatchHost{
-							{Host: []string{c.config.CoreDomain}},
+							{Host: []string{fmt.Sprintf("mdfriday.%s", c.config.CoreDomain)}},
 						},
 						Handle: []HandleConfig{
 							{
@@ -379,7 +379,7 @@ func (c *Client) StartServerBackground() error {
 					{
 						ID: fmt.Sprintf("couchdb-%s", c.config.CoreDomain),
 						Match: []MatchHost{
-							{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+							{Host: []string{fmt.Sprintf("cdb.mdfriday.%s", c.config.CoreDomain)}},
 						},
 						Handle: []HandleConfig{
 							{
