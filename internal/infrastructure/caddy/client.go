@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -411,9 +412,12 @@ func (c *Client) StartServerBackground() error {
 		// 生产环境：添加平台域名的 Wildcard TLS 配置
 		// 这样所有 subdomain（如 user123.mdfriday.com）都会使用 Wildcard 证书
 		if !isDev && c.config.DNSPodToken != "" {
-			tlsConfig := GeneratePlatformTLSConfig(c.config.CoreDomain, c.config.DNSPodToken)
-			if tlsConfig != nil {
-				config.Apps.TLS = tlsConfig
+			secretID, secretKey := c.parseDNSPodToken()
+			if secretID != "" && secretKey != "" {
+				tlsConfig := GeneratePlatformTLSConfig(c.config.CoreDomain, secretID, secretKey)
+				if tlsConfig != nil {
+					config.Apps.TLS = tlsConfig
+				}
 			}
 		}
 
@@ -1021,7 +1025,12 @@ func (c *Client) SetupPlatformWildcard() error {
 		return fmt.Errorf("valid CoreDomain is required for wildcard certificate")
 	}
 
-	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", c.config.DNSPodToken)
+	secretID, secretKey := c.parseDNSPodToken()
+	if secretID == "" || secretKey == "" {
+		return fmt.Errorf("invalid DNSPodToken format, expected 'SecretId,SecretKey'")
+	}
+
+	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", secretID, secretKey)
 	return c.AddTLSPolicy(policy)
 }
 
@@ -1035,12 +1044,31 @@ func (c *Client) GenerateTLSConfig() *TLSConfig {
 		return nil
 	}
 
+	secretID, secretKey := c.parseDNSPodToken()
+	if secretID == "" || secretKey == "" {
+		return nil
+	}
+
 	// 生成平台域名的 Wildcard 策略
-	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", c.config.DNSPodToken)
+	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", secretID, secretKey)
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{
 			Policies: []AutomationPolicy{wildcardPolicy},
 		},
 	}
+}
+
+// parseDNSPodToken 解析 DNSPodToken 字符串
+// DNSPodToken 格式为 "SecretId,SecretKey"（逗号分隔）
+// 返回 secretID 和 secretKey，如果格式不正确则返回空字符串
+func (c *Client) parseDNSPodToken() (secretID, secretKey string) {
+	if c.config.DNSPodToken == "" {
+		return "", ""
+	}
+	parts := strings.SplitN(c.config.DNSPodToken, ",", 2)
+	if len(parts) != 2 {
+		return "", ""
+	}
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
 }

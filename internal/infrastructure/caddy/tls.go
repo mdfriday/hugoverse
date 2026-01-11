@@ -35,9 +35,11 @@ type DNSChallenge struct {
 }
 
 // DNSProvider DNS 提供商配置
+// 腾讯云 DNS (tencentcloud) 需要 secret_id 和 secret_key 两个字段
 type DNSProvider struct {
-	Name     string `json:"name"`
-	APIToken string `json:"api_token"`
+	Name      string `json:"name"`
+	SecretID  string `json:"secret_id"`
+	SecretKey string `json:"secret_key"`
 }
 
 // HTTPChallenge HTTP-01 Challenge 配置
@@ -61,10 +63,10 @@ type HTTPChallenge struct {
 //
 // 注意：DNSPod 已被腾讯云收购，原 github.com/caddy-dns/dnspod 已过时且不兼容新版 libdns。
 // 请使用 github.com/caddy-dns/tencentcloud，provider name 为 "tencentcloud"。
-// API Token 格式为 SecretId,SecretKey（用逗号分隔）
+// secretID 和 secretKey 分别是腾讯云 API 的 SecretId 和 SecretKey。
 //
 // 如果使用官方预编译的 Caddy 二进制文件，DNS-01 challenge 将无法工作。
-func NewDNS01Policy(id string, subjects []string, providerName, apiToken string) AutomationPolicy {
+func NewDNS01Policy(id string, subjects []string, providerName, secretID, secretKey string) AutomationPolicy {
 	return AutomationPolicy{
 		ID:       id,
 		Subjects: subjects,
@@ -74,8 +76,9 @@ func NewDNS01Policy(id string, subjects []string, providerName, apiToken string)
 				Challenges: &ChallengeConfig{
 					DNS: &DNSChallenge{
 						Provider: &DNSProvider{
-							Name:     providerName,
-							APIToken: apiToken,
+							Name:      providerName,
+							SecretID:  secretID,
+							SecretKey: secretKey,
 						},
 					},
 				},
@@ -111,9 +114,9 @@ func NewSingleDomainHTTP01Policy(domain string) AutomationPolicy {
 // 用于平台域名（如 mdfriday.com 和 *.mdfriday.com）
 //
 // 前提条件：需要构建包含 DNS provider 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
-func NewWildcardDNS01Policy(coreDomain, providerName, apiToken string) AutomationPolicy {
+func NewWildcardDNS01Policy(coreDomain, providerName, secretID, secretKey string) AutomationPolicy {
 	subjects := []string{coreDomain, "*." + coreDomain}
-	return NewDNS01Policy("platform-wildcard", subjects, providerName, apiToken)
+	return NewDNS01Policy("platform-wildcard", subjects, providerName, secretID, secretKey)
 }
 
 // ==================== TLS 配置生成函数 ====================
@@ -123,14 +126,14 @@ func NewWildcardDNS01Policy(coreDomain, providerName, apiToken string) Automatio
 // 所有 subdomain 将自动使用此 Wildcard 证书，无需单独申请
 //
 // 前提条件：需要构建包含腾讯云 DNS 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
-// apiToken 格式：SecretId,SecretKey（用逗号分隔）
-func GeneratePlatformTLSConfig(coreDomain, apiToken string) *TLSConfig {
-	if coreDomain == "" || apiToken == "" {
+// secretID 和 secretKey 分别是腾讯云 API 的 SecretId 和 SecretKey
+func GeneratePlatformTLSConfig(coreDomain, secretID, secretKey string) *TLSConfig {
+	if coreDomain == "" || secretID == "" || secretKey == "" {
 		return nil
 	}
 
 	// 创建平台域名的 Wildcard 策略（使用 tencentcloud provider）
-	wildcardPolicy := NewWildcardDNS01Policy(coreDomain, "tencentcloud", apiToken)
+	wildcardPolicy := NewWildcardDNS01Policy(coreDomain, "tencentcloud", secretID, secretKey)
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{
