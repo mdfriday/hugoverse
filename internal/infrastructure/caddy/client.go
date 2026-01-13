@@ -123,9 +123,10 @@ type MatchHost struct {
 
 // HandleConfig 处理器配置
 type HandleConfig struct {
-	Handler   string     `json:"handler"`
-	Upstreams []Upstream `json:"upstreams,omitempty"` // for reverse_proxy
-	Root      string     `json:"root,omitempty"`      // for file_server
+	Handler    string     `json:"handler"`
+	Upstreams  []Upstream `json:"upstreams,omitempty"`   // for reverse_proxy
+	Root       string     `json:"root,omitempty"`        // for file_server
+	StatusCode int        `json:"status_code,omitempty"` // for static_response
 }
 
 // Upstream 上游服务器
@@ -360,38 +361,59 @@ func (c *Client) StartServerBackground() error {
 				},
 			}
 		} else {
-			serverConfig = &ServerConfig{
-				Listen: []string{":80", ":443"},
-				Routes: []Route{
-					{
-						ID: fmt.Sprintf("core-app.%s", c.config.CoreDomain),
-						Match: []MatchHost{
-							{Host: []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}},
-						},
-						Handle: []HandleConfig{
-							{
-								Handler: "reverse_proxy",
-								Upstreams: []Upstream{
-									{Dial: c.config.DefaultBackend},
-								},
-							},
-						},
+			// 生产环境路由配置
+			routes := []Route{
+				{
+					ID: fmt.Sprintf("core-app.%s", c.config.CoreDomain),
+					Match: []MatchHost{
+						{Host: []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}},
 					},
-					{
-						ID: fmt.Sprintf("core-cdb.%s", c.config.CoreDomain),
-						Match: []MatchHost{
-							{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
-						},
-						Handle: []HandleConfig{
-							{
-								Handler: "reverse_proxy",
-								Upstreams: []Upstream{
-									{Dial: c.config.CouchDBBackend},
-								},
+					Handle: []HandleConfig{
+						{
+							Handler: "reverse_proxy",
+							Upstreams: []Upstream{
+								{Dial: c.config.DefaultBackend},
 							},
 						},
 					},
 				},
+				{
+					ID: fmt.Sprintf("core-cdb.%s", c.config.CoreDomain),
+					Match: []MatchHost{
+						{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+					},
+					Handle: []HandleConfig{
+						{
+							Handler: "reverse_proxy",
+							Upstreams: []Upstream{
+								{Dial: c.config.CouchDBBackend},
+							},
+						},
+					},
+				},
+			}
+
+			// 如果配置了 DNSPodToken，添加通配符占位路由（触发通配符证书申请）
+			// 这个路由放在最后，作为 fallback，返回 404
+			// 所有 *.mdfriday.com 的子域名会复用这个通配符证书
+			if c.config.DNSPodToken != "" {
+				routes = append(routes, Route{
+					ID: fmt.Sprintf("wildcard-%s", c.config.CoreDomain),
+					Match: []MatchHost{
+						{Host: []string{fmt.Sprintf("*.%s", c.config.CoreDomain)}},
+					},
+					Handle: []HandleConfig{
+						{
+							Handler:    "static_response",
+							StatusCode: 404,
+						},
+					},
+				})
+			}
+
+			serverConfig = &ServerConfig{
+				Listen: []string{":80", ":443"},
+				Routes: routes,
 			}
 		}
 
