@@ -551,6 +551,9 @@ func (c *Client) GetPID() (int, error) {
 // sitePath: 静态站点文件路径 (如 /web/sites/example-com)
 // A     mdfriday.com        →  <server-ip>
 // A     *.mdfriday.com      →  <server-ip>
+//
+// 注意：新 route 会插入到通配符 route 之前（倒数第二个位置），
+// 确保具体域名优先于通配符匹配
 func (c *Client) AddStaticSite(domain, sitePath string) error {
 	route := Route{
 		ID: fmt.Sprintf("site-%s", sanitizeDomainForID(domain)),
@@ -570,7 +573,21 @@ func (c *Client) AddStaticSite(domain, sitePath string) error {
 		return fmt.Errorf("failed to marshal route: %w", err)
 	}
 
-	url := fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
+	// 获取当前 routes 数量，以便插入到通配符之前
+	insertIndex, err := c.getRouteInsertIndex()
+	if err != nil {
+		// 如果获取失败，回退到追加模式
+		insertIndex = -1
+	}
+
+	var url string
+	if insertIndex > 0 {
+		// 插入到指定位置（通配符之前）
+		url = fmt.Sprintf("%s/config/apps/http/servers/main/routes/%d", c.config.AdminAPI, insertIndex)
+	} else {
+		// 追加到末尾（回退模式）
+		url = fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
+	}
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
@@ -590,6 +607,49 @@ func (c *Client) AddStaticSite(domain, sitePath string) error {
 	}
 
 	return nil
+}
+
+// getRouteInsertIndex 获取新 route 应该插入的位置
+// 返回通配符 route 的索引（即倒数第一个），新 route 插入到这个位置会把通配符挤到最后
+// 如果没有通配符 route，返回 -1 表示追加到末尾
+func (c *Client) getRouteInsertIndex() (int, error) {
+	url := fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
+
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return -1, err
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return -1, fmt.Errorf("failed to get routes (status %d)", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return -1, err
+	}
+
+	var routes []map[string]interface{}
+	if err := json.Unmarshal(body, &routes); err != nil {
+		return -1, err
+	}
+
+	// 查找通配符 route 的位置
+	wildcardID := fmt.Sprintf("wildcard-%s", c.config.CoreDomain)
+	for i, route := range routes {
+		if id, ok := route["@id"].(string); ok && id == wildcardID {
+			return i, nil
+		}
+	}
+
+	// 没有找到通配符 route，追加到末尾
+	return -1, nil
 }
 
 // GetCertificateStatus 查询域名的 SSL 证书状态
