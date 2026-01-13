@@ -37,10 +37,13 @@ type DNSChallenge struct {
 // DNSProvider DNS 提供商配置
 // 腾讯云 DNS (tencentcloud) 凭据直接在配置中指定
 // 注意：环境变量方式在某些 Caddy 版本中不工作，因此直接在配置中传递凭据
+// JSON 字段名必须使用 PascalCase（与 caddy-dns/tencentcloud 插件保持一致）
 type DNSProvider struct {
-	Name      string `json:"name"`
-	SecretID  string `json:"secret_id,omitempty"`
-	SecretKey string `json:"secret_key,omitempty"`
+	Name         string `json:"name"`
+	SecretId     string `json:"SecretId,omitempty"`
+	SecretKey    string `json:"SecretKey,omitempty"`
+	Region       string `json:"Region,omitempty"`
+	SessionToken string `json:"SessionToken,omitempty"`
 }
 
 // HTTPChallenge HTTP-01 Challenge 配置
@@ -78,7 +81,7 @@ func NewDNS01Policy(id string, subjects []string, providerName, secretID, secret
 					DNS: &DNSChallenge{
 						Provider: &DNSProvider{
 							Name:      providerName,
-							SecretID:  secretID,
+							SecretId:  secretID,
 							SecretKey: secretKey,
 						},
 					},
