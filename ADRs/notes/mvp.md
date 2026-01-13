@@ -19,22 +19,26 @@ export PATH="$HOME/go/bin:$PATH"
 
 ./hugov license generate -email me@sunwei.xyz -password 123456 -plan starter -count 1
 
-#   1. License Key: MDF-CPJB-CJSG-2B7C
-#      Email:       cpjb-cjsg-2b7c@mdfriday.com
-#      Password:    Y3BqYi1janNnLTJiN2M=
-
+#   1. License Key: MDF-7XV5-DPW2-4VTT
+#      Email:       7xv5-dpw2-4vtt@mdfriday.com
+#      Password:    N3h2NS1kcHcyLTR2dHQ=
 
 curl -X POST http://127.0.0.1:1314/api/login \
 -H "Content-Type: application/x-www-form-urlencoded" \
--d "email=r3qn-3fnl-bn4x@mdfriday.com&password=cjNxbi0zZm5sLWJuNHg="
+-d "email=7xv5-dpw2-4vtt@mdfriday.com&password=N3h2NS1kcHcyLTR2dHQ="
 
-# eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18
+# eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMTFUMTY6NDI6MDEuNDQ3MDY0KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiI3eHY1LWRwdzItNHZ0dEBtZGZyaWRheS5jb20ifQ.kOKXRLFbv8VV_g-OsnQBVuranUabF8W47Fuwf_CqiwM
+
+curl -s -X GET "http://127.0.0.1:1314/api/license/info?key=MDF-7XV5-DPW2-4VTT" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMTFUMTY6NDI6MDEuNDQ3MDY0KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiI3eHY1LWRwdzItNHZ0dEBtZGZyaWRheS5jb20ifQ.kOKXRLFbv8VV_g-OsnQBVuranUabF8W47Fuwf_CqiwM"
+
+#{"data":[{"activated":true,"activated_at":1768207508890,"current_devices":0,"current_ips":0,"expires_at":1799743508890,"features":{"max_devices":3,"max_ips":3,"sync_enabled":true,"sync_quota":500,"publish_enabled":true,"max_sites":3,"max_storage":1024,"custom_domain":false,"validity_days":365},"is_expired":false,"is_valid":true,"issue_date":1768207508890,"license_key":"MDF-7XV5-DPW2-4VTT","max_devices":3,"max_ips":3,"plan":"starter"}]}
 
 curl -s -X POST "http://127.0.0.1:1314/api/license/activate" \
-    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMDhUMTU6NDQ6MjIuMDMyMjI4KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiJjcGpiLWNqc2ctMmI3Y0BtZGZyaWRheS5jb20ifQ.XMib-pxIwb6fPD60c7A1KaqQ2gN1O0kHt4tXZ63oe18" \
-    -F "license_key=MDF-CPJB-CJSG-2B7C" \
-    -F "device_id=DID_11223344" \
-    -F "device_name=Test Device" \
+    -H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJhdWQiOm51bGwsImV4cCI6IjIwMjYtMDItMTFUMTY6NDI6MDEuNDQ3MDY0KzA4OjAwIiwiaWF0IjpudWxsLCJpc3MiOm51bGwsImp0aSI6bnVsbCwibmJmIjpudWxsLCJzdWIiOm51bGwsInVzZXIiOiI3eHY1LWRwdzItNHZ0dEBtZGZyaWRheS5jb20ifQ.kOKXRLFbv8VV_g-OsnQBVuranUabF8W47Fuwf_CqiwM" \
+    -F "license_key=MDF-7XV5-DPW2-4VTT" \
+    -F "device_id=DID_11223322" \
+    -F "device_name=Test Device 22" \
     -F "device_type=desktop"
 
 # {"data":[{"activated":true,"expires_at":1799480892903,"features":{"max_devices":3,"max_ips":3,"sync_enabled":true,"sync_quota":500,"publish_enabled":true,"max_sites":3,"max_storage":1024,"custom_domain":false,"validity_days":365},"first_time":false,"license_key":"MDF-CPJB-CJSG-2B7C","plan":"starter","success":true,"sync":{"db_endpoint":"https://cdb.127.0.0.1","db_name":"userdb-6873577151b0b6e2","db_password":"Y3BqYi1janNnLTJiN2M=","email":"cpjb-cjsg-2b7c@mdfriday.com","status":"active"},"user":{"email":"cpjb-cjsg-2b7c@mdfriday.com","user_dir":"6873577151"}}]}

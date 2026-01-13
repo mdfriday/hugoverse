@@ -105,6 +105,17 @@ func (s *Server) wrapContentHandler(handler http.HandlerFunc) http.HandlerFunc {
 					s.auth.Check(handler)))))
 }
 
+// wrapLicenseHandler wraps handlers that require license expiry check
+// Returns 403 Forbidden with JSON error if license is expired
+func (s *Server) wrapLicenseHandler(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(
+		s.cors.Handle(
+			s.comp.Gzip(
+				s.db.Open(
+					s.auth.Check(
+						s.license.CheckExpiry(handler))))))
+}
+
 func (s *Server) wrapSignatureHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(
 		s.cors.Handle(

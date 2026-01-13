@@ -222,8 +222,8 @@ func (s *Handler) UpdateSubDomainHandler(res http.ResponseWriter, req *http.Requ
 	}
 
 	oldSubdomain := oldSd.Sub
-	oldFullDomain := fmt.Sprintf("%s.%s", oldSubdomain, s.adminApp.Domain())
-	newFullDomain := fmt.Sprintf("%s.%s", newSubdomain, s.adminApp.Domain())
+	oldFullDomain := fmt.Sprintf("%s.%s", oldSubdomain, s.adminApp.RootDomain())
+	newFullDomain := fmt.Sprintf("%s.%s", newSubdomain, s.adminApp.RootDomain())
 
 	// sitePath 保持不变
 	sitePath := filepath.Join(application.PreviewDir(), pd.Folder, application.SubDomainFolder())
@@ -410,7 +410,7 @@ func (s *Handler) AddDomainHandler(res http.ResponseWriter, req *http.Request) {
 	// 调用 Caddy 添加自定义域名（内部会处理域名检查和 TLS policy）
 	if err := s.caddyClient.AddCustomDomain(domain, sitePath, false); err != nil {
 		s.log.Errorf("Failed to add custom domain to Caddy: %v", err)
-		
+
 		// 检查是否是域名未就绪的错误
 		if strings.Contains(err.Error(), "domain not ready") {
 			serverIP := s.adminApp.ServerIP()
@@ -420,7 +420,7 @@ func (s *Handler) AddDomainHandler(res http.ResponseWriter, req *http.Request) {
 			s.jsonError(res, fmt.Sprintf("Domain DNS is not configured correctly. Please point your domain to %s", serverIP), http.StatusBadRequest)
 			return
 		}
-		
+
 		s.jsonError(res, "Failed to add custom domain: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -613,86 +613,85 @@ func validateSubdomainFormat(subdomain string) error {
 // isReservedSubdomain 检查是否为保留的 subdomain
 func isReservedSubdomain(subdomain string) bool {
 	reserved := map[string]bool{
-		"www":      true,
-		"api":      true,
-		"admin":    true,
-		"cdb":      true,
-		"mail":     true,
-		"ftp":      true,
-		"smtp":     true,
-		"pop":      true,
-		"imap":     true,
-		"ns1":      true,
-		"ns2":      true,
-		"ns3":      true,
-		"mx":       true,
-		"mx1":      true,
-		"mx2":      true,
-		"webmail":  true,
-		"cpanel":   true,
-		"whm":      true,
+		"www":          true,
+		"api":          true,
+		"admin":        true,
+		"cdb":          true,
+		"mail":         true,
+		"ftp":          true,
+		"smtp":         true,
+		"pop":          true,
+		"imap":         true,
+		"ns1":          true,
+		"ns2":          true,
+		"ns3":          true,
+		"mx":           true,
+		"mx1":          true,
+		"mx2":          true,
+		"webmail":      true,
+		"cpanel":       true,
+		"whm":          true,
 		"autodiscover": true,
 		"autoconfig":   true,
-		"test":     true,
-		"dev":      true,
-		"staging":  true,
-		"prod":     true,
-		"beta":     true,
-		"alpha":    true,
-		"demo":     true,
-		"preview":  true,
-		"support":  true,
-		"help":     true,
-		"docs":     true,
-		"blog":     true,
-		"shop":     true,
-		"store":    true,
-		"app":      true,
-		"apps":     true,
-		"mobile":   true,
-		"status":   true,
-		"cdn":      true,
-		"static":   true,
-		"assets":   true,
-		"img":      true,
-		"images":   true,
-		"video":    true,
-		"videos":   true,
-		"media":    true,
-		"download": true,
-		"downloads": true,
-		"upload":   true,
-		"uploads":  true,
-		"file":     true,
-		"files":    true,
-		"secure":   true,
-		"ssl":      true,
-		"vpn":      true,
-		"proxy":    true,
-		"git":      true,
-		"svn":      true,
-		"repo":     true,
-		"jenkins":  true,
-		"ci":       true,
-		"build":    true,
-		"deploy":   true,
-		"monitor":  true,
-		"log":      true,
-		"logs":     true,
-		"analytics": true,
-		"stats":    true,
-		"db":       true,
-		"database": true,
-		"mysql":    true,
-		"postgres": true,
-		"redis":    true,
-		"mongo":    true,
-		"elastic":  true,
-		"kafka":    true,
-		"rabbit":   true,
-		"mdfriday": true,
+		"test":         true,
+		"dev":          true,
+		"staging":      true,
+		"prod":         true,
+		"beta":         true,
+		"alpha":        true,
+		"demo":         true,
+		"preview":      true,
+		"support":      true,
+		"help":         true,
+		"docs":         true,
+		"blog":         true,
+		"shop":         true,
+		"store":        true,
+		"app":          true,
+		"apps":         true,
+		"mobile":       true,
+		"status":       true,
+		"cdn":          true,
+		"static":       true,
+		"assets":       true,
+		"img":          true,
+		"images":       true,
+		"video":        true,
+		"videos":       true,
+		"media":        true,
+		"download":     true,
+		"downloads":    true,
+		"upload":       true,
+		"uploads":      true,
+		"file":         true,
+		"files":        true,
+		"secure":       true,
+		"ssl":          true,
+		"vpn":          true,
+		"proxy":        true,
+		"git":          true,
+		"svn":          true,
+		"repo":         true,
+		"jenkins":      true,
+		"ci":           true,
+		"build":        true,
+		"deploy":       true,
+		"monitor":      true,
+		"log":          true,
+		"logs":         true,
+		"analytics":    true,
+		"stats":        true,
+		"db":           true,
+		"database":     true,
+		"mysql":        true,
+		"postgres":     true,
+		"redis":        true,
+		"mongo":        true,
+		"elastic":      true,
+		"kafka":        true,
+		"rabbit":       true,
+		"mdfriday":     true,
 	}
 
 	return reserved[subdomain]
 }
-

@@ -20,6 +20,7 @@ import (
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/database"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/form"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/handler"
+	"github.com/mdfriday/hugoverse/internal/interfaces/api/license"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/record"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/tls"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
@@ -75,6 +76,7 @@ type Server struct {
 	cache   *cache.Cache
 	cors    *cors.Cors
 	auth    *auth.Auth
+	license *license.License
 
 	handler    *handler.Handler
 	httpServer *http.Server
@@ -126,6 +128,8 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 	s.record.Start()
 
 	s.tls = tls.NewTls(s, s.adminApp, application.TLSDir())
+
+	s.license = license.New(contentApp, s.Log)
 
 	s.handler = handler.New(s.Log, s.db, contentApp, s.adminApp, s.auth)
 

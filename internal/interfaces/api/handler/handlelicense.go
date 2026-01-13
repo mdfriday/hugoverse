@@ -131,7 +131,7 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 				}
 
 				if err := s.caddyClient.AddStaticSite(
-					fmt.Sprintf("%s.%s", sd.Sub, s.adminApp.Domain()),
+					fmt.Sprintf("%s.%s", sd.Sub, s.adminApp.RootDomain()),
 					filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder())); err != nil {
 					s.log.Errorf("Failed to add static site to Caddy for subdomain %s: %v", sd.Sub, err)
 					s.jsonError(res, "Failed to add static site to Caddy: "+err.Error(), http.StatusInternalServerError)

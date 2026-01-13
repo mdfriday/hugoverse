@@ -2,6 +2,8 @@ package entity
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
 )
 
@@ -17,8 +19,20 @@ func (h *Http) Host() string {
 	return h.Conf.Domain
 }
 
-func (h *Http) Domain() string       { return h.Conf.Domain }
-func (h *Http) HttpPort() string     { return h.Conf.HTTPPort }
+func (h *Http) Domain() string   { return h.Conf.Domain }
+func (h *Http) HttpPort() string { return h.Conf.HTTPPort }
+
+// RootDomain extracts the root domain (last two parts) from Domain()
+// Examples: abc.example.com -> example.com, sub.abc.example.com -> example.com
+func (h *Http) RootDomain() string {
+	domain := h.Domain()
+	parts := strings.Split(domain, ".")
+	if len(parts) <= 2 {
+		return domain // already root domain or single part (e.g., localhost)
+	}
+	return strings.Join(parts[len(parts)-2:], ".")
+}
+
 func (h *Http) DevHttpsPort() string { return h.Conf.DevHTTPSPort }
 func (h *Http) BindAddress() string  { return h.Conf.BindAddress }
 func (h *Http) ServerIP() string     { return h.Conf.ServerIP }

@@ -364,9 +364,9 @@ func (c *Client) StartServerBackground() error {
 				Listen: []string{":80", ":443"},
 				Routes: []Route{
 					{
-						ID: fmt.Sprintf("core-%s", c.config.CoreDomain),
+						ID: fmt.Sprintf("core-app.%s", c.config.CoreDomain),
 						Match: []MatchHost{
-							{Host: []string{fmt.Sprintf("mdfriday.%s", c.config.CoreDomain)}},
+							{Host: []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}},
 						},
 						Handle: []HandleConfig{
 							{
@@ -378,9 +378,9 @@ func (c *Client) StartServerBackground() error {
 						},
 					},
 					{
-						ID: fmt.Sprintf("couchdb-%s", c.config.CoreDomain),
+						ID: fmt.Sprintf("core-cdb.%s", c.config.CoreDomain),
 						Match: []MatchHost{
-							{Host: []string{fmt.Sprintf("cdb.mdfriday.%s", c.config.CoreDomain)}},
+							{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
 						},
 						Handle: []HandleConfig{
 							{
