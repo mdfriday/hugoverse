@@ -59,5 +59,5 @@ func (h *Http) CouchDBDomain() string {
 	if h.Env == "dev" {
 		return "http://localhost:5984"
 	}
-	return fmt.Sprintf("https://cdb.%s", h.Domain())
+	return fmt.Sprintf("https://cdb.%s", h.RootDomain())
 }
