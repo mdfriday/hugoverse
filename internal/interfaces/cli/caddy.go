@@ -329,6 +329,7 @@ func (c *caddyCmd) runStatus(args []string) error {
 func (c *caddyCmd) runAdd(args []string) error {
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	adminAPI := addCmd.String("admin", "http://127.0.0.1:2019", "Caddy Admin API address")
+	coreDomain := addCmd.String("core-domain", "mdfriday.com", "Core domain for wildcard routing")
 	domain := addCmd.String("domain", "", "Domain name (required)")
 	path := addCmd.String("path", "", "Static site path (required)")
 
@@ -346,7 +347,8 @@ func (c *caddyCmd) runAdd(args []string) error {
 	fmt.Printf("📁 Adding static site: %s -> %s\n", *domain, *path)
 
 	config := &caddy.Config{
-		AdminAPI: *adminAPI,
+		AdminAPI:   *adminAPI,
+		CoreDomain: *coreDomain,
 	}
 	client := caddy.NewClient(config)
 

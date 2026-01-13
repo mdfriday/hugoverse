@@ -51,7 +51,7 @@ func NewClient(config *Config) *Client {
 		config.CouchDBBackend = "127.0.0.1:5984"
 	}
 	if config.CoreDomain == "" {
-		config.CoreDomain = "mdfriday.site"
+		config.CoreDomain = "mdfriday.com"
 	}
 	if config.PidFile == "" {
 		config.PidFile = "/tmp/caddy.pid"
