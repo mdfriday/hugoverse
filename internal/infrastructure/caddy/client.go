@@ -552,8 +552,10 @@ func (c *Client) GetPID() (int, error) {
 // A     mdfriday.com        →  <server-ip>
 // A     *.mdfriday.com      →  <server-ip>
 //
-// 注意：新 route 会插入到通配符 route 之前（倒数第二个位置），
-// 确保具体域名优先于通配符匹配
+// 注意：为确保具体域名优先于通配符匹配，采用以下策略：
+// 1. 删除通配符 route
+// 2. 添加新 route
+// 3. 重新添加通配符 route（保持在最后）
 func (c *Client) AddStaticSite(domain, sitePath string) error {
 	route := Route{
 		ID: fmt.Sprintf("site-%s", sanitizeDomainForID(domain)),
@@ -568,88 +570,160 @@ func (c *Client) AddStaticSite(domain, sitePath string) error {
 		},
 	}
 
+	// 1. 获取并删除通配符 route（如果存在）
+	wildcardRoute, err := c.getAndRemoveWildcardRoute()
+	if err != nil {
+		// 忽略错误，继续添加新 route
+		wildcardRoute = nil
+	}
+
+	// 2. 添加新 route
 	body, err := json.Marshal(route)
 	if err != nil {
+		// 如果失败，尝试恢复通配符 route
+		if wildcardRoute != nil {
+			if err := c.addRoute(*wildcardRoute); err != nil {
+				// 通配符添加失败不影响主流程，只记录日志
+				// 可以通过后续操作恢复
+				fmt.Printf("failed to restore wildcard route: %v\n", err)
+			}
+		}
 		return fmt.Errorf("failed to marshal route: %w", err)
 	}
 
-	// 获取当前 routes 数量，以便插入到通配符之前
-	insertIndex, err := c.getRouteInsertIndex()
-	if err != nil {
-		// 如果获取失败，回退到追加模式
-		insertIndex = -1
-	}
-
-	var url string
-	if insertIndex > 0 {
-		// 插入到指定位置（通配符之前）
-		url = fmt.Sprintf("%s/config/apps/http/servers/main/routes/%d", c.config.AdminAPI, insertIndex)
-	} else {
-		// 追加到末尾（回退模式）
-		url = fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
-	}
-
+	url := fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
+		if wildcardRoute != nil {
+			if err := c.addRoute(*wildcardRoute); err != nil {
+				// 通配符添加失败不影响主流程，只记录日志
+				// 可以通过后续操作恢复
+				fmt.Printf("failed to restore wildcard route: %v\n", err)
+			}
+		}
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		if wildcardRoute != nil {
+			if err := c.addRoute(*wildcardRoute); err != nil {
+				// 通配符添加失败不影响主流程，只记录日志
+				// 可以通过后续操作恢复
+				fmt.Printf("failed to restore wildcard route: %v\n", err)
+			}
+		}
 		return fmt.Errorf("failed to add route: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		respBody, _ := io.ReadAll(resp.Body)
+		if wildcardRoute != nil {
+			if err := c.addRoute(*wildcardRoute); err != nil {
+				// 通配符添加失败不影响主流程，只记录日志
+				// 可以通过后续操作恢复
+				fmt.Printf("failed to restore wildcard route: %v\n", err)
+			}
+		}
 		return fmt.Errorf("failed to add route (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	// 3. 重新添加通配符 route（保持在最后）
+	if wildcardRoute != nil {
+		if err := c.addRoute(*wildcardRoute); err != nil {
+			// 通配符添加失败不影响主流程，只记录日志
+			// 可以通过后续操作恢复
+			fmt.Printf("failed to restore wildcard route: %v\n", err)
+		}
 	}
 
 	return nil
 }
 
-// getRouteInsertIndex 获取新 route 应该插入的位置
-// 返回通配符 route 的索引（即倒数第一个），新 route 插入到这个位置会把通配符挤到最后
-// 如果没有通配符 route，返回 -1 表示追加到末尾
-func (c *Client) getRouteInsertIndex() (int, error) {
-	url := fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
+// getAndRemoveWildcardRoute 获取并删除通配符 route
+// 返回被删除的 route 配置，以便后续重新添加
+func (c *Client) getAndRemoveWildcardRoute() (*Route, error) {
+	wildcardID := fmt.Sprintf("wildcard-%s", c.config.CoreDomain)
 
+	// 先获取通配符 route 的配置
+	url := fmt.Sprintf("%s/id/%s", c.config.AdminAPI, wildcardID)
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode == http.StatusNotFound {
+		// 通配符 route 不存在，返回 nil
+		return nil, nil
+	}
+
 	if resp.StatusCode != http.StatusOK {
-		return -1, fmt.Errorf("failed to get routes (status %d)", resp.StatusCode)
+		return nil, fmt.Errorf("failed to get wildcard route (status %d)", resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return -1, err
+		return nil, err
 	}
 
-	var routes []map[string]interface{}
-	if err := json.Unmarshal(body, &routes); err != nil {
-		return -1, err
+	var route Route
+	if err := json.Unmarshal(body, &route); err != nil {
+		return nil, err
 	}
 
-	// 查找通配符 route 的位置
-	wildcardID := fmt.Sprintf("wildcard-%s", c.config.CoreDomain)
-	for i, route := range routes {
-		if id, ok := route["@id"].(string); ok && id == wildcardID {
-			return i, nil
-		}
+	// 删除通配符 route
+	deleteURL := fmt.Sprintf("%s/id/%s", c.config.AdminAPI, wildcardID)
+	deleteReq, err := http.NewRequest(http.MethodDelete, deleteURL, nil)
+	if err != nil {
+		return nil, err
 	}
 
-	// 没有找到通配符 route，追加到末尾
-	return -1, nil
+	deleteResp, err := c.httpClient.Do(deleteReq)
+	if err != nil {
+		return nil, err
+	}
+	defer deleteResp.Body.Close()
+
+	if deleteResp.StatusCode != http.StatusOK && deleteResp.StatusCode != http.StatusNotFound {
+		return nil, fmt.Errorf("failed to delete wildcard route (status %d)", deleteResp.StatusCode)
+	}
+
+	return &route, nil
+}
+
+// addRoute 添加一个 route
+func (c *Client) addRoute(route Route) error {
+	body, err := json.Marshal(route)
+	if err != nil {
+		return err
+	}
+
+	url := fmt.Sprintf("%s/config/apps/http/servers/main/routes", c.config.AdminAPI)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("failed to add route (status %d)", resp.StatusCode)
+	}
+
+	return nil
 }
 
 // GetCertificateStatus 查询域名的 SSL 证书状态
