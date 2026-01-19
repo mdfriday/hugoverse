@@ -166,30 +166,12 @@ func (d *Database) PutContent(ci any, data []byte) error {
 			}); err != nil {
 			return err
 		}
+
+		if err := d.getStore(ns).SetIndex(newKeyValueItem(ciSlug.ItemSlug(), fmt.Sprintf("%s:%d", ns, id))); err != nil {
+			return err
+		}
 	}
 
-	return nil
-}
-
-func (d *Database) NewContent(ci any, data []byte) error {
-	if err := d.PutContent(ci, data); err != nil {
-		return err
-	}
-
-	cii, ok := ci.(content.Identifiable)
-	if !ok {
-		return errors.New("invalid content type")
-	}
-	id := cii.ItemID()
-	ns := cii.ItemName()
-
-	ciSlug, ok := ci.(content.Sluggable)
-	if !ok {
-		return errors.New("invalid content type")
-	}
-	if err := d.getStore(ns).SetIndex(newKeyValueItem(ciSlug.ItemSlug(), fmt.Sprintf("%s:%d", ns, id))); err != nil {
-		return err
-	}
 	ciHash, ok := ci.(content.Hashable)
 	if ok {
 		if err := d.getStore(ns).SetIndex(newKeyValueItem(fmt.Sprintf("%s:%s", ns, ciHash.ItemHash()), fmt.Sprintf("%d", id))); err != nil {
@@ -198,6 +180,10 @@ func (d *Database) NewContent(ci any, data []byte) error {
 	}
 
 	return nil
+}
+
+func (d *Database) NewContent(ci any, data []byte) error {
+	return d.PutContent(ci, data)
 }
 
 func (d *Database) NextContentId(ns string) (uint64, error) {
