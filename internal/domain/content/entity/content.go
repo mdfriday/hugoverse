@@ -168,16 +168,6 @@ func (c *Content) UpdateContent(contentType string, data url.Values) error {
 }
 
 func (c *Content) UpdateContentObject(ci any) error {
-	b, err := c.Marshal(ci)
-	if err != nil {
-		return err
-	}
-
-	if err := c.Repo.PutContent(ci, b); err != nil {
-		c.Log.Errorln("[repo] PutContent Error:", err)
-		return err
-	}
-
 	cis, ok := ci.(content.Statusable)
 	if !ok {
 		return errors.New("invalid content type")
@@ -187,6 +177,16 @@ func (c *Content) UpdateContentObject(ci any) error {
 	cih, ok := ci.(content.Hashable)
 	if ok {
 		cih.SetHash()
+	}
+
+	b, err := c.Marshal(ci)
+	if err != nil {
+		return err
+	}
+
+	if err := c.Repo.PutContent(ci, b); err != nil {
+		c.Log.Errorln("[repo] PutContent Error:", err)
+		return err
 	}
 
 	cii, ok := ci.(content.Identifiable)

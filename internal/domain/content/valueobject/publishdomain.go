@@ -92,3 +92,36 @@ func (d *PublishDomain) AutoApprove(res http.ResponseWriter, req *http.Request) 
 
 	return nil
 }
+func (d *PublishDomain) BeforeAPICreate(res http.ResponseWriter, req *http.Request) error {
+	// do initial user authentication here on the request, checking for a
+	// token or cookie, or that certain form fields are set and valid
+
+	// for example, this will check if the request was made by a CMS admin user:
+	//if !user.IsValid(req) {
+	//	return api.ErrNoAuth
+	//}
+
+	// you could then to data validation on the request post form, or do it in
+	// the Create method, which is called after BeforeAPICreate
+
+	return nil
+}
+func (d *PublishDomain) AfterAPICreate(res http.ResponseWriter, req *http.Request) error {
+	return nil
+}
+
+func (d *PublishDomain) Create(res http.ResponseWriter, req *http.Request) error {
+	// do form data validation for required fields
+	required := []string{
+		"license",
+	}
+
+	for _, r := range required {
+		if req.PostFormValue(r) == "" {
+			err := fmt.Errorf("request missing required field: %s", r)
+			return err
+		}
+	}
+
+	return nil
+}

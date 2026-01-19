@@ -23,6 +23,18 @@ func (c *Content) GetSubDomainByKey(sub string) (*valueobject.SubDomain, error) 
 }
 
 func (c *Content) UpdateSubDomain(sd *valueobject.SubDomain) error {
+	slug, err := valueobject.Slug(sd)
+	if err != nil {
+		return err
+	}
+
+	slug, err = c.Repo.CheckSlugForDuplicate("SubDomain", slug)
+	if err != nil {
+		return err
+	}
+
+	sd.SetSlug(slug)
+
 	return c.UpdateContentObject(sd)
 }
 
