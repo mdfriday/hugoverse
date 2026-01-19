@@ -71,7 +71,7 @@ func New(log loggers.Logger, db *database.Database,
 
 	caddyClient := caddy.NewClient(&caddy.Config{
 		ServerIP:   adminApp.ServerIP(),
-		CoreDomain: adminApp.Domain(),
+		CoreDomain: adminApp.RootDomain(),
 	})
 
 	// 创建基本Handler结构

@@ -201,7 +201,7 @@ func (s *Handler) getContent(res http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Handler) postContent(res http.ResponseWriter, req *http.Request) {
-	err := req.ParseMultipartForm(apiFrom.MaxMemory) // maxMemory 4MB
+	err := req.ParseMultipartForm(apiFrom.MaxMemory)
 	if err != nil {
 		s.log.Errorf("Error parsing multipart form: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)

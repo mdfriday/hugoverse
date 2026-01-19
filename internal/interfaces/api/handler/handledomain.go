@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/mdfriday/hugoverse/internal/application"
-	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	apiFrom "github.com/mdfriday/hugoverse/internal/interfaces/api/form"
 	"github.com/mdfriday/hugoverse/pkg/timestamp"
 )
@@ -236,21 +235,17 @@ func (s *Handler) UpdateSubDomainHandler(res http.ResponseWriter, req *http.Requ
 
 	// 2. 更新 SubDomain 记录
 	now := timestamp.CurrentTimeMillis()
-	newSd := &contentVO.SubDomain{
-		License: license.LicenseKey,
-		Sub:     newSubdomain,
-		Item: contentVO.Item{
-			Timestamp: now,
-			Updated:   now,
-			Namespace: "SubDomain",
-		},
-	}
+	oldSd.Sub = newSubdomain
+	oldSd.Timestamp = now
+	oldSd.Updated = now
 
 	// 创建新的 SubDomain 记录
-	if _, err := s.contentApp.CreateSubDomain(newSd); err != nil {
+	if err := s.contentApp.UpdateSubDomain(oldSd); err != nil {
 		s.log.Errorf("Failed to create new subdomain record: %v", err)
 		// 回滚：恢复旧的 Caddy route
-		s.caddyClient.AddStaticSite(oldFullDomain, sitePath)
+		if err := s.caddyClient.AddStaticSite(oldFullDomain, sitePath); err != nil {
+			s.log.Errorf("Failed to rollback old Caddy route: %v", err)
+		}
 		s.jsonError(res, "Failed to update subdomain: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

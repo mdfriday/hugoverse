@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	MaxMemory = 8 << 20
+	MaxMemory = 32 << 20
 )
 
 type Content struct {
