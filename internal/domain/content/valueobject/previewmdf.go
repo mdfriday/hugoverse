@@ -12,6 +12,7 @@ type MDFPreview struct {
 
 	Name  string `json:"name"`
 	Type  string `json:"type"`
+	Path  string `json:"path"`
 	Asset string `json:"asset"`
 	Size  string `json:"size"`
 }
@@ -32,6 +33,13 @@ func (s *MDFPreview) MarshalEditor() ([]byte, error) {
 				"label":       "Type",
 				"type":        "text",
 				"placeholder": "Enter the type here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("Path", s, map[string]string{
+				"label":       "Path",
+				"type":        "text",
+				"placeholder": "Enter the path here",
 			}),
 		},
 		editor.Field{

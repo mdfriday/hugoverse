@@ -85,7 +85,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 	case "share":
 		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), preview.Name)
 	case "sub":
-		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder(), preview.Name)
+		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder(), preview.Path)
 	case "custom":
 		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder(), preview.Name)
 	default:
@@ -115,7 +115,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 	case "share":
 		link = fmt.Sprintf("%s/%s/%s/%s", s.adminApp.CaddyURL(), application.PreviewFolder(), s.db.UserDir(), preview.Name)
 	case "sub":
-		link = fmt.Sprintf("%s/%s", s.adminApp.SubBaseURL(s.db.UserDir()), preview.Name) // TODO: default sub changed
+		link = preview.Path
 	case "custom":
 		link = s.adminApp.BaseURL() // TODO: we need to add path
 	}
