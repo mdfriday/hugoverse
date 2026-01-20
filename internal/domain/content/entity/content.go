@@ -168,17 +168,6 @@ func (c *Content) UpdateContent(contentType string, data url.Values) error {
 }
 
 func (c *Content) UpdateContentObject(ci any) error {
-	cis, ok := ci.(content.Statusable)
-	if !ok {
-		return errors.New("invalid content type")
-	}
-	status := cis.ItemStatus()
-
-	cih, ok := ci.(content.Hashable)
-	if ok {
-		cih.SetHash()
-	}
-
 	b, err := c.Marshal(ci)
 	if err != nil {
 		return err
@@ -189,6 +178,17 @@ func (c *Content) UpdateContentObject(ci any) error {
 		return err
 	}
 
+	cis, ok := ci.(content.Statusable)
+	if !ok {
+		return errors.New("invalid content type")
+	}
+	status := cis.ItemStatus()
+
+	cih, ok := ci.(content.Hashable)
+	if ok {
+		cih.SetHash()
+	}
+	
 	cii, ok := ci.(content.Identifiable)
 	if ok {
 		go func() {

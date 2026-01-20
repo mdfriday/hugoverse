@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -233,14 +234,26 @@ func (s *Handler) UpdateSubDomainHandler(res http.ResponseWriter, req *http.Requ
 		// 继续执行，不阻塞
 	}
 
-	// 2. 更新 SubDomain 记录
+	// 2. 创建 SubDomain 记录
+	if err := s.contentApp.DeleteSubDomain(oldSd); err != nil {
+		s.log.Errorf("Failed to delete old subdomain record: %v", err)
+		s.jsonError(res, "Failed to update subdomain: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	now := timestamp.CurrentTimeMillis()
-	oldSd.Sub = newSubdomain
-	oldSd.Timestamp = now
-	oldSd.Updated = now
+	newSd := &contentVO.SubDomain{
+		License: license.LicenseKey,
+		Sub:     newSubdomain,
+		Item: contentVO.Item{
+			Timestamp: now,
+			Updated:   now,
+			Namespace: "SubDomain",
+		},
+	}
 
 	// 创建新的 SubDomain 记录
-	if err := s.contentApp.UpdateSubDomain(oldSd); err != nil {
+	if _, err := s.contentApp.CreateSubDomain(newSd); err != nil {
 		s.log.Errorf("Failed to create new subdomain record: %v", err)
 		// 回滚：恢复旧的 Caddy route
 		if err := s.caddyClient.AddStaticSite(oldFullDomain, sitePath); err != nil {
