@@ -82,7 +82,7 @@ func (l *License) MarshalEditor() ([]byte, error) {
 			View: editor.Checkbox("Activated", l, map[string]string{
 				"label": "Activated",
 			}, map[string]string{
-				"true": "Yes",
+				"true": "yes",
 			}),
 		},
 		editor.Field{
@@ -119,7 +119,7 @@ func (l *License) MarshalEditor() ([]byte, error) {
 			View: editor.Checkbox("SyncEnabled", l, map[string]string{
 				"label": "Sync Enabled",
 			}, map[string]string{
-				"true": "Yes",
+				"true": "sync",
 			}),
 		},
 		editor.Field{
@@ -132,7 +132,7 @@ func (l *License) MarshalEditor() ([]byte, error) {
 			View: editor.Checkbox("PublishEnabled", l, map[string]string{
 				"label": "Publish Enabled",
 			}, map[string]string{
-				"true": "Yes",
+				"true": "publish",
 			}),
 		},
 		editor.Field{
@@ -151,14 +151,14 @@ func (l *License) MarshalEditor() ([]byte, error) {
 			View: editor.Checkbox("CustomSubDomain", l, map[string]string{
 				"label": "Custom Sub Domain",
 			}, map[string]string{
-				"true": "Yes",
+				"true": "sub-domain",
 			}),
 		},
 		editor.Field{
 			View: editor.Checkbox("CustomDomain", l, map[string]string{
 				"label": "Custom Domain",
 			}, map[string]string{
-				"true": "Yes",
+				"true": "custom-domain",
 			}),
 		},
 	)
