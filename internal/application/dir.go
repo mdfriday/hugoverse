@@ -10,6 +10,7 @@ import (
 
 var cachedHugoverseDir string
 
+const folderEnterprise = "enterprise"
 const folderPreview = "s"
 const folderPublish = "publish"
 const folderSubDomain = "mdf_sub_domain"
@@ -49,6 +50,10 @@ func UploadDir() string {
 
 func ImageStorageDir() string {
 	return filepath.Join(DataDir(), "images")
+}
+
+func EnterpriseDir() string {
+	return filepath.Join(DataDir(), folderEnterprise)
 }
 
 func PreviewDir() string {

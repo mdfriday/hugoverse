@@ -82,7 +82,7 @@ func (cmd *licenseCmd) Run() error {
 // runGenerate 批量生成 license
 func (cmd *licenseCmd) runGenerate(args []string) error {
 	fs := flag.NewFlagSet("generate", flag.ExitOnError)
-	
+
 	email := fs.String("email", "", "Email for login")
 	password := fs.String("password", "", "Password for login")
 	apiBase := fs.String("api", "http://127.0.0.1:1314", "API base URL")
@@ -124,7 +124,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	fmt.Printf("   API: %s\n", *apiBase)
 	fmt.Printf("   Plan: %s\n", *plan)
 	fmt.Printf("   Count: %d\n", *count)
-	fmt.Printf("   Expiry: %d days\n", planConfig.ExpiryDays)
 	fmt.Printf("   Max Devices: %d\n", planConfig.MaxDevices)
 	fmt.Printf("   Max IPs: %d\n", planConfig.MaxIPs)
 	fmt.Println()
@@ -144,7 +143,7 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	successCount := 0
 	failCount := 0
 	generatedKeys := []string{}
-	
+
 	// 记录用户创建信息
 	type LicenseInfo struct {
 		Key      string
@@ -156,13 +155,13 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	for i := 0; i < *count; i++ {
 		// 生成 license key
 		licenseKey := cmd.generateLicenseKey(*plan)
-		
+
 		fmt.Printf("   [%d/%d] Creating: %s\n", i+1, *count, licenseKey)
-		
+
 		// 生成邮箱和密码
 		email := cmd.licenseKeyToEmail(licenseKey)
 		password := cmd.licenseKeyToPassword(licenseKey)
-		
+
 		// 步骤 1: 创建用户
 		fmt.Printf("        → Creating user: %s\n", email)
 		userErr := cmd.createUser(*apiBase, email, password)
@@ -172,12 +171,11 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 			continue // 用户创建失败，跳过 license 创建
 		}
 		fmt.Printf("        ✅ User created\n")
-		
+
 		// 步骤 2: 创建 license
 		fmt.Printf("        → Creating license\n")
-		licenseErr := cmd.createLicense(*apiBase, token, licenseKey, *plan, 
-			planConfig.ExpiryDays, planConfig.MaxDevices, planConfig.MaxIPs)
-		
+		licenseErr := cmd.createLicense(*apiBase, token, licenseKey, *plan, planConfig)
+
 		if licenseErr != nil {
 			fmt.Printf("        ❌ License creation failed: %v\n", licenseErr)
 			failCount++
@@ -228,38 +226,99 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 
 // PlanConfig 定义 plan 配置
 type PlanConfig struct {
-	ExpiryDays int
-	MaxDevices int
-	MaxIPs     int
+	// 设备/IP 限制
+	MaxDevices int `json:"max_devices"`
+	MaxIPs     int `json:"max_ips"`
+
+	// Sync 功能
+	SyncEnabled bool `json:"sync_enabled"`
+	SyncQuotaMB int  `json:"sync_quota"`
+
+	// Publish 功能
+	PublishEnabled  bool `json:"publish_enabled"`
+	MaxSites        int  `json:"max_sites"`
+	MaxStorageMB    int  `json:"max_storage"`
+	CustomDomain    bool `json:"custom_domain"`
+	CustomSubDomain bool `json:"custom_sub_domain"` // 二级域名
+
+	// 有效期（天数）
+	ValidityDays int `json:"validity_days"`
 }
 
 // getPlanConfig 获取 plan 配置
 func (cmd *licenseCmd) getPlanConfig(plan string) PlanConfig {
 	configs := map[string]PlanConfig{
 		"free": {
-			ExpiryDays: 30,
-			MaxDevices: 1,
-			MaxIPs:     1,
+			MaxDevices:      3,
+			MaxIPs:          3,
+			SyncEnabled:     true,
+			SyncQuotaMB:     500,
+			PublishEnabled:  true,
+			MaxSites:        3,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: true,
+			CustomDomain:    true,
+			ValidityDays:    3, // ✅ 3 天
 		},
 		"starter": {
-			ExpiryDays: 365,
-			MaxDevices: 3,
-			MaxIPs:     3,
+			MaxDevices:      3,
+			MaxIPs:          3,
+			SyncEnabled:     true,
+			SyncQuotaMB:     500,
+			PublishEnabled:  false, // ❌ 不支持发布
+			MaxSites:        0,
+			MaxStorageMB:    1024, // 1G
+			CustomSubDomain: false,
+			CustomDomain:    false,
+			ValidityDays:    365,
+		},
+		"enjoy": {
+			MaxDevices:      5,
+			MaxIPs:          5,
+			SyncEnabled:     true,
+			SyncQuotaMB:     2048,
+			PublishEnabled:  false,
+			MaxSites:        0,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: false,
+			CustomDomain:    false,
+			ValidityDays:    365,
 		},
 		"creator": {
-			ExpiryDays: 365,
-			MaxDevices: 5,
-			MaxIPs:     5,
+			MaxDevices:      5,
+			MaxIPs:          5,
+			SyncEnabled:     true,
+			SyncQuotaMB:     2048,
+			PublishEnabled:  true,
+			MaxSites:        10,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: true,  // ✅ 二级域名
+			CustomDomain:    false,
+			ValidityDays:    365,
 		},
 		"pro": {
-			ExpiryDays: 365,
-			MaxDevices: 10,
-			MaxIPs:     10,
+			MaxDevices:      10,
+			MaxIPs:          10,
+			SyncEnabled:     true,
+			SyncQuotaMB:     10240,
+			PublishEnabled:  true,
+			MaxSites:        50,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: true,
+			CustomDomain:    true, // ✅ 独立域名
+			ValidityDays:    365,
 		},
 		"enterprise": {
-			ExpiryDays: 36500, // 100 years
-			MaxDevices: 999,
-			MaxIPs:     999,
+			MaxDevices:      100,
+			MaxIPs:          100,
+			SyncEnabled:     true,
+			SyncQuotaMB:     51200,
+			PublishEnabled:  true,
+			MaxSites:        100,
+			MaxStorageMB:    102400, // 100G
+			CustomSubDomain: true,
+			CustomDomain:    true,
+			ValidityDays:    365 * 100, // ✅ 100 年
 		},
 	}
 
@@ -296,156 +355,166 @@ func (cmd *licenseCmd) generateRandomString(length int) string {
 	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // 排除易混淆字符 0,O,1,I
 	b := make([]byte, length)
 	rand.Read(b)
-	
+
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
 		result[i] = charset[int(b[i])%len(charset)]
 	}
-	
+
 	return string(result)
 }
 
 // createUser 创建用户
 func (cmd *licenseCmd) createUser(apiBase, email, password string) error {
 	userURL := fmt.Sprintf("%s/api/user", apiBase)
-	
+
 	// 构造表单数据
 	data := fmt.Sprintf("email=%s&password=%s", email, password)
-	
+
 	req, err := http.NewRequest("POST", userURL, strings.NewReader(data))
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	
+
 	// 接受 200 OK 或 201 Created
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }
 
 // login 登录获取 token
 func (cmd *licenseCmd) login(apiBase, email, password string) (string, error) {
 	loginURL := fmt.Sprintf("%s/api/login", apiBase)
-	
+
 	// 构造表单数据
 	data := fmt.Sprintf("email=%s&password=%s", email, password)
-	
+
 	req, err := http.NewRequest("POST", loginURL, strings.NewReader(data))
 	if err != nil {
 		return "", err
 	}
-	
+
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
-	
+
 	// 接受 200 OK 或 201 Created
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return "", fmt.Errorf("login failed with status %d: %s", resp.StatusCode, string(body))
 	}
-	
+
 	// 解析响应
 	var result struct {
 		Success bool     `json:"success"`
 		Data    []string `json:"data"`
 		Error   string   `json:"error"`
 	}
-	
+
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("failed to parse login response: %w", err)
 	}
-	
+
 	// 如果响应中有 data 字段且不为空，就认为登录成功
 	if len(result.Data) > 0 {
 		return result.Data[0], nil
 	}
-	
+
 	// 检查 success 字段（兼容性）
 	if result.Success && len(result.Data) == 0 {
 		return "", fmt.Errorf("login successful but no token returned")
 	}
-	
+
 	return "", fmt.Errorf("login failed: %s", result.Error)
 }
 
 // createLicense 创建 license
-func (cmd *licenseCmd) createLicense(apiBase, token, licenseKey, plan string, expiryDays, maxDevices, maxIPs int) error {
+func (cmd *licenseCmd) createLicense(apiBase, token, licenseKey, plan string, planConf PlanConfig) error {
 	createURL := fmt.Sprintf("%s/api/content?type=License", apiBase)
-	
+
 	// 构造 multipart 表单
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
-	
+
 	// 添加字段
 	fields := map[string]string{
 		"id":          "-1",
 		"license_key": licenseKey,
 		"plan":        plan,
-		"expiry_days": fmt.Sprintf("%d", expiryDays),
-		"max_devices": fmt.Sprintf("%d", maxDevices),
-		"max_ips":     fmt.Sprintf("%d", maxIPs),
+		"max_devices": fmt.Sprintf("%d", planConf.MaxDevices),
+		"max_ips":     fmt.Sprintf("%d", planConf.MaxIPs),
+
+		"sync_enabled": fmt.Sprintf("%t", planConf.SyncEnabled),
+		"sync_quota":   fmt.Sprintf("%d", planConf.SyncQuotaMB),
+
+		"publish_enabled":   fmt.Sprintf("%t", planConf.PublishEnabled),
+		"max_sites":         fmt.Sprintf("%d", planConf.MaxSites),
+		"max_storage":       fmt.Sprintf("%d", planConf.MaxStorageMB),
+		"custom_domain":     fmt.Sprintf("%t", planConf.CustomDomain),
+		"custom_sub_domain": fmt.Sprintf("%t", planConf.CustomSubDomain),
+
+		"validity_days": fmt.Sprintf("%d", planConf.ValidityDays),
 	}
-	
+
 	for key, val := range fields {
 		if err := writer.WriteField(key, val); err != nil {
 			return err
 		}
 	}
-	
+
 	if err := writer.Close(); err != nil {
 		return err
 	}
-	
+
 	// 创建请求
 	req, err := http.NewRequest("POST", createURL, &buf)
 	if err != nil {
 		return err
 	}
-	
+
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-	
+
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
-	
+
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	return nil
 }

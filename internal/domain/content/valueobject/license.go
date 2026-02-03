@@ -17,6 +17,7 @@ type LicensePlan string
 const (
 	PlanFree       LicensePlan = "free"
 	PlanStarter    LicensePlan = "starter"
+	PlanEnjoy      LicensePlan = "enjoy"
 	PlanCreator    LicensePlan = "creator"
 	PlanPro        LicensePlan = "pro"
 	PlanEnterprise LicensePlan = "enterprise"
@@ -42,6 +43,17 @@ type License struct {
 	MaxIPs         int `json:"max_ips"`         // 最大 IP 数，默认 3
 	CurrentDevices int `json:"current_devices"` // 当前设备数
 	CurrentIPs     int `json:"current_ips"`     // 当前 IP 数
+
+	// Sync 功能
+	SyncEnabled bool `json:"sync_enabled"`
+	SyncQuotaMB int  `json:"sync_quota"`
+
+	// Publish 功能
+	PublishEnabled  bool `json:"publish_enabled"`
+	MaxSites        int  `json:"max_sites"`
+	MaxStorageMB    int  `json:"max_storage"`
+	CustomDomain    bool `json:"custom_domain"`
+	CustomSubDomain bool `json:"custom_sub_domain"` // 二级域名
 }
 
 // MarshalEditor 实现 editor.Editable 接口
@@ -60,9 +72,35 @@ func (l *License) MarshalEditor() ([]byte, error) {
 			}, map[string]string{
 				"free":       "Free",
 				"starter":    "Starter",
+				"enjoy":      "Enjoy",
 				"creator":    "Creator",
 				"pro":        "Pro",
 				"enterprise": "Enterprise",
+			}),
+		},
+		editor.Field{
+			View: editor.Checkbox("Activated", l, map[string]string{
+				"label": "Activated",
+			}, map[string]string{
+				"true": "Yes",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("IssueDate", l, map[string]string{
+				"label": "Issue Date",
+				"type":  "number",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("ExpiryDate", l, map[string]string{
+				"label": "Expiry Date",
+				"type":  "number",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("ActivatedAt", l, map[string]string{
+				"label": "Activated At",
+				"type":  "number",
 			}),
 		},
 		editor.Field{
@@ -78,8 +116,47 @@ func (l *License) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
-			View: editor.Checkbox("Activated", l, map[string]string{
-				"label": "Activated",
+			View: editor.Checkbox("SyncEnabled", l, map[string]string{
+				"label": "Sync Enabled",
+			}, map[string]string{
+				"true": "Yes",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("SyncQuotaMB", l, map[string]string{
+				"label": "Sync Quota MB",
+				"type":  "number",
+			}),
+		},
+		editor.Field{
+			View: editor.Checkbox("PublishEnabled", l, map[string]string{
+				"label": "Publish Enabled",
+			}, map[string]string{
+				"true": "Yes",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("MaxSites", l, map[string]string{
+				"label": "Max Sites",
+				"type":  "number",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("MaxStorageMB", l, map[string]string{
+				"label": "Max Storage MB",
+				"type":  "number",
+			}),
+		},
+		editor.Field{
+			View: editor.Checkbox("CustomSubDomain", l, map[string]string{
+				"label": "Custom Sub Domain",
+			}, map[string]string{
+				"true": "Yes",
+			}),
+		},
+		editor.Field{
+			View: editor.Checkbox("CustomDomain", l, map[string]string{
+				"label": "Custom Domain",
 			}, map[string]string{
 				"true": "Yes",
 			}),
@@ -224,10 +301,11 @@ type LicenseFeatures struct {
 	SyncQuotaMB int  `json:"sync_quota"`
 
 	// Publish 功能
-	PublishEnabled bool `json:"publish_enabled"`
-	MaxSites       int  `json:"max_sites"`
-	MaxStorageMB   int  `json:"max_storage"`
-	CustomDomain   bool `json:"custom_domain"`
+	PublishEnabled  bool `json:"publish_enabled"`
+	MaxSites        int  `json:"max_sites"`
+	MaxStorageMB    int  `json:"max_storage"`
+	CustomDomain    bool `json:"custom_domain"`
+	CustomSubDomain bool `json:"custom_sub_domain"` // 二级域名
 
 	// 有效期（天数）
 	ValidityDays int `json:"validity_days"`
@@ -238,63 +316,86 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 	switch plan {
 	case PlanFree:
 		return &LicenseFeatures{
-			MaxDevices:     3,
-			MaxIPs:         3,
-			SyncEnabled:    true,
-			SyncQuotaMB:    500,
-			PublishEnabled: true,
-			MaxSites:       3,
-			MaxStorageMB:   500,
-			CustomDomain:   false,
-			ValidityDays:   30, // Free Plan: 30 天有效期
+			MaxDevices:      3,
+			MaxIPs:          3,
+			SyncEnabled:     true,
+			SyncQuotaMB:     500,
+			PublishEnabled:  true,
+			MaxSites:        3,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: true,
+			CustomDomain:    true,
+			ValidityDays:    3, // ✅ 3 天
 		}
+
 	case PlanStarter:
 		return &LicenseFeatures{
-			MaxDevices:     3,
-			MaxIPs:         3,
-			SyncEnabled:    true,
-			SyncQuotaMB:    500,
-			PublishEnabled: true,
-			MaxSites:       3,
-			MaxStorageMB:   1024,
-			CustomDomain:   false,
-			ValidityDays:   365, // Starter Plan: 365 天有效期
+			MaxDevices:      3,
+			MaxIPs:          3,
+			SyncEnabled:     true,
+			SyncQuotaMB:     500,
+			PublishEnabled:  false, // ❌ 不支持发布
+			MaxSites:        0,
+			MaxStorageMB:    1024, // 1G
+			CustomSubDomain: false,
+			CustomDomain:    false,
+			ValidityDays:    365,
 		}
+
+	case PlanEnjoy: // ✅ 畅享版
+		return &LicenseFeatures{
+			MaxDevices:      5,
+			MaxIPs:          5,
+			SyncEnabled:     true,
+			SyncQuotaMB:     2048,
+			PublishEnabled:  false,
+			MaxSites:        0,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: false,
+			CustomDomain:    false,
+			ValidityDays:    365,
+		}
+
 	case PlanCreator:
 		return &LicenseFeatures{
-			MaxDevices:     5,
-			MaxIPs:         5,
-			SyncEnabled:    true,
-			SyncQuotaMB:    2048,
-			PublishEnabled: true,
-			MaxSites:       10,
-			MaxStorageMB:   5120,
-			CustomDomain:   true,
-			ValidityDays:   365, // Creator Plan: 365 天有效期
+			MaxDevices:      5,
+			MaxIPs:          5,
+			SyncEnabled:     true,
+			SyncQuotaMB:     2048,
+			PublishEnabled:  true,
+			MaxSites:        10,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: true,  // ✅ 二级域名
+			CustomDomain:    false,
+			ValidityDays:    365,
 		}
+
 	case PlanPro:
 		return &LicenseFeatures{
-			MaxDevices:     10,
-			MaxIPs:         10,
-			SyncEnabled:    true,
-			SyncQuotaMB:    10240,
-			PublishEnabled: true,
-			MaxSites:       50,
-			MaxStorageMB:   20480,
-			CustomDomain:   true,
-			ValidityDays:   365, // Pro Plan: 365 天有效期
+			MaxDevices:      10,
+			MaxIPs:          10,
+			SyncEnabled:     true,
+			SyncQuotaMB:     10240,
+			PublishEnabled:  true,
+			MaxSites:        50,
+			MaxStorageMB:    10240, // 10G
+			CustomSubDomain: true,
+			CustomDomain:    true, // ✅ 独立域名
+			ValidityDays:    365,
 		}
+
 	case PlanEnterprise:
 		return &LicenseFeatures{
-			MaxDevices:     -1, // 无限制
-			MaxIPs:         -1, // 无限制
-			SyncEnabled:    true,
-			SyncQuotaMB:    51200,
-			PublishEnabled: true,
-			MaxSites:       -1, // 无限制
-			MaxStorageMB:   102400,
-			CustomDomain:   true,
-			ValidityDays:   365, // Enterprise Plan: 365 天有效期
+			MaxDevices:      100,
+			MaxIPs:          100,
+			SyncEnabled:     true,
+			SyncQuotaMB:     51200,
+			PublishEnabled:  true,
+			MaxSites:        100,
+			MaxStorageMB:    102400, // 100G
+			CustomSubDomain: true,
+			CustomDomain:    true,
+			ValidityDays:    365 * 100, // ✅ 100 年
 		}
 	default:
 		return &LicenseFeatures{
