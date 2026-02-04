@@ -413,7 +413,7 @@ func (s *Handler) AddDomainHandler(res http.ResponseWriter, req *http.Request) {
 	// TODO: 实现全局域名唯一性检查（需要遍历所有 PublishDomain 或建立索引）
 
 	// sitePath: 自定义域名内容目录
-	sitePath := filepath.Join(application.PreviewDir(), pd.Folder, application.CustomDomainFolder())
+	sitePath := filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder())
 
 	// 调用 Caddy 添加自定义域名（内部会处理域名检查和 TLS policy）
 	if err := s.caddyClient.AddCustomDomain(domain, sitePath, false); err != nil {
