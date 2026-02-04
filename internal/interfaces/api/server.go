@@ -135,7 +135,8 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 
 	s.registerHandler()
 
-	go application.PreviewSiteRecycle(contentApp, s.adminApp.Token())
+	//go application.PreviewSiteRecycle(contentApp, s.adminApp.Token())
+	go application.LicenseResourceRecycle(contentApp, s.Log)
 
 	return s, nil
 }
