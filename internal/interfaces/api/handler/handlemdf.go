@@ -87,7 +87,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 	case "sub":
 		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder(), preview.Path)
 	case "custom":
-		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder(), preview.Name)
+		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder(), preview.Path)
 	case "enterprise":
 		previewDir = filepath.Join(application.EnterpriseDir(), preview.Path)
 	default:
@@ -121,7 +121,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 	case "enterprise":
 		link = preview.Path
 	case "custom":
-		link = s.adminApp.BaseURL() // TODO: we need to add path
+		link = preview.Path
 	}
 
 	jsonBytes, err := json.Marshal(link)
