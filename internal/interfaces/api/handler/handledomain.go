@@ -289,8 +289,10 @@ func (s *Handler) UpdateSubDomainHandler(res http.ResponseWriter, req *http.Requ
 
 // ========== 自定义域名管理 API ==========
 
-// CheckDomainHandler 检查自定义域名就绪状态
+// CheckDomainHandler 检查域名 DNS 配置（前置检测）
 // POST /api/license/domain/check
+// 注意：此 API 只检查 DNS，不检查 HTTPS 状态
+// HTTPS 状态请使用 /api/license/domain/https-status
 func (s *Handler) CheckDomainHandler(res http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodPost {
 		res.WriteHeader(http.StatusMethodNotAllowed)
@@ -330,7 +332,7 @@ func (s *Handler) CheckDomainHandler(res http.ResponseWriter, req *http.Request)
 		return
 	}
 
-	// 调用域名检查
+	// 调用 DNS 检查
 	result, err := s.caddyClient.CheckDomainReadiness(domain)
 	if err != nil {
 		s.log.Errorf("Failed to check domain readiness: %v", err)
@@ -339,15 +341,14 @@ func (s *Handler) CheckDomainHandler(res http.ResponseWriter, req *http.Request)
 	}
 
 	response := map[string]interface{}{
-		"domain":         domain,
-		"dns_valid":      result.DNSValid,
-		"resolved_ips":   result.ResolvedIPs,
-		"http_reachable": result.HTTPReachable,
-		"ready":          result.Ready,
+		"domain":       domain,
+		"dns_valid":    result.DNSValid,
+		"resolved_ips": result.ResolvedIPs,
+		"ready":        result.Ready,
 	}
 
 	if result.Ready {
-		response["message"] = "Domain is ready for HTTPS certificate issuance"
+		response["message"] = "Domain DNS is configured correctly. You can proceed to add this domain."
 	} else if result.Error != "" {
 		response["error"] = result.Error
 	}
@@ -412,23 +413,30 @@ func (s *Handler) AddDomainHandler(res http.ResponseWriter, req *http.Request) {
 	// 检查域名是否已被其他用户使用
 	// TODO: 实现全局域名唯一性检查（需要遍历所有 PublishDomain 或建立索引）
 
+	// ✅ 只进行 DNS 检测（可选，用于快速反馈）
+	dnsResult, err := s.caddyClient.CheckDomainReadiness(domain)
+	if err != nil {
+		s.log.Errorf("Failed to check domain DNS: %v", err)
+		// 不阻塞，继续执行
+	} else if !dnsResult.DNSValid {
+		// DNS 未配置，返回友好提示
+		serverIP := s.adminApp.ServerIP()
+		if serverIP == "" {
+			serverIP = "your server IP"
+		}
+		s.jsonError(res, fmt.Sprintf(
+			"Domain DNS is not configured correctly. Please point your domain to %s and wait a few minutes for DNS propagation.",
+			serverIP,
+		), http.StatusBadRequest)
+		return
+	}
+
 	// sitePath: 自定义域名内容目录
 	sitePath := filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder())
 
-	// 调用 Caddy 添加自定义域名（内部会处理域名检查和 TLS policy）
-	if err := s.caddyClient.AddCustomDomain(domain, sitePath, false); err != nil {
+	// ✅ 添加域名（跳过重复检测）
+	if err := s.caddyClient.AddCustomDomain(domain, sitePath, true); err != nil {
 		s.log.Errorf("Failed to add custom domain to Caddy: %v", err)
-
-		// 检查是否是域名未就绪的错误
-		if strings.Contains(err.Error(), "domain not ready") {
-			serverIP := s.adminApp.ServerIP()
-			if serverIP == "" {
-				serverIP = "your server IP"
-			}
-			s.jsonError(res, fmt.Sprintf("Domain DNS is not configured correctly. Please point your domain to %s", serverIP), http.StatusBadRequest)
-			return
-		}
-
 		s.jsonError(res, "Failed to add custom domain: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -445,10 +453,11 @@ func (s *Handler) AddDomainHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// ✅ 返回 pending 状态，引导用户使用 https-status API
 	s.jsonResponse(res, map[string]interface{}{
 		"domain":  domain,
-		"status":  "pending_certificate",
-		"message": "Custom domain added. SSL certificate is being issued.",
+		"status":  "cert_pending",
+		"message": "Custom domain added successfully. HTTPS certificate is being issued by Let's Encrypt (usually 1-2 minutes). Use /api/license/domain/https-status to check certificate status.",
 	})
 }
 
@@ -573,16 +582,19 @@ func (s *Handler) GetDomainsHandler(res http.ResponseWriter, req *http.Request) 
 	if pd.CusDomain != "" {
 		customDomainInfo := map[string]interface{}{
 			"domain": pd.CusDomain,
-			"status": "active",
 		}
 
-		// 尝试获取证书状态
-		certInfo, err := s.caddyClient.GetCertificateStatus(pd.CusDomain)
-		if err == nil && certInfo != nil {
+		// ✅ 执行 TLS 检测获取实时状态
+		tlsResult := s.caddyClient.GetChecker().CheckTLS(pd.CusDomain)
+
+		customDomainInfo["status"] = tlsResult.TLSStatus
+		customDomainInfo["tls_ready"] = tlsResult.TLSReady
+
+		if tlsResult.TLSReady && tlsResult.CertInfo != nil {
 			customDomainInfo["certificate"] = map[string]interface{}{
-				"status":     certInfo.Status,
-				"issuer":     certInfo.Issuer,
-				"expires_at": certInfo.NotAfter,
+				"status":     tlsResult.CertInfo.Status,
+				"issuer":     tlsResult.CertInfo.Issuer,
+				"expires_at": tlsResult.CertInfo.NotAfter,
 			}
 		}
 
@@ -702,4 +714,124 @@ func isReservedSubdomain(subdomain string) bool {
 	}
 
 	return reserved[subdomain]
+}
+
+// DomainSSLStatusHandler 查询自定义域名 HTTPS 状态
+// POST /api/license/domain/https-status
+func (s *Handler) DomainSSLStatusHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := req.ParseMultipartForm(apiFrom.MaxMemory)
+	if err != nil {
+		s.log.Errorf("Error parsing multipart form: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	licenseKey := req.PostForm.Get("license_key")
+	domain := req.PostForm.Get("domain")
+
+	if licenseKey == "" {
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	if domain == "" {
+		s.jsonError(res, "Domain is required", http.StatusBadRequest)
+		return
+	}
+
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+
+	// 检查 CustomDomain 权限
+	if !license.GetFeatures().CustomDomain {
+		s.jsonError(res, "Custom domain feature not enabled", http.StatusForbidden)
+		return
+	}
+
+	// 获取 PublishDomain 记录
+	pd, err := s.contentApp.GetPublishDomainByKey(license.LicenseKey)
+	if err != nil {
+		s.jsonError(res, "Publish domain not found", http.StatusNotFound)
+		return
+	}
+
+	// 验证域名属于该用户
+	if pd.CusDomain != domain {
+		s.jsonError(res, "Domain does not belong to this license", http.StatusForbidden)
+		return
+	}
+
+	// 1. 先检查 DNS（快速反馈）
+	dnsResult, err := s.caddyClient.CheckDomainReadiness(domain)
+	if err != nil {
+		s.log.Errorf("Failed to check DNS: %v", err)
+		s.jsonError(res, "Failed to check domain DNS: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 如果 DNS 未配置，直接返回
+	if !dnsResult.DNSValid {
+		s.jsonResponse(res, map[string]interface{}{
+			"domain":       domain,
+			"status":       "dns_pending",
+			"tls_ready":    false,
+			"dns_valid":    false,
+			"resolved_ips": dnsResult.ResolvedIPs,
+			"error":        dnsResult.Error,
+			"message":      "DNS is not configured correctly. Please point your domain to " + s.adminApp.ServerIP(),
+		})
+		return
+	}
+
+	// 2. 执行 TLS 检测（主判据）
+	tlsResult := s.caddyClient.GetChecker().CheckTLS(domain)
+
+	response := map[string]interface{}{
+		"domain":       domain,
+		"status":       tlsResult.TLSStatus,
+		"tls_ready":    tlsResult.TLSReady,
+		"dns_valid":    dnsResult.DNSValid,
+		"resolved_ips": dnsResult.ResolvedIPs,
+	}
+
+	// 根据状态添加消息
+	switch tlsResult.TLSStatus {
+	case "active":
+		response["message"] = "HTTPS is fully operational"
+		if tlsResult.CertInfo != nil {
+			response["certificate"] = map[string]interface{}{
+				"status":      tlsResult.CertInfo.Status,
+				"issuer":      tlsResult.CertInfo.Issuer,
+				"subject":     tlsResult.CertInfo.Subject,
+				"not_before":  tlsResult.CertInfo.NotBefore,
+				"not_after":   tlsResult.CertInfo.NotAfter,
+				"dns_names":   tlsResult.CertInfo.DNSNames,
+				"is_wildcard": tlsResult.CertInfo.IsWildcard,
+			}
+		}
+
+	case "cert_pending":
+		response["message"] = "HTTPS certificate is being issued by Let's Encrypt. This usually takes 1-2 minutes."
+		response["estimated_time"] = "1-2 minutes"
+		response["troubleshooting"] = "If this persists for more than 5 minutes, please check your DNS configuration."
+
+	case "cert_error":
+		response["error"] = tlsResult.Error
+		response["troubleshooting"] = "Please check DNS configuration and Caddy logs for details."
+
+	default:
+		response["status"] = "unknown"
+		response["error"] = "Unknown TLS status"
+	}
+
+	s.jsonResponse(res, response)
 }

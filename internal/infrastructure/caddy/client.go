@@ -136,12 +136,15 @@ type Upstream struct {
 
 // CertificateInfo SSL 证书信息
 type CertificateInfo struct {
-	Domain    string    `json:"domain"`
-	Status    string    `json:"status"` // "issued", "pending", "failed"
-	NotBefore time.Time `json:"not_before"`
-	NotAfter  time.Time `json:"not_after"`
-	Issuer    string    `json:"issuer"`
-	Error     string    `json:"error,omitempty"`
+	Domain     string    `json:"domain"`
+	Status     string    `json:"status"` // "issued", "pending", "failed"
+	NotBefore  time.Time `json:"not_before"`
+	NotAfter   time.Time `json:"not_after"`
+	Issuer     string    `json:"issuer"`
+	Subject    string    `json:"subject,omitempty"`     // 证书主题
+	DNSNames   []string  `json:"dns_names,omitempty"`   // DNS 名称列表
+	IsWildcard bool      `json:"is_wildcard,omitempty"` // 是否为通配符证书
+	Error      string    `json:"error,omitempty"`
 }
 
 // StartServer 启动 Caddy 服务器
@@ -1110,6 +1113,14 @@ func (c *Client) CheckDomainReadiness(domain string) (*DomainCheckResult, error)
 		return checker.CheckAll(domain), nil
 	}
 	return c.checker.CheckAll(domain), nil
+}
+
+// GetChecker 返回域名检查器（供 API 层调用 CheckTLS）
+func (c *Client) GetChecker() *DomainChecker {
+	if c.checker == nil {
+		c.checker = NewDomainChecker(c.config.ServerIP)
+	}
+	return c.checker
 }
 
 // ==================== 自定义域名管理方法 ====================

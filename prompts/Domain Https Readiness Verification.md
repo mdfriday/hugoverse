@@ -32,7 +32,7 @@ s.mux.HandleFunc("/api/license/domain/https-status", s.wrapContentHandler(s.hand
 
 ---
 
-## 二、整体流程（推荐状态机）
+## 二、添加自定义域名流程（推荐状态机）
 
 ```text
 USER_ADDED_DOMAIN

@@ -2,35 +2,38 @@ package caddy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
-	"net/http"
+	"strings"
 	"time"
 )
 
 // DomainCheckResult 域名检查结果
 type DomainCheckResult struct {
-	Domain        string   `json:"domain"`
-	DNSValid      bool     `json:"dns_valid"`
-	ResolvedIPs   []string `json:"resolved_ips"`
-	HTTPReachable bool     `json:"http_reachable"`
-	Error         string   `json:"error,omitempty"`
-	Ready         bool     `json:"ready"`
+	Domain      string            `json:"domain"`
+	DNSValid    bool              `json:"dns_valid"`
+	ResolvedIPs []string          `json:"resolved_ips"`
+	TLSReady    bool              `json:"tls_ready"`
+	TLSStatus   string            `json:"tls_status"`       // dns_pending, cert_pending, cert_error, active
+	CertInfo    *CertificateInfo  `json:"certificate,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	Ready       bool              `json:"ready"`
 }
 
 // DomainChecker 域名检查器
 type DomainChecker struct {
-	ServerIP    string
-	DNSTimeout  time.Duration
-	HTTPTimeout time.Duration
+	ServerIP   string
+	DNSTimeout time.Duration
+	TLSTimeout time.Duration
 }
 
 // NewDomainChecker 创建域名检查器
 func NewDomainChecker(serverIP string) *DomainChecker {
 	return &DomainChecker{
-		ServerIP:    serverIP,
-		DNSTimeout:  10 * time.Second,
-		HTTPTimeout: 15 * time.Second,
+		ServerIP:   serverIP,
+		DNSTimeout: 10 * time.Second,
+		TLSTimeout: 15 * time.Second,
 	}
 }
 
@@ -82,67 +85,93 @@ func (c *DomainChecker) CheckDNS(domain string) *DomainCheckResult {
 	return result
 }
 
-// CheckHTTP 检查 HTTP 可达性
-// 验证域名的 80 端口是否可以访问（用于 HTTP-01 challenge）
-func (c *DomainChecker) CheckHTTP(domain string) *DomainCheckResult {
+// CheckTLS 检查 HTTPS TLS 握手和证书有效性
+// 这是判断 HTTPS 是否就绪的【主判据】
+func (c *DomainChecker) CheckTLS(domain string) *DomainCheckResult {
 	result := &DomainCheckResult{
-		Domain: domain,
+		Domain:    domain,
+		TLSStatus: "cert_pending",
 	}
 
-	// 创建带超时的 HTTP 客户端
-	client := &http.Client{
-		Timeout: c.HTTPTimeout,
-		// 不跟随重定向
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	// 创建带超时的 dialer
+	dialer := &net.Dialer{
+		Timeout: c.TLSTimeout,
 	}
 
-	// 尝试访问 ACME challenge 路径
-	// 即使返回 404 也说明 HTTP 可达
-	url := fmt.Sprintf("http://%s/.well-known/acme-challenge/test", domain)
-	
-	resp, err := client.Get(url)
+	// 尝试 TLS 连接
+	conn, err := tls.DialWithDialer(dialer, "tcp", domain+":443", &tls.Config{
+		ServerName: domain,           // SNI
+		MinVersion: tls.VersionTLS12,
+	})
+
 	if err != nil {
-		result.Error = fmt.Sprintf("HTTP check failed: %v", err)
+		// TLS 握手失败（证书未签发或网络问题）
+		result.Error = fmt.Sprintf("TLS handshake failed: %v", err)
 		return result
 	}
-	defer resp.Body.Close()
+	defer conn.Close()
 
-	// 任何 HTTP 响应都说明可达（包括 404）
-	// Let's Encrypt 只需要能访问到服务器即可
-	result.HTTPReachable = true
+	// 获取证书
+	state := conn.ConnectionState()
+	if len(state.PeerCertificates) == 0 {
+		result.TLSStatus = "cert_error"
+		result.Error = "No certificate presented by server"
+		return result
+	}
+
+	cert := state.PeerCertificates[0]
+
+	// 验证证书有效期
+	now := time.Now()
+	if now.Before(cert.NotBefore) {
+		result.TLSStatus = "cert_error"
+		result.Error = fmt.Sprintf("Certificate not yet valid (valid from %s)", cert.NotBefore)
+		return result
+	}
+	if now.After(cert.NotAfter) {
+		result.TLSStatus = "cert_error"
+		result.Error = fmt.Sprintf("Certificate expired (expired on %s)", cert.NotAfter)
+		return result
+	}
+
+	// 验证主机名匹配
+	if err := cert.VerifyHostname(domain); err != nil {
+		result.TLSStatus = "cert_error"
+		result.Error = fmt.Sprintf("Certificate hostname mismatch: %v", err)
+		return result
+	}
+
+	// ✅ TLS 握手成功，证书有效
+	result.TLSReady = true
+	result.TLSStatus = "active"
+	result.Ready = true
+	result.CertInfo = &CertificateInfo{
+		Status:     "issued",
+		Issuer:     cert.Issuer.CommonName,
+		Subject:    cert.Subject.CommonName,
+		NotBefore:  cert.NotBefore,
+		NotAfter:   cert.NotAfter,
+		DNSNames:   cert.DNSNames,
+		IsWildcard: strings.HasPrefix(cert.Subject.CommonName, "*."),
+	}
+
 	return result
 }
 
-// CheckAll 执行完整的域名检查
-// 依次检查 DNS 和 HTTP，全部通过则 Ready=true
+// CheckAll 执行域名检查（仅 DNS）
+// 注意：不包含 TLS 检测（TLS 检测在用户查询状态时进行）
 func (c *DomainChecker) CheckAll(domain string) *DomainCheckResult {
-	// 先检查 DNS
+	// 检查 DNS
 	dnsResult := c.CheckDNS(domain)
 	if !dnsResult.DNSValid {
+		dnsResult.TLSStatus = "dns_pending"
 		return dnsResult
 	}
 
-	// 再检查 HTTP
-	httpResult := c.CheckHTTP(domain)
-	
-	// 合并结果
-	result := &DomainCheckResult{
-		Domain:        domain,
-		DNSValid:      dnsResult.DNSValid,
-		ResolvedIPs:   dnsResult.ResolvedIPs,
-		HTTPReachable: httpResult.HTTPReachable,
-	}
-
-	if !httpResult.HTTPReachable {
-		result.Error = httpResult.Error
-		return result
-	}
-
-	// 全部通过
-	result.Ready = true
-	return result
+	// DNS 就绪
+	dnsResult.Ready = true
+	dnsResult.TLSStatus = "dns_ready"
+	return dnsResult
 }
 
 // CheckDNSOnly 仅检查 DNS（不检查 HTTP）

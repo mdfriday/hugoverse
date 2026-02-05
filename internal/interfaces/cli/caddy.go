@@ -576,17 +576,14 @@ func (c *caddyCmd) runDomainCheck(args []string) error {
 		}
 	}
 
-	// HTTP 检查
-	if result.HTTPReachable {
-		fmt.Printf("   ✅ HTTP Reachable: true\n")
-	} else {
-		fmt.Printf("   ❌ HTTP Reachable: false\n")
-	}
+	// TLS 状态（仅显示，不执行 TLS 检测，因为 CheckAll 只检查 DNS）
+	fmt.Printf("   ℹ️  TLS Status: %s\n", result.TLSStatus)
 
 	// 总体结果
 	if result.Ready {
-		fmt.Println("\n✅ Domain is ready for HTTPS certificate issuance")
+		fmt.Println("\n✅ Domain DNS is configured correctly")
 		fmt.Println("   You can now add this domain: hugov caddy domain add -domain " + *domain + " -path /path/to/site")
+		fmt.Println("\n💡 Note: After adding the domain, HTTPS certificate will be issued automatically (1-2 minutes)")
 	} else {
 		fmt.Printf("\n❌ Domain is not ready: %s\n", result.Error)
 		fmt.Println("\n💡 Tips:")
@@ -596,10 +593,6 @@ func (c *caddyCmd) runDomainCheck(args []string) error {
 				fmt.Printf("      Add an A record: %s -> %s\n", *domain, *serverIP)
 			}
 			fmt.Println("   2. Wait for DNS propagation (may take a few minutes)")
-		}
-		if !result.HTTPReachable {
-			fmt.Println("   - Ensure the server is accessible on port 80")
-			fmt.Println("   - Check firewall settings")
 		}
 	}
 
