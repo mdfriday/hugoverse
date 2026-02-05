@@ -37,6 +37,12 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 		return
 	}
 
+	licenseKey := req.FormValue("license_key")
+	if licenseKey == "" {
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
+		return
+	}
+
 	pt, ok := s.contentApp.GetContentCreator(t)
 	if !ok {
 		res.WriteHeader(http.StatusNotFound)
@@ -80,15 +86,38 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 		return
 	}
 
+	// 验证 License 是否存在
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+
 	previewDir := ""
 	switch preview.Type {
 	case "share":
+		if !license.GetFeatures().PublishEnabled {
+			s.jsonError(res, "Share feature not enabled for this license plan", http.StatusForbidden)
+			return
+		}
 		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), preview.Name)
 	case "sub":
+		if !license.GetFeatures().CustomSubDomain {
+			s.jsonError(res, "Custom subdomain feature not enabled for this license plan", http.StatusForbidden)
+			return
+		}
 		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.SubDomainFolder(), preview.Path)
 	case "custom":
+		if !license.GetFeatures().CustomDomain {
+			s.jsonError(res, "Custom domain feature not enabled for this license plan", http.StatusForbidden)
+			return
+		}
 		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), application.CustomDomainFolder(), preview.Path)
 	case "enterprise":
+		if license.Plan != "enterprise" {
+			s.jsonError(res, "Enterprise feature not enabled for this license plan", http.StatusForbidden)
+			return
+		}
 		previewDir = filepath.Join(application.EnterpriseDir(), preview.Path)
 	default:
 		s.log.Error().WithFields(loggers.GetGlobalFields()).WithError(fmt.Errorf("unknown preview type: %s", preview.Type)).Logf("t: %s, id: %s", t, id)
