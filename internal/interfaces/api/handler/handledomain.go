@@ -552,6 +552,12 @@ func (s *Handler) GetDomainsHandler(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	// 检查 PublishEnabled 权限
+	if !license.GetFeatures().PublishEnabled {
+		s.jsonError(res, "Publish feature not enabled for this license plan", http.StatusForbidden)
+		return
+	}
+
 	// 获取 PublishDomain 记录
 	pd, err := s.contentApp.GetPublishDomainByKey(license.LicenseKey)
 	if err != nil {
@@ -559,49 +565,20 @@ func (s *Handler) GetDomainsHandler(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
-	// 构建响应
-	response := map[string]interface{}{
-		"license_key":     license.LicenseKey,
-		"platform_domain": s.adminApp.Domain(),
-		"features": map[string]interface{}{
-			"custom_domain_enabled": license.GetFeatures().CustomDomain,
-			"max_custom_domains":    1,
-		},
+	// 获取 SubDomain 记录
+	sd, err := s.contentApp.GetSubDomainByKey(pd.SubDomain)
+	if err != nil {
+		s.jsonError(res, "Subdomain not found", http.StatusNotFound)
+		return
 	}
 
-	// SubDomain 信息
-	if pd.SubDomain != "" {
-		response["subdomain"] = map[string]interface{}{
-			"name":        pd.SubDomain,
-			"full_domain": fmt.Sprintf("%s.%s", pd.SubDomain, s.adminApp.Domain()),
-			"status":      "active",
-		}
-	}
-
-	// 自定义域名信息
-	if pd.CusDomain != "" {
-		customDomainInfo := map[string]interface{}{
-			"domain": pd.CusDomain,
-		}
-
-		// ✅ 执行 TLS 检测获取实时状态
-		tlsResult := s.caddyClient.GetChecker().CheckTLS(pd.CusDomain)
-
-		customDomainInfo["status"] = tlsResult.TLSStatus
-		customDomainInfo["tls_ready"] = tlsResult.TLSReady
-
-		if tlsResult.TLSReady && tlsResult.CertInfo != nil {
-			customDomainInfo["certificate"] = map[string]interface{}{
-				"status":     tlsResult.CertInfo.Status,
-				"issuer":     tlsResult.CertInfo.Issuer,
-				"expires_at": tlsResult.CertInfo.NotAfter,
-			}
-		}
-
-		response["custom_domain"] = customDomainInfo
-	}
-
-	s.jsonResponse(res, response)
+	s.jsonResponse(res, map[string]interface{}{
+		"subdomain":   sd.Sub,
+		"full_domain": fmt.Sprintf("%s.%s", sd.Sub, s.adminApp.Domain()),
+		"cus_domain":  pd.CusDomain,
+		"folder":      pd.Folder,
+		"created_at":  sd.Timestamp,
+	})
 }
 
 // ========== 辅助函数 ==========
