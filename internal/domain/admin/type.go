@@ -15,6 +15,7 @@ type Admin interface {
 	Upload
 	Http
 	Client
+	GitHub
 }
 
 type Traceable interface {
@@ -71,4 +72,10 @@ type Controller interface {
 
 type Client interface {
 	ClientSecret() string
+}
+
+type GitHub interface {
+	HookSecret() string
+	GithubToken() string
+	TargetRepository() string
 }

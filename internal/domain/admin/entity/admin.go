@@ -22,6 +22,7 @@ type Admin struct {
 	*Netlify
 	*CouchDB
 	*Caddy
+	*GitHub
 
 	Log loggers.Logger
 }
@@ -113,6 +114,9 @@ func (a *Admin) PutConfig(key string, value any) error {
 	}
 	if a.CouchDB != nil {
 		a.CouchDB.Conf = a.Conf
+	}
+	if a.GitHub != nil {
+		a.GitHub.Conf = a.Conf
 	}
 
 	return nil

@@ -65,6 +65,7 @@ func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/cta/submit", s.wrapSignatureHandler(s.handler.CTAHandler))
 
 	s.mux.HandleFunc("/api/counter", s.wrapCounterHandler(s.handler.CounterHandler))
+	s.mux.HandleFunc("/api/github-hook", s.wrapCounterHandler(s.handler.GithubReleaseHander))
 
 	s.mux.HandleFunc("/api/images", s.wrapPublicHandler(s.handler.ImagesHandler))
 	s.mux.HandleFunc("/api/image", s.wrapPublicHandler(s.handler.ImageHandler))

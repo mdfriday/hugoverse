@@ -50,6 +50,11 @@ type Config struct {
 
 	// 服务器 IP 配置
 	ServerIP string `json:"server_ip"` // 服务器公网 IP (用于域名检测)
+
+	// GitHub 配置
+	GithubHookSecret string `json:"github_hook_secret"` // GitHub Webhook Secret (用于验证 webhook 签名)
+	GithubToken      string `json:"github_token"`       // GitHub Personal Access Token (用于下载私有仓库)
+	GithubTargetRepo string `json:"github_target_repo"` // GitHub 目标仓库全名 (如 mdfriday/obsidian-friday-plugin)
 }
 
 func (c *Config) IsCacheInvalidate() bool {
@@ -200,6 +205,27 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 				"label":       "Server Public IP (for domain DNS check)",
 				"type":        "text",
 				"placeholder": "1.2.3.4",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("GithubHookSecret", c, map[string]string{
+				"label":       "GitHub Webhook Secret",
+				"type":        "text",
+				"placeholder": "Enter webhook secret configured in GitHub",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("GithubToken", c, map[string]string{
+				"label":       "GitHub Personal Access Token",
+				"type":        "password",
+				"placeholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("GithubTargetRepo", c, map[string]string{
+				"label":       "GitHub Target Repository",
+				"type":        "text",
+				"placeholder": "mdfriday/obsidian-friday-plugin",
 			}),
 		},
 		editor.Field{

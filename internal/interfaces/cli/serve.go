@@ -86,8 +86,8 @@ func setupLogger(env api.ENV) func(s *api.Server) error {
 				return fmt.Errorf("failed to create log file: %w", err)
 			}
 			s.Log = loggers.New(loggers.Options{
-				Level:         logg.LevelInfo,
-				DistinctLevel: logg.LevelWarn,
+				Level:         logg.LevelDebug,
+				DistinctLevel: logg.LevelDebug,
 				Stdout:        f,
 				Stderr:        f,
 				WithColor:     false,
@@ -102,8 +102,8 @@ func setupLogger(env api.ENV) func(s *api.Server) error {
 				return fmt.Errorf("failed to create log file: %w", err)
 			}
 			s.Log = loggers.New(loggers.Options{
-				Level:         logg.LevelError,
-				DistinctLevel: logg.LevelError,
+				Level:         logg.LevelInfo,
+				DistinctLevel: logg.LevelInfo,
 				Stdout:        f,
 				Stderr:        f,
 				WithColor:     false,
