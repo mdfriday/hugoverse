@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/infrastructure/github"
@@ -58,11 +60,61 @@ func (s *Handler) GithubReleaseHander(res http.ResponseWriter, req *http.Request
 	}
 
 	// 解析 payload
-	// GitHub webhook 直接在 request body 中发送 JSON（即使 Content-Type 是 application/x-www-form-urlencoded）
-	payload, err := github.ParseReleasePayload(body)
+	// 根据 GitHub 官方文档: https://docs.github.com/zh/webhooks/webhook-events-and-payloads
+	// GitHub Webhook 支持两种 Content-Type：
+	// 1. application/json: JSON 直接在 body 中（推荐）
+	// 2. application/x-www-form-urlencoded: JSON 在表单字段 "payload" 中
+	var payloadData []byte
+	contentType := req.Header.Get("Content-Type")
+	
+	s.log.Infof("Webhook received - Content-Type: %s, Body length: %d", contentType, len(body))
+	
+	if strings.Contains(contentType, "application/json") {
+		// 格式 1: JSON 直接在 body 中
+		s.log.Infof("Parsing as application/json")
+		payloadData = body
+	} else if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+		// 格式 2: JSON 在表单字段 "payload" 中
+		s.log.Infof("Parsing as application/x-www-form-urlencoded")
+		
+		// 需要重新包装 body 供 ParseForm 使用
+		req.Body = io.NopCloser(bytes.NewBuffer(body))
+		if err := req.ParseForm(); err != nil {
+			s.log.Errorf("Failed to parse form: %v", err)
+			res.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(res, "Failed to parse form data")
+			return
+		}
+		
+		payloadStr := req.FormValue("payload")
+		if payloadStr == "" {
+			s.log.Errorf("Missing 'payload' field in form data")
+			res.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(res, "Missing 'payload' field in form data")
+			return
+		}
+		
+		payloadData = []byte(payloadStr)
+		s.log.Infof("Extracted payload from form field (length: %d)", len(payloadData))
+	} else {
+		s.log.Errorf("Unsupported Content-Type: %s", contentType)
+		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Unsupported Content-Type: %s", contentType)
+		return
+	}
+
+	s.log.Infof("Parsing JSON payload (length: %d)", len(payloadData))
+	payload, err := github.ParseReleasePayload(payloadData)
 	if err != nil {
 		s.log.Errorf("Failed to parse release payload: %v", err)
+		// 显示前 500 个字符用于调试
+		maxLen := 500
+		if len(payloadData) < maxLen {
+			maxLen = len(payloadData)
+		}
+		s.log.Errorf("Payload data (first %d chars): %s", maxLen, string(payloadData[:maxLen]))
 		res.WriteHeader(http.StatusBadRequest)
+		fmt.Fprintf(res, "Failed to parse payload: %v", err)
 		return
 	}
 
