@@ -119,6 +119,9 @@ func (a *Admin) PutConfig(key string, value any) error {
 	if a.GitHub != nil {
 		a.GitHub.Conf = a.Conf
 	}
+	if a.SMTP != nil {
+		a.SMTP.Conf = a.Conf
+	}
 
 	return nil
 }

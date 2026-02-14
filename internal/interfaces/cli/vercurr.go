@@ -3,6 +3,6 @@ package cli
 var CurrentVersion = Version{
     Major:      0,
     Minor:      2,
-    PatchLevel: 32,
+    PatchLevel: 33,
     Suffix:     "",
 }
