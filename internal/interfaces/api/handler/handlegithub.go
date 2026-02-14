@@ -58,21 +58,8 @@ func (s *Handler) GithubReleaseHander(res http.ResponseWriter, req *http.Request
 	}
 
 	// 解析 payload
-	// GitHub 使用 application/x-www-form-urlencoded 时，payload 在 form 的 payload 字段中
-	if err := req.ParseForm(); err != nil {
-		s.log.Errorf("Failed to parse form: %v", err)
-		res.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	payloadJSON := req.PostForm.Get("payload")
-	if payloadJSON == "" {
-		s.log.Errorln("Missing payload in form data")
-		res.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	payload, err := github.ParseReleasePayload([]byte(payloadJSON))
+	// GitHub webhook 直接在 request body 中发送 JSON（即使 Content-Type 是 application/x-www-form-urlencoded）
+	payload, err := github.ParseReleasePayload(body)
 	if err != nil {
 		s.log.Errorf("Failed to parse release payload: %v", err)
 		res.WriteHeader(http.StatusBadRequest)
@@ -101,27 +88,38 @@ func (s *Handler) GithubReleaseHander(res http.ResponseWriter, req *http.Request
 		payload.Release.TagName,
 		payload.Repository.FullName)
 
-	// 下载 zipball
+	// 检查是否有 assets
+	if len(payload.Release.Assets) == 0 {
+		s.log.Warnf("Release %s has no assets, skipping download", payload.Release.TagName)
+		res.WriteHeader(http.StatusOK)
+		fmt.Fprintf(res, "Release %s has no assets", payload.Release.TagName)
+		return
+	}
+
+	s.log.Infof("Found %d assets in release %s", len(payload.Release.Assets), payload.Release.TagName)
+
+	// 下载 assets 并打包成 ZIP
 	downloader := github.NewReleaseDownloader()
 	uploadDir := application.UploadDir()
 	targetFilename := "friday-latest.zip"
 
-	s.log.Infof("Downloading zipball from: %s", payload.Release.ZipballURL)
+	s.log.Infof("Downloading %d assets from release %s", len(payload.Release.Assets), payload.Release.TagName)
 
-	if err := downloader.DownloadReleaseZip(
-		payload.Release.ZipballURL,
+	if err := downloader.DownloadAssetsAsZip(
+		payload.Release.Assets,
 		uploadDir,
 		targetFilename,
 		githubToken,
 	); err != nil {
-		s.log.Errorf("Failed to download release zip: %v", err)
+		s.log.Errorf("Failed to download release assets: %v", err)
 		res.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(res, "Failed to download release: %v", err)
+		fmt.Fprintf(res, "Failed to download release assets: %v", err)
 		return
 	}
 
 	targetPath := filepath.Join(uploadDir, targetFilename)
-	s.log.Infof("Successfully downloaded release %s to %s",
+	s.log.Infof("Successfully downloaded %d assets from release %s to %s",
+		len(payload.Release.Assets),
 		payload.Release.TagName,
 		targetPath)
 

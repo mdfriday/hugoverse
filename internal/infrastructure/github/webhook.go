@@ -18,12 +18,22 @@ type ReleasePayload struct {
 
 // Release GitHub Release 信息
 type Release struct {
-	TagName    string `json:"tag_name"`
-	Name       string `json:"name"`
-	ZipballURL string `json:"zipball_url"`
-	TarballURL string `json:"tarball_url"`
-	Draft      bool   `json:"draft"`
-	Prerelease bool   `json:"prerelease"`
+	TagName    string       `json:"tag_name"`
+	Name       string       `json:"name"`
+	ZipballURL string       `json:"zipball_url"`
+	TarballURL string       `json:"tarball_url"`
+	Draft      bool         `json:"draft"`
+	Prerelease bool         `json:"prerelease"`
+	Assets     []ReleaseAsset `json:"assets"`
+}
+
+// ReleaseAsset GitHub Release Asset 信息
+type ReleaseAsset struct {
+	ID                 int64  `json:"id"`
+	Name               string `json:"name"`
+	ContentType        string `json:"content_type"`
+	Size               int64  `json:"size"`
+	BrowserDownloadURL string `json:"browser_download_url"`
 }
 
 // Repository GitHub 仓库信息
