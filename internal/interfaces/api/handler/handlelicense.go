@@ -543,27 +543,6 @@ func (s *Handler) RecoverLicenseHandler(res http.ResponseWriter, req *http.Reque
 		password := license.ToPassword()
 		dbName := fmt.Sprintf("%s%s", s.adminApp.CouchDBPrefix(), license.ToUserDir())
 
-		// 创建 CouchDB 数据库
-		if err := s.couchClient.CreateDatabase(dbName); err != nil {
-			s.log.Errorf("Failed to create database for sync account: %v", err)
-			s.jsonError(res, "Failed to create database for sync account: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// 创建用户
-		if err := s.couchClient.CreateUser(email, password); err != nil {
-			s.log.Errorf("Failed to create user for sync account: %v", err)
-			s.jsonError(res, "Failed to create user for sync account: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		// 设置数据库权限
-		if err := s.couchClient.SetDatabasePermission(dbName, email); err != nil {
-			s.log.Errorf("Failed to set database permission for sync account: %v", err)
-			s.jsonError(res, "Failed to set database permission for sync account: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-
 		account := &contentVO.SyncAccount{
 			License:    license.LicenseKey,
 			Email:      email,
