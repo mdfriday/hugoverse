@@ -2,8 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -12,6 +10,8 @@ import (
 	"mime/multipart"
 	"net/http"
 	"strings"
+
+	"github.com/mdfriday/hugoverse/internal/infrastructure/licensekit"
 )
 
 type licenseCmd struct {
@@ -108,15 +108,13 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	}
 
 	// 验证 plan 类型
-	validPlans := map[string]bool{
-		"free": true, "starter": true, "creator": true, "pro": true, "enterprise": true,
-	}
-	if !validPlans[*plan] {
-		return fmt.Errorf("invalid plan: %s (must be: free|starter|creator|pro|enterprise)", *plan)
+	if !licensekit.IsValidPlan(*plan) {
+		validPlans := strings.Join(licensekit.GetValidPlans(), "|")
+		return fmt.Errorf("invalid plan: %s (must be: %s)", *plan, validPlans)
 	}
 
 	// 获取 plan 配置
-	planConfig := cmd.getPlanConfig(*plan)
+	planConfig := licensekit.GetPlanConfig(*plan)
 
 	fmt.Println("🚀 Batch License Generation")
 	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -154,13 +152,13 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 
 	for i := 0; i < *count; i++ {
 		// 生成 license key
-		licenseKey := cmd.generateLicenseKey(*plan)
+		licenseKey := licensekit.GenerateLicenseKey()
 
 		fmt.Printf("   [%d/%d] Creating: %s\n", i+1, *count, licenseKey)
 
 		// 生成邮箱和密码
-		email := cmd.licenseKeyToEmail(licenseKey)
-		password := cmd.licenseKeyToPassword(licenseKey)
+		email := licensekit.LicenseKeyToEmail(licenseKey)
+		password := licensekit.LicenseKeyToPassword(licenseKey)
 
 		// 步骤 1: 创建用户
 		fmt.Printf("        → Creating user: %s\n", email)
@@ -222,146 +220,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 
 	fmt.Println("🎉 All licenses and users created successfully!")
 	return nil
-}
-
-// PlanConfig 定义 plan 配置
-type PlanConfig struct {
-	// 设备/IP 限制
-	MaxDevices int `json:"max_devices"`
-	MaxIPs     int `json:"max_ips"`
-
-	// Sync 功能
-	SyncEnabled bool `json:"sync_enabled"`
-	SyncQuotaMB int  `json:"sync_quota"`
-
-	// Publish 功能
-	PublishEnabled  bool `json:"publish_enabled"`
-	MaxSites        int  `json:"max_sites"`
-	MaxStorageMB    int  `json:"max_storage"`
-	CustomDomain    bool `json:"custom_domain"`
-	CustomSubDomain bool `json:"custom_sub_domain"` // 二级域名
-
-	// 有效期（天数）
-	ValidityDays int `json:"validity_days"`
-}
-
-// getPlanConfig 获取 plan 配置
-func (cmd *licenseCmd) getPlanConfig(plan string) PlanConfig {
-	configs := map[string]PlanConfig{
-		"free": {
-			MaxDevices:      3,
-			MaxIPs:          3,
-			SyncEnabled:     true,
-			SyncQuotaMB:     500,
-			PublishEnabled:  true,
-			MaxSites:        3,
-			MaxStorageMB:    10240, // 10G
-			CustomSubDomain: true,
-			CustomDomain:    true,
-			ValidityDays:    3, // ✅ 3 天
-		},
-		"starter": {
-			MaxDevices:      3,
-			MaxIPs:          3,
-			SyncEnabled:     true,
-			SyncQuotaMB:     500,
-			PublishEnabled:  false, // ❌ 不支持发布
-			MaxSites:        0,
-			MaxStorageMB:    1024, // 1G
-			CustomSubDomain: false,
-			CustomDomain:    false,
-			ValidityDays:    365,
-		},
-		"enjoy": {
-			MaxDevices:      5,
-			MaxIPs:          5,
-			SyncEnabled:     true,
-			SyncQuotaMB:     2048,
-			PublishEnabled:  false,
-			MaxSites:        0,
-			MaxStorageMB:    10240, // 10G
-			CustomSubDomain: false,
-			CustomDomain:    false,
-			ValidityDays:    365,
-		},
-		"creator": {
-			MaxDevices:      5,
-			MaxIPs:          5,
-			SyncEnabled:     true,
-			SyncQuotaMB:     2048,
-			PublishEnabled:  true,
-			MaxSites:        10,
-			MaxStorageMB:    10240, // 10G
-			CustomSubDomain: true,  // ✅ 二级域名
-			CustomDomain:    false,
-			ValidityDays:    365,
-		},
-		"pro": {
-			MaxDevices:      10,
-			MaxIPs:          10,
-			SyncEnabled:     true,
-			SyncQuotaMB:     10240,
-			PublishEnabled:  true,
-			MaxSites:        50,
-			MaxStorageMB:    10240, // 10G
-			CustomSubDomain: true,
-			CustomDomain:    true, // ✅ 独立域名
-			ValidityDays:    365,
-		},
-		"enterprise": {
-			MaxDevices:      100,
-			MaxIPs:          100,
-			SyncEnabled:     true,
-			SyncQuotaMB:     51200,
-			PublishEnabled:  true,
-			MaxSites:        100,
-			MaxStorageMB:    102400, // 100G
-			CustomSubDomain: true,
-			CustomDomain:    true,
-			ValidityDays:    365 * 100, // ✅ 100 年
-		},
-	}
-
-	return configs[plan]
-}
-
-// licenseKeyToEmail 将 License Key 转换为邮箱
-// 规则：去掉 "MDF-" 前缀，转小写，加上 @mdfriday.com
-func (cmd *licenseCmd) licenseKeyToEmail(licenseKey string) string {
-	key := strings.ToLower(strings.TrimPrefix(licenseKey, "MDF-"))
-	return fmt.Sprintf("%s@mdfriday.com", key)
-}
-
-// licenseKeyToPassword 将 License Key 转换为密码
-// 规则：去掉 "MDF-" 前缀，转小写，base64 编码
-func (cmd *licenseCmd) licenseKeyToPassword(licenseKey string) string {
-	key := strings.ToLower(strings.TrimPrefix(licenseKey, "MDF-"))
-	return base64.StdEncoding.EncodeToString([]byte(key))
-}
-
-// generateLicenseKey 生成 license key
-// 格式：MDF-XXXX-XXXX-XXXX（全随机，避免被猜测）
-func (cmd *licenseCmd) generateLicenseKey(plan string) string {
-	// 生成三个随机部分，每部分 4 个字符
-	part1 := cmd.generateRandomString(4)
-	part2 := cmd.generateRandomString(4)
-	part3 := cmd.generateRandomString(4)
-
-	return fmt.Sprintf("MDF-%s-%s-%s", part1, part2, part3)
-}
-
-// generateRandomString 生成随机字符串
-func (cmd *licenseCmd) generateRandomString(length int) string {
-	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // 排除易混淆字符 0,O,1,I
-	b := make([]byte, length)
-	rand.Read(b)
-
-	result := make([]byte, length)
-	for i := 0; i < length; i++ {
-		result[i] = charset[int(b[i])%len(charset)]
-	}
-
-	return string(result)
 }
 
 // createUser 创建用户
@@ -454,7 +312,7 @@ func (cmd *licenseCmd) login(apiBase, email, password string) (string, error) {
 }
 
 // createLicense 创建 license
-func (cmd *licenseCmd) createLicense(apiBase, token, licenseKey, plan string, planConf PlanConfig) error {
+func (cmd *licenseCmd) createLicense(apiBase, token, licenseKey, plan string, planConf licensekit.PlanConfig) error {
 	createURL := fmt.Sprintf("%s/api/content?type=License", apiBase)
 
 	// 构造 multipart 表单
