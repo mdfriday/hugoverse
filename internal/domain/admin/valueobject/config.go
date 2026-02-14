@@ -55,6 +55,14 @@ type Config struct {
 	GithubHookSecret string `json:"github_hook_secret"` // GitHub Webhook Secret (用于验证 webhook 签名)
 	GithubToken      string `json:"github_token"`       // GitHub Personal Access Token (用于下载私有仓库)
 	GithubTargetRepo string `json:"github_target_repo"` // GitHub 目标仓库全名 (如 mdfriday/obsidian-friday-plugin)
+
+	// SMTP 配置
+	SMTPHost     string `json:"smtp_host"`     // SMTP 服务器地址 (如 smtp.gmail.com)
+	SMTPPort     int    `json:"smtp_port"`     // SMTP 端口 (如 587 for TLS, 465 for SSL)
+	SMTPUsername string `json:"smtp_username"` // SMTP 用户名 (通常是邮箱地址)
+	SMTPPassword string `json:"smtp_password"` // SMTP 密码或应用专用密码
+	SMTPFrom     string `json:"smtp_from"`     // 发件人邮箱地址
+	SMTPUseTLS   bool   `json:"smtp_use_tls"`  // 是否使用 TLS (STARTTLS)
 }
 
 func (c *Config) IsCacheInvalidate() bool {
@@ -226,6 +234,48 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 				"label":       "GitHub Target Repository",
 				"type":        "text",
 				"placeholder": "mdfriday/obsidian-friday-plugin",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("SMTPHost", c, map[string]string{
+				"label":       "SMTP Server Host",
+				"type":        "text",
+				"placeholder": "smtp.gmail.com",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("SMTPPort", c, map[string]string{
+				"label":       "SMTP Server Port",
+				"type":        "number",
+				"placeholder": "587",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("SMTPUsername", c, map[string]string{
+				"label":       "SMTP Username",
+				"type":        "text",
+				"placeholder": "your-email@example.com",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("SMTPPassword", c, map[string]string{
+				"label":       "SMTP Password",
+				"type":        "password",
+				"placeholder": "Your SMTP password or app-specific password",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("SMTPFrom", c, map[string]string{
+				"label":       "SMTP From Address",
+				"type":        "email",
+				"placeholder": "noreply@mdfriday.com",
+			}),
+		},
+		editor.Field{
+			View: editor.Checkbox("SMTPUseTLS", c, map[string]string{
+				"label": "Use TLS (STARTTLS) for SMTP connection",
+			}, map[string]string{
+				"true": "Enable TLS",
 			}),
 		},
 		editor.Field{

@@ -49,6 +49,9 @@ func (s *Server) registerLicenseHandler() {
 	s.mux.HandleFunc("/api/license/domain/https-status", s.wrapContentHandler(s.handler.DomainSSLStatusHandler))
 
 	s.mux.HandleFunc("/api/license/domains", s.wrapContentHandler(s.handler.GetDomainsHandler))
+
+	// 申请试用 License
+	s.mux.HandleFunc("/api/license/trial", s.wrapCounterHandler(s.handler.GetTrialHandler))
 }
 
 func (s *Server) registerContentHandler() {

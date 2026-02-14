@@ -294,3 +294,9 @@ curl -X POST "http://127.0.0.1:1314/api/mdf/preview?type=MDFPreview" \
 curl -X POST "http://127.0.0.1:1314/api/mdf/preview/deploy?type=MDFPreview&id=1" \
 -F "type=MDFPreview" \
 -F "host_name=MDFriday Preview" 
+
+
+#### Trial License
+
+curl -s -X POST "http://127.0.0.1:1314/api/license/trial" \
+-F "email=me@sunwei.xyz"

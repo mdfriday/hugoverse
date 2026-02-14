@@ -325,7 +325,7 @@ func GetPlanFeatures(plan LicensePlan) *LicenseFeatures {
 			MaxStorageMB:    10240, // 10G
 			CustomSubDomain: true,
 			CustomDomain:    true,
-			ValidityDays:    3, // ✅ 3 天
+			ValidityDays:    7, // ✅ 7 天
 		}
 
 	case PlanStarter:

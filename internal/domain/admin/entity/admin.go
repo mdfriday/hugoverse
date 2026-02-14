@@ -23,6 +23,7 @@ type Admin struct {
 	*CouchDB
 	*Caddy
 	*GitHub
+	*SMTP
 
 	Log loggers.Logger
 }

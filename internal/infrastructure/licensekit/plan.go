@@ -34,7 +34,7 @@ func GetPlanConfig(plan string) PlanConfig {
 			MaxStorageMB:    10240, // 10G
 			CustomSubDomain: true,
 			CustomDomain:    true,
-			ValidityDays:    3, // ✅ 3 天
+			ValidityDays:    7, // ✅ 7 天
 		},
 		"starter": {
 			MaxDevices:      3,
@@ -119,4 +119,3 @@ func IsValidPlan(plan string) bool {
 func GetValidPlans() []string {
 	return []string{"free", "starter", "enjoy", "creator", "pro", "enterprise"}
 }
-

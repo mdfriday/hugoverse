@@ -2,6 +2,7 @@ package entity
 
 import (
 	"encoding/json"
+
 	"github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"github.com/mdfriday/hugoverse/pkg/hash"
 )
@@ -28,6 +29,11 @@ func (c *Content) GetLicenseByKey(licenseKey string) (*valueobject.License, erro
 // UpdateLicense 更新 License
 func (c *Content) UpdateLicense(license *valueobject.License) error {
 	return c.UpdateContentObject(license)
+}
+
+// CreateLicense 创建 License
+func (c *Content) CreateLicense(license *valueobject.License) (string, error) {
+	return c.newContent("License", license)
 }
 
 // ========== LicenseUsage Operations ==========
@@ -57,4 +63,28 @@ func (c *Content) UpdateLicenseUsage(licenseUsage *valueobject.LicenseUsage) err
 // CreateLicenseUsage 创建 LicenseUsage
 func (c *Content) CreateLicenseUsage(licenseUsage *valueobject.LicenseUsage) (string, error) {
 	return c.newContent("LicenseUsage", licenseUsage)
+}
+
+// ========== LicenseTrial Operations ==========
+
+// GetLicenseTrialByEmail 通过 Email 获取 LicenseTrial
+func (c *Content) GetLicenseTrialByEmail(email string) (*valueobject.LicenseTrial, error) {
+	hashKey := hash.MD5(email)
+
+	data, err := c.GetContentByHash("LicenseTrial", hashKey, "")
+	if err != nil {
+		return nil, err
+	}
+
+	var licenseTrial valueobject.LicenseTrial
+	if err := json.Unmarshal(data, &licenseTrial); err != nil {
+		return nil, err
+	}
+
+	return &licenseTrial, nil
+}
+
+// CreateLicenseTrial 创建 LicenseTrial
+func (c *Content) CreateLicenseTrial(licenseTrial *valueobject.LicenseTrial) (string, error) {
+	return c.newContent("LicenseTrial", licenseTrial)
 }

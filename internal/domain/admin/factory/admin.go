@@ -51,6 +51,7 @@ func NewAdmin(env string, repo repository.Repository) (*entity.Admin, error) {
 	a.CouchDB = &entity.CouchDB{Conf: a.Conf}
 	a.Caddy = &entity.Caddy{Env: env, Conf: a.Conf}
 	a.GitHub = &entity.GitHub{Conf: a.Conf}
+	a.SMTP = &entity.SMTP{Conf: a.Conf}
 
 	return a, nil
 }

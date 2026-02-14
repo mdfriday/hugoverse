@@ -162,7 +162,7 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 
 		// 步骤 1: 创建用户
 		fmt.Printf("        → Creating user: %s\n", email)
-		userErr := cmd.createUser(*apiBase, email, password)
+		userErr := licensekit.CreateUser(*apiBase, email, password)
 		if userErr != nil {
 			fmt.Printf("        ❌ User creation failed: %v\n", userErr)
 			failCount++
@@ -219,40 +219,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	}
 
 	fmt.Println("🎉 All licenses and users created successfully!")
-	return nil
-}
-
-// createUser 创建用户
-func (cmd *licenseCmd) createUser(apiBase, email, password string) error {
-	userURL := fmt.Sprintf("%s/api/user", apiBase)
-
-	// 构造表单数据
-	data := fmt.Sprintf("email=%s&password=%s", email, password)
-
-	req, err := http.NewRequest("POST", userURL, strings.NewReader(data))
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	// 接受 200 OK 或 201 Created
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("status %d: %s", resp.StatusCode, string(body))
-	}
-
 	return nil
 }
 
