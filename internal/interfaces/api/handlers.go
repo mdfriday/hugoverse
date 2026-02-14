@@ -13,6 +13,7 @@ func (s *Server) registerLicenseHandler() {
 
 	// License 激活 (需要认证)
 	s.mux.HandleFunc("/api/license/activate", s.wrapContentHandler(s.handler.ActivateLicenseHandler))
+	s.mux.HandleFunc("/api/license/recover", s.wrapContentHandler(s.handler.RecoverLicenseHandler))
 
 	// License 信息查询 (需要认证)
 	s.mux.HandleFunc("/api/license/info", s.wrapContentHandler(s.handler.GetLicenseInfoHandler))

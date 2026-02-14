@@ -345,6 +345,259 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 	s.jsonResponse(res, response)
 }
 
+func (s *Handler) RecoverLicenseHandler(res http.ResponseWriter, req *http.Request) {
+	if req.Method != http.MethodPost {
+		res.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	err := req.ParseMultipartForm(apiFrom.MaxMemory) // maxMemory 4MB
+	if err != nil {
+		s.log.Errorf("Error parsing multipart form: %v", err)
+		res.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	licenseKey := req.PostForm.Get("license_key")
+	deviceID := "device_id"
+	deviceName := "device_name"
+	deviceType := "desktop"
+
+	if licenseKey == "" {
+		s.log.Errorf("License key is required")
+		s.jsonError(res, "License key is required", http.StatusBadRequest)
+		return
+	}
+
+	// 查找 License (必须已存在)
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		// License 不存在，返回错误
+		s.log.Errorf("Invalid license key: %s", licenseKey)
+		s.jsonError(res, "Invalid license key: License not found", http.StatusNotFound)
+		return
+	}
+
+	now := timestamp.CurrentTimeMillis()
+	firstTimeActivation := false
+
+	// 首次激活 - 设置日期
+	if !license.Activated {
+		license.Activated = true
+		license.ActivatedAt = now
+		firstTimeActivation = true
+
+		// 设置 IssueDate 为当前时间
+		if license.IssueDate == 0 {
+			license.IssueDate = now
+		}
+
+		// 根据 License Plan 设置 ExpiryDate
+		if license.ExpiryDate == 0 {
+			features := contentVO.GetPlanFeatures(license.Plan)
+			validityDays := features.ValidityDays
+			expiryTime := time.Now().Add(time.Duration(validityDays) * 24 * time.Hour)
+			license.ExpiryDate = expiryTime.UnixMilli()
+		}
+
+		if err := s.contentApp.UpdateLicense(license); err != nil {
+			s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// Allocate publish subdomain by default upon first activation
+		if license.GetFeatures().PublishEnabled {
+			_, err := s.contentApp.GetSubDomainByKey(s.db.UserDir())
+			if err != nil {
+				sd := &contentVO.SubDomain{
+					License: license.LicenseKey,
+					Sub:     s.db.UserDir(),
+					Item: contentVO.Item{
+						Timestamp: now,
+						Updated:   now,
+						Namespace: "SubDomain",
+					},
+				}
+
+				if _, err := s.contentApp.CreateSubDomain(sd); err != nil {
+					s.log.Errorf("Failed to create subdomain for license %s: %v", license.LicenseKey, err)
+					s.jsonError(res, "Failed to create subdomain: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+
+				pd := &contentVO.PublishDomain{
+					License:   license.LicenseKey,
+					SubDomain: sd.Sub,
+					Folder:    s.db.UserDir(),
+					CusDomain: "",
+					Item: contentVO.Item{
+						Timestamp: now,
+						Updated:   now,
+						Namespace: "PublishDomain",
+					},
+				}
+
+				if _, err := s.contentApp.CreatePublishDomain(pd); err != nil {
+					s.log.Errorf("Failed to create publish domain for license %s: %v", license.LicenseKey, err)
+					s.jsonError(res, "Failed to create publish domain: "+err.Error(), http.StatusInternalServerError)
+					return
+				}
+			}
+		}
+	}
+
+	// 新设备 - 检查限制
+	if !license.CanAddDevice() {
+		if err := fmt.Errorf("device limit reached (%d/%d)", license.CurrentDevices, license.MaxDevices); err != nil {
+			s.log.Errorf("Device limit reached for license %s: %v", license.LicenseKey, err)
+			s.jsonError(res, "Device limit reached", http.StatusForbidden)
+			return
+		}
+	}
+
+	// 创建新设备记录
+	device := &contentVO.LicenseDevice{
+		License:     license.LicenseKey,
+		DeviceID:    deviceID,
+		DeviceName:  deviceName,
+		DeviceType:  deviceType,
+		FirstSeenAt: now,
+		LastSeenAt:  now,
+		AccessCount: 1,
+		Status:      "active",
+		Item: contentVO.Item{
+			Timestamp: now,
+			Updated:   now,
+			Namespace: "LicenseDevice",
+		},
+	}
+
+	if _, err := s.contentApp.CreateDevice(device); err != nil {
+		s.log.Errorf("Failed to create device record: %v", err)
+		s.jsonError(res, "Failed to create device record: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 更新 License 设备计数
+	license.CurrentDevices++
+
+	// 获取客户端 IP
+	ipAddress := s.getClientIP(req)
+
+	// 新 IP - 检查限制
+	if !license.CanAddIP() {
+		s.log.Errorf("IP limit reached for license %s", license.LicenseKey)
+		s.jsonError(res, "IP limit reached", http.StatusForbidden)
+		return
+	}
+
+	// 创建新 IP 记录
+	ip := &contentVO.LicenseIP{
+		License:     license.LicenseKey,
+		IPAddress:   ipAddress,
+		FirstSeenAt: now,
+		LastSeenAt:  now,
+		AccessCount: 1,
+		Status:      "active",
+		Item: contentVO.Item{
+			Timestamp: now,
+			Updated:   now,
+			Namespace: "LicenseIP",
+		},
+	}
+
+	if _, err := s.contentApp.CreateLicenseIP(ip); err != nil {
+		s.log.Errorf("Failed to create IP record: %v", err)
+		s.jsonError(res, "Failed to create IP record: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 更新 License IP 计数
+	license.CurrentIPs++
+
+	if err := s.contentApp.UpdateLicense(license); err != nil {
+		s.log.Errorf("Failed to update license: %v", err)
+		s.jsonError(res, "Failed to update license: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 返回响应
+	response := map[string]interface{}{
+		"success":     true,
+		"first_time":  firstTimeActivation,
+		"license_key": license.LicenseKey,
+		"plan":        license.Plan,
+		"activated":   license.Activated,
+		"expires_at":  license.ExpiryDate,
+		"features":    license.GetFeatures(),
+		"user": map[string]interface{}{
+			"email":    license.ToEmail(),
+			"user_dir": s.db.UserDir(),
+		},
+	}
+
+	// 创建 Sync 账号 (如果支持)
+	var syncInfo map[string]interface{}
+	if license.GetFeatures().SyncEnabled {
+		email := license.ToEmail()
+		password := license.ToPassword()
+		dbName := fmt.Sprintf("%s%s", s.adminApp.CouchDBPrefix(), license.ToUserDir())
+
+		// 创建 CouchDB 数据库
+		if err := s.couchClient.CreateDatabase(dbName); err != nil {
+			s.log.Errorf("Failed to create database for sync account: %v", err)
+			s.jsonError(res, "Failed to create database for sync account: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 创建用户
+		if err := s.couchClient.CreateUser(email, password); err != nil {
+			s.log.Errorf("Failed to create user for sync account: %v", err)
+			s.jsonError(res, "Failed to create user for sync account: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		// 设置数据库权限
+		if err := s.couchClient.SetDatabasePermission(dbName, email); err != nil {
+			s.log.Errorf("Failed to set database permission for sync account: %v", err)
+			s.jsonError(res, "Failed to set database permission for sync account: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		account := &contentVO.SyncAccount{
+			License:    license.LicenseKey,
+			Email:      email,
+			DBName:     dbName,
+			DBPassword: password,
+			DBEndpoint: s.adminApp.CouchDBDomain(),
+			Status:     "active",
+			CreatedAt:  now,
+			Item: contentVO.Item{
+				Timestamp: now,
+				Updated:   now,
+				Namespace: "SyncAccount",
+			},
+		}
+
+		if _, err := s.contentApp.CreateSyncAccount(account); err != nil {
+			s.log.Errorf("Failed to save sync account: %v", err)
+			s.jsonError(res, "Failed to save sync account: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		syncInfo = map[string]interface{}{
+			"email":       account.Email,
+			"db_name":     account.DBName,
+			"db_password": password,
+			"db_endpoint": account.DBEndpoint,
+			"status":      account.Status,
+		}
+		response["sync"] = syncInfo
+	}
+
+	s.jsonResponse(res, response)
+}
+
 // GetLicenseInfoHandler 获取 License 信息
 // GET /api/license/info?key=xxx
 func (h *Handler) GetLicenseInfoHandler(w http.ResponseWriter, r *http.Request) {

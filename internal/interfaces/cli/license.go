@@ -73,10 +73,104 @@ func (cmd *licenseCmd) Run() error {
 	switch subCommand {
 	case "generate":
 		return cmd.runGenerate(cmd.cmd.Args()[1:])
+	case "recover":
+		return cmd.runRecover(cmd.cmd.Args()[1:])
 	default:
 		cmd.Usage()
 		return fmt.Errorf("invalid license subcommand: %s (only 'generate' is supported)", subCommand)
 	}
+}
+
+func (cmd *licenseCmd) runRecover(args []string) error {
+	fs := flag.NewFlagSet("recover", flag.ExitOnError)
+
+	email := fs.String("email", "", "Email for login")
+	password := fs.String("password", "", "Password for login")
+	apiBase := fs.String("api", "http://127.0.0.1:1314", "API base URL")
+	plan := fs.String("plan", "", "License plan (free|starter|creator|pro|lifetime)")
+	key := fs.String("key", "", "License Key to recover")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	// 验证必填参数
+	if *email == "" {
+		return errors.New("email is required (-email)")
+	}
+	if *password == "" {
+		return errors.New("password is required (-password)")
+	}
+	if *plan == "" {
+		return errors.New("plan is required (-plan)")
+	}
+	if *key < "" {
+		return errors.New("key is required (-key)")
+	}
+
+	// 验证 plan 类型
+	if !licensekit.IsValidPlan(*plan) {
+		validPlans := strings.Join(licensekit.GetValidPlans(), "|")
+		return fmt.Errorf("invalid plan: %s (must be: %s)", *plan, validPlans)
+	}
+
+	// 获取 plan 配置
+	planConfig := licensekit.GetPlanConfig(*plan)
+
+	fmt.Println("🚀 Batch License Generation")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("   Email: %s\n", *email)
+	fmt.Printf("   API: %s\n", *apiBase)
+	fmt.Printf("   Plan: %s\n", *plan)
+	fmt.Printf("   Key: %s\n", *key)
+	fmt.Printf("   Max Devices: %d\n", planConfig.MaxDevices)
+	fmt.Printf("   Max IPs: %d\n", planConfig.MaxIPs)
+	fmt.Println()
+
+	// 第一步：登录获取 token
+	fmt.Println("📝 Step 1: Logging in...")
+	token, err := cmd.login(*apiBase, *email, *password)
+	if err != nil {
+		return fmt.Errorf("login failed: %w", err)
+	}
+	fmt.Printf("✅ Login successful\n\n")
+
+	// 记录用户创建信息
+	type LicenseInfo struct {
+		Key      string
+		Email    string
+		Password string
+	}
+
+	// 生成 license key
+	licenseKey := *key
+
+	// 步骤 2: 创建 license
+	fmt.Printf("        → Creating license\n")
+	licenseErr := cmd.createLicense(*apiBase, token, licenseKey, *plan, planConfig)
+	if licenseErr != nil {
+		fmt.Printf("        ❌ License creation failed: %v\n", licenseErr)
+	}
+	fmt.Println() // 空行分隔每个 license
+
+	// 步骤 2: 恢复 license
+	fmt.Printf("        → Recovering license\n")
+	recoverErr := cmd.recoverLicense(*apiBase, token, licenseKey)
+	if recoverErr != nil {
+		fmt.Printf("        ❌ License recover failed: %v\n", recoverErr)
+	}
+	fmt.Println() // 空行分隔每个 license
+
+	// 生成邮箱和密码
+	keyEmail := licensekit.LicenseKeyToEmail(licenseKey)
+	keyPassword := licensekit.LicenseKeyToPassword(licenseKey)
+	fmt.Printf("  License Key: %s\n", licenseKey)
+	fmt.Printf("      Email:       %s\n", keyEmail)
+	fmt.Printf("      Password:    %s\n", keyPassword)
+	fmt.Println()
+
+	fmt.Println("🎉 All licenses and users created successfully!")
+	return nil
 }
 
 // runGenerate 批量生成 license
@@ -303,6 +397,56 @@ func (cmd *licenseCmd) createLicense(apiBase, token, licenseKey, plan string, pl
 		"custom_sub_domain": fmt.Sprintf("%t", planConf.CustomSubDomain),
 
 		"validity_days": fmt.Sprintf("%d", planConf.ValidityDays),
+	}
+
+	for key, val := range fields {
+		if err := writer.WriteField(key, val); err != nil {
+			return err
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return err
+	}
+
+	// 创建请求
+	req, err := http.NewRequest("POST", createURL, &buf)
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+func (cmd *licenseCmd) recoverLicense(apiBase, token, licenseKey string) error {
+	createURL := fmt.Sprintf("%s/api/license/recover", apiBase)
+
+	// 构造 multipart 表单
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+
+	// 添加字段
+	fields := map[string]string{
+		"license_key": licenseKey,
 	}
 
 	for key, val := range fields {
