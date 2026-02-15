@@ -964,6 +964,11 @@ func (c *Client) ExportConfig(outputPath string) error {
 	return nil
 }
 
+// GetConfigObject 获取配置对象（用于备份）
+func (c *Client) GetConfigObject() *Config {
+	return c.config
+}
+
 // GetConfig 获取当前 Caddy 配置
 func (c *Client) GetConfig() (map[string]interface{}, error) {
 	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)

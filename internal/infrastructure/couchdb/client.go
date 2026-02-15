@@ -245,3 +245,13 @@ func (c *Client) GetDiskUsage(dbName string) (int64, error) {
 func (c *Client) setBasicAuth(req *http.Request) {
 	req.SetBasicAuth(c.config.AdminUser, c.config.AdminPass)
 }
+
+// GetURL 获取 CouchDB URL
+func (c *Client) GetURL() string {
+	return c.config.URL
+}
+
+// GetConfig 获取配置（用于备份）
+func (c *Client) GetConfig() *Config {
+	return c.config
+}

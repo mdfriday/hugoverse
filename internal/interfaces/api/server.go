@@ -13,6 +13,8 @@ import (
 	"github.com/mdfriday/hugoverse/internal/application"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/entity"
 	"github.com/mdfriday/hugoverse/internal/domain/admin/factory"
+	"github.com/mdfriday/hugoverse/internal/infrastructure/caddy"
+	"github.com/mdfriday/hugoverse/internal/infrastructure/couchdb"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/auth"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/cache"
 	"github.com/mdfriday/hugoverse/internal/interfaces/api/compression"
@@ -137,6 +139,22 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 
 	//go application.PreviewSiteRecycle(contentApp, s.adminApp.Token())
 	go application.LicenseResourceRecycle(contentApp, s.Log)
+
+	// 在生产环境启动备份调度器
+	if s.Env == PROD {
+		go func() {
+			s.Log.Println("Starting backup scheduler for production environment...")
+			couchdbCfg := s.GetCouchDBConfig()
+			caddyCfg := s.GetCaddyConfig()
+
+			if couchdbCfg != nil && caddyCfg != nil {
+				scheduler := application.NewBackupScheduler(couchdbCfg, caddyCfg, s.Log)
+				scheduler.Start()
+			} else {
+				s.Log.Warnln("Backup scheduler not started: missing CouchDB or Caddy configuration")
+			}
+		}()
+	}
 
 	return s, nil
 }
@@ -264,4 +282,36 @@ func (s *Server) saveConfig() error {
 		return err
 	}
 	return nil
+}
+
+// GetCouchDBConfig 获取 CouchDB 配置（用于备份调度器）
+func (s *Server) GetCouchDBConfig() *couchdb.Config {
+	if s.adminApp == nil || s.adminApp.Conf == nil {
+		return nil
+	}
+
+	return &couchdb.Config{
+		URL:       s.adminApp.CouchDBURL(),
+		AdminUser: s.adminApp.CouchDBAdminName(),
+		AdminPass: s.adminApp.CouchDBAdminPassword(),
+		DBPrefix:  s.adminApp.CouchDBPrefix(),
+	}
+}
+
+// GetCaddyConfig 获取 Caddy 配置（用于备份调度器）
+func (s *Server) GetCaddyConfig() *caddy.Config {
+	if s.adminApp == nil || s.adminApp.Conf == nil {
+		return nil
+	}
+
+	return &caddy.Config{
+		AdminAPI:       "http://127.0.0.1:2019",
+		DefaultBackend: "127.0.0.1:1314",
+		CouchDBBackend: "127.0.0.1:5984",
+		CoreDomain:     s.adminApp.Conf.Domain,
+		ServerIP:       s.adminApp.Conf.ServerIP,
+		DNSPodToken:    "", // DNSPod Token 不存储在配置中，只在启动时使用
+		PidFile:        "/tmp/caddy.pid",
+		LogFile:        "/tmp/caddy.log",
+	}
 }
