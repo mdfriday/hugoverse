@@ -146,9 +146,9 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 			s.Log.Println("Starting backup scheduler for production environment...")
 			couchdbCfg := s.GetCouchDBConfig()
 			caddyCfg := s.GetCaddyConfig()
-
+			
 			if couchdbCfg != nil && caddyCfg != nil {
-				scheduler := application.NewBackupScheduler(couchdbCfg, caddyCfg, s.Log)
+				scheduler := application.NewBackupScheduler(couchdbCfg, caddyCfg, contentApp, s.Log)
 				scheduler.Start()
 			} else {
 				s.Log.Warnln("Backup scheduler not started: missing CouchDB or Caddy configuration")
