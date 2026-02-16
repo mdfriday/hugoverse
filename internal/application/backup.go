@@ -16,7 +16,6 @@ import (
 	"github.com/mdfriday/hugoverse/internal/infrastructure/caddy"
 	"github.com/mdfriday/hugoverse/internal/infrastructure/couchdb"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
-	bolt "go.etcd.io/bbolt"
 )
 
 // BackupScheduler 备份调度器
@@ -130,19 +129,19 @@ func NewBackupScheduler(couchdbCfg *couchdb.Config, caddyCfg *caddy.Config, cont
 
 // Start 启动备份定时任务
 func (bs *BackupScheduler) Start() {
-	//// 计算到凌晨 2:00（中国时间）的时间
-	//loc := time.FixedZone("CST", 8*3600)
-	//now := time.Now().In(loc)
-	//
-	//nextRun := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, loc)
-	//if now.After(nextRun) {
-	//	nextRun = nextRun.Add(24 * time.Hour)
-	//}
-	//
-	//bs.log.Printf("Backup scheduler started, next run at: %s", nextRun.Format(time.RFC3339))
-	//
-	//// 等待到首次执行时间
-	//time.Sleep(time.Until(nextRun))
+	// 计算到凌晨 2:00（中国时间）的时间
+	loc := time.FixedZone("CST", 8*3600)
+	now := time.Now().In(loc)
+
+	nextRun := time.Date(now.Year(), now.Month(), now.Day(), 2, 0, 0, 0, loc)
+	if now.After(nextRun) {
+		nextRun = nextRun.Add(24 * time.Hour)
+	}
+
+	bs.log.Printf("Backup scheduler started, next run at: %s", nextRun.Format(time.RFC3339))
+
+	// 等待到首次执行时间
+	time.Sleep(time.Until(nextRun))
 
 	// 创建 24 小时定时器
 	ticker := time.NewTicker(24 * time.Hour)
@@ -405,39 +404,39 @@ func (bs *BackupScheduler) backupCouchDB(tempDir string, info *CouchDBBackupInfo
 // backupCouchDBDatabase 备份单个 CouchDB 数据库（优化内存使用）
 func (bs *BackupScheduler) backupCouchDBDatabase(dir string, dbName string) (DatabaseBackupInfo, error) {
 	start := time.Now()
-	
+
 	// 获取数据库信息
 	dbInfo, err := bs.getCouchDBDatabaseInfo(dbName)
 	if err != nil {
 		return DatabaseBackupInfo{}, err
 	}
-	
+
 	// 修复类型转换问题
 	docCount := 0
 	if dc, ok := dbInfo["doc_count"].(float64); ok {
 		docCount = int(dc)
 	}
-	
+
 	bs.log.Printf("Backing up: %s (%d docs)", dbName, docCount)
-	
+
 	// 直接流式写入文件，避免大量文档占用内存
 	outputPath := filepath.Join(dir, dbName+".json")
-	
+
 	// 使用流式导出（避免 OOM）
 	fileSize, err := bs.streamExportCouchDBDocs(dbName, dbInfo, outputPath)
 	if err != nil {
 		return DatabaseBackupInfo{}, err
 	}
-	
+
 	info := DatabaseBackupInfo{
 		DocCount:   docCount,
 		UpdateSeq:  fmt.Sprintf("%v", dbInfo["update_seq"]),
 		Size:       fileSize,
 		BackupTime: time.Since(start).Milliseconds(),
 	}
-	
+
 	bs.log.Printf("✓ %s backed up: %.2f KB in %d ms", dbName, float64(info.Size)/1024, info.BackupTime)
-	
+
 	return info, nil
 }
 
@@ -497,34 +496,35 @@ func (bs *BackupScheduler) backupSystemDB(tempDir string, info *HugoverseBackupI
 		return fmt.Errorf("failed to create hugoverse directory: %w", err)
 	}
 
-	// 打开数据库（只读）
-	db, err := bolt.Open(bs.systemDBPath, 0666, &bolt.Options{ReadOnly: true})
-	if err != nil {
-		return fmt.Errorf("failed to open system.db: %w", err)
+	// 检查源文件是否存在
+	if _, err := os.Stat(bs.systemDBPath); err != nil {
+		return fmt.Errorf("system.db not found at %s: %w", bs.systemDBPath, err)
 	}
-	defer db.Close()
 
 	// 备份文件路径
 	backupPath := filepath.Join(hugoverseDir, "system.db")
-	backupFile, err := os.Create(backupPath)
+
+	// 直接复制文件（system.db 已被应用打开，不能再打开）
+	sourceFile, err := os.Open(bs.systemDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to open system.db: %w", err)
+	}
+	defer sourceFile.Close()
+
+	destFile, err := os.Create(backupPath)
 	if err != nil {
 		return fmt.Errorf("failed to create backup file: %w", err)
 	}
-	defer backupFile.Close()
+	defer destFile.Close()
 
-	// 使用 BoltDB 的内置备份功能
-	err = db.View(func(tx *bolt.Tx) error {
-		_, err := tx.WriteTo(backupFile)
-		return err
-	})
-
+	// 复制文件
+	written, err := io.Copy(destFile, sourceFile)
 	if err != nil {
-		return fmt.Errorf("failed to backup database: %w", err)
+		return fmt.Errorf("failed to copy system.db: %w", err)
 	}
 
-	stat, _ := os.Stat(backupPath)
 	info.DBPath = bs.systemDBPath
-	info.Size = stat.Size()
+	info.Size = written
 
 	bs.log.Printf("✓ system.db backed up: %.2f MB", float64(info.Size)/1024/1024)
 
