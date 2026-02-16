@@ -402,53 +402,42 @@ func (bs *BackupScheduler) backupCouchDB(tempDir string, info *CouchDBBackupInfo
 	return nil
 }
 
-// backupCouchDBDatabase 备份单个 CouchDB 数据库
+// backupCouchDBDatabase 备份单个 CouchDB 数据库（优化内存使用）
 func (bs *BackupScheduler) backupCouchDBDatabase(dir string, dbName string) (DatabaseBackupInfo, error) {
 	start := time.Now()
-
+	
 	// 获取数据库信息
 	dbInfo, err := bs.getCouchDBDatabaseInfo(dbName)
 	if err != nil {
 		return DatabaseBackupInfo{}, err
 	}
-
-	bs.log.Printf("Backing up: %s (%d docs)", dbName, dbInfo["doc_count"])
-
-	// 导出所有文档
-	docs, err := bs.exportCouchDBDocs(dbName)
+	
+	// 修复类型转换问题
+	docCount := 0
+	if dc, ok := dbInfo["doc_count"].(float64); ok {
+		docCount = int(dc)
+	}
+	
+	bs.log.Printf("Backing up: %s (%d docs)", dbName, docCount)
+	
+	// 直接流式写入文件，避免大量文档占用内存
+	outputPath := filepath.Join(dir, dbName+".json")
+	
+	// 使用流式导出（避免 OOM）
+	fileSize, err := bs.streamExportCouchDBDocs(dbName, dbInfo, outputPath)
 	if err != nil {
 		return DatabaseBackupInfo{}, err
 	}
-
-	// 构建备份数据
-	backup := map[string]interface{}{
-		"db_name":    dbName,
-		"update_seq": dbInfo["update_seq"],
-		"doc_count":  dbInfo["doc_count"],
-		"timestamp":  time.Now().Format(time.RFC3339),
-		"docs":       docs,
-	}
-
-	// 保存为 JSON 文件
-	outputPath := filepath.Join(dir, dbName+".json")
-	data, err := json.Marshal(backup)
-	if err != nil {
-		return DatabaseBackupInfo{}, fmt.Errorf("failed to marshal backup: %w", err)
-	}
-
-	if err := os.WriteFile(outputPath, data, 0644); err != nil {
-		return DatabaseBackupInfo{}, fmt.Errorf("failed to write backup file: %w", err)
-	}
-
+	
 	info := DatabaseBackupInfo{
-		DocCount:   int(dbInfo["doc_count"].(float64)),
+		DocCount:   docCount,
 		UpdateSeq:  fmt.Sprintf("%v", dbInfo["update_seq"]),
-		Size:       int64(len(data)),
+		Size:       fileSize,
 		BackupTime: time.Since(start).Milliseconds(),
 	}
-
-	bs.log.Printf("✓ %s backed up: %.2f KB", dbName, float64(info.Size)/1024)
-
+	
+	bs.log.Printf("✓ %s backed up: %.2f KB in %d ms", dbName, float64(info.Size)/1024, info.BackupTime)
+	
 	return info, nil
 }
 

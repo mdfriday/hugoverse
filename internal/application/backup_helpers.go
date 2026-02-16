@@ -643,42 +643,165 @@ func (bs *BackupScheduler) getCouchDBDatabaseInfo(dbName string) (map[string]int
 // exportCouchDBDocs 导出数据库所有文档
 func (bs *BackupScheduler) exportCouchDBDocs(dbName string) ([]interface{}, error) {
 	url := fmt.Sprintf("%s/%s/_all_docs?include_docs=true", bs.couchdbClient.GetURL(), dbName)
-
+	
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
-
+	
 	bs.setBasicAuth(req)
-
+	
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
+	
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
 	}
-
+	
 	var result struct {
 		Rows []struct {
 			Doc interface{} `json:"doc"`
 		} `json:"rows"`
 	}
-
+	
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
-
+	
 	docs := make([]interface{}, 0, len(result.Rows))
 	for _, row := range result.Rows {
 		if row.Doc != nil {
 			docs = append(docs, row.Doc)
 		}
 	}
+	
+	return docs, nil
+}
 
+// streamExportCouchDBDocs 流式导出数据库文档（分批处理，避免 OOM）
+func (bs *BackupScheduler) streamExportCouchDBDocs(dbName string, dbInfo map[string]interface{}, outputPath string) (int64, error) {
+	// 创建输出文件
+	file, err := os.Create(outputPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer file.Close()
+	
+	// 写入文件头部（元数据）
+	docCount := 0
+	if dc, ok := dbInfo["doc_count"].(float64); ok {
+		docCount = int(dc)
+	}
+	
+	header := fmt.Sprintf(`{"db_name":"%s","update_seq":"%v","doc_count":%d,"timestamp":"%s","docs":[`,
+		dbName,
+		dbInfo["update_seq"],
+		docCount,
+		time.Now().Format(time.RFC3339),
+	)
+	
+	if _, err := file.WriteString(header); err != nil {
+		return 0, err
+	}
+	
+	// 分批导出文档，避免 OOM
+	// 每批处理 1000 个文档
+	batchSize := 1000
+	totalExported := 0
+	
+	for skip := 0; skip < docCount; skip += batchSize {
+		// 获取一批文档
+		limit := batchSize
+		if skip+limit > docCount {
+			limit = docCount - skip
+		}
+		
+		docs, err := bs.exportCouchDBDocsBatch(dbName, skip, limit)
+		if err != nil {
+			return 0, fmt.Errorf("failed to export batch at skip=%d: %w", skip, err)
+		}
+		
+		// 写入文档
+		for i, doc := range docs {
+			if totalExported > 0 || i > 0 {
+				file.WriteString(",")
+			}
+			
+			// 将文档序列化为 JSON 并写入
+			docJSON, err := json.Marshal(doc)
+			if err != nil {
+				bs.log.Warnf("Failed to marshal doc in %s: %v", dbName, err)
+				continue
+			}
+			
+			file.Write(docJSON)
+			totalExported++
+		}
+		
+		// 输出进度（每 10 批）
+		if (skip/batchSize)%10 == 0 && skip > 0 {
+			progress := float64(totalExported) / float64(docCount) * 100
+			bs.log.Printf("  Progress: %d/%d docs (%.1f%%)", totalExported, docCount, progress)
+		}
+	}
+	
+	// 写入文件尾部
+	file.WriteString("]}")
+	
+	// 获取文件大小
+	stat, _ := os.Stat(outputPath)
+	
+	if totalExported != docCount {
+		bs.log.Warnf("Expected %d docs, exported %d docs for %s", docCount, totalExported, dbName)
+	}
+	
+	return stat.Size(), nil
+}
+
+// exportCouchDBDocsBatch 分批导出文档
+func (bs *BackupScheduler) exportCouchDBDocsBatch(dbName string, skip, limit int) ([]interface{}, error) {
+	url := fmt.Sprintf("%s/%s/_all_docs?include_docs=true&skip=%d&limit=%d", 
+		bs.couchdbClient.GetURL(), dbName, skip, limit)
+	
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	
+	bs.setBasicAuth(req)
+	
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code: %d, body: %s", resp.StatusCode, string(body))
+	}
+	
+	var result struct {
+		Rows []struct {
+			Doc interface{} `json:"doc"`
+		} `json:"rows"`
+	}
+	
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, err
+	}
+	
+	docs := make([]interface{}, 0, len(result.Rows))
+	for _, row := range result.Rows {
+		if row.Doc != nil {
+			docs = append(docs, row.Doc)
+		}
+	}
+	
 	return docs, nil
 }
 
