@@ -579,16 +579,21 @@ func (s *Handler) RecoverLicenseHandler(res http.ResponseWriter, req *http.Reque
 
 // GetLicenseInfoHandler 获取 License 信息
 // GET /api/license/info?key=xxx
-func (h *Handler) GetLicenseInfoHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Handler) GetLicenseInfoHandler(w http.ResponseWriter, r *http.Request) {
 	licenseKey := r.URL.Query().Get("key")
 	if licenseKey == "" {
-		h.jsonError(w, "License key is required", http.StatusBadRequest)
+		s.jsonError(w, "License key is required", http.StatusBadRequest)
 		return
 	}
 
-	license, err := h.contentApp.GetLicenseByKey(licenseKey)
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
-		h.jsonError(w, "License not found", http.StatusNotFound)
+		s.jsonError(w, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(w, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -608,7 +613,7 @@ func (h *Handler) GetLicenseInfoHandler(w http.ResponseWriter, r *http.Request) 
 		"features":        license.GetFeatures(),
 	}
 
-	h.jsonResponse(w, response)
+	s.jsonResponse(w, response)
 }
 
 // GetDevicesHandler 获取 License 的设备列表
@@ -631,6 +636,11 @@ func (s *Handler) GetDevicesHandler(res http.ResponseWriter, req *http.Request) 
 	if err != nil {
 		s.log.Errorf("License not found: %s", licenseKey)
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -682,6 +692,11 @@ func (s *Handler) GetIPsHandler(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		s.log.Errorf("License not found: %s", licenseKey)
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -736,6 +751,11 @@ func (s *Handler) GetSyncInfoHandler(res http.ResponseWriter, req *http.Request)
 		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	// 检查是否支持 Sync 功能
 	if !license.GetFeatures().SyncEnabled {
@@ -784,6 +804,11 @@ func (s *Handler) GetPublishInfoHandler(res http.ResponseWriter, req *http.Reque
 		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	// 检查是否支持 Publish 功能
 	if !license.GetFeatures().PublishEnabled {
@@ -824,6 +849,11 @@ func (s *Handler) GetDisksHandler(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		s.log.Errorf("License not found: %s", licenseKey)
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -890,6 +920,11 @@ func (s *Handler) GetUsageHandler(res http.ResponseWriter, req *http.Request) {
 	if err != nil {
 		s.log.Errorf("License not found: %s", licenseKey)
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -1029,6 +1064,11 @@ func (s *Handler) ResetUsageHandler(res http.ResponseWriter, req *http.Request) 
 		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	var syncReset, publishReset bool
 	var syncErr, publishErr error
@@ -1058,6 +1098,8 @@ func (s *Handler) ResetUsageHandler(res http.ResponseWriter, req *http.Request) 
 				s.jsonError(res, "Failed to set database permission for sync account: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
+
+			syncReset = true
 		}
 	} else {
 		s.log.Warnf("No sync account found for license %s", license.LicenseKey)
@@ -1306,7 +1348,7 @@ func (s *Handler) BlockIPHandler(res http.ResponseWriter, req *http.Request) {
 
 // ========== Helper Methods ==========
 
-func (h *Handler) getClientIP(r *http.Request) string {
+func (s *Handler) getClientIP(r *http.Request) string {
 	// 优先检查 X-Forwarded-For
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// 取第一个 IP (可能有多个代理)
@@ -1327,7 +1369,7 @@ func (h *Handler) getClientIP(r *http.Request) string {
 	return addr
 }
 
-func (h *Handler) detectPlanFromKey(key string) contentVO.LicensePlan {
+func (s *Handler) detectPlanFromKey(key string) contentVO.LicensePlan {
 	// 根据 License Key 前缀判断套餐类型
 	// 例如: MDF-FREE-xxxx, MDF-STARTER-xxxx, MDF-CREATOR-xxxx, MDF-PRO-xxxx, MDF-ENT-xxxx
 	upperKey := strings.ToUpper(key)
@@ -1348,26 +1390,26 @@ func (h *Handler) detectPlanFromKey(key string) contentVO.LicensePlan {
 	}
 }
 
-func (h *Handler) jsonResponse(w http.ResponseWriter, data interface{}) {
+func (s *Handler) jsonResponse(w http.ResponseWriter, data interface{}) {
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
-		h.log.Errorf("Error marshalling JSON: %v", err)
+		s.log.Errorf("Error marshalling JSON: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	j, err := h.res.FmtJSON(jsonBytes)
+	j, err := s.res.FmtJSON(jsonBytes)
 	if err != nil {
-		h.log.Errorf("Error formatting JSON: %v", err)
+		s.log.Errorf("Error formatting JSON: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
-	h.res.Json(w, j)
+	s.res.Json(w, j)
 }
 
-func (h *Handler) jsonError(w http.ResponseWriter, message string, status int) {
+func (s *Handler) jsonError(w http.ResponseWriter, message string, status int) {
 	errorData := map[string]interface{}{
 		"success": false,
 		"error":   message,
@@ -1375,18 +1417,18 @@ func (h *Handler) jsonError(w http.ResponseWriter, message string, status int) {
 
 	jsonBytes, err := json.Marshal(errorData)
 	if err != nil {
-		h.log.Errorf("Error marshalling error JSON: %v", err)
+		s.log.Errorf("Error marshalling error JSON: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	j, err := h.res.FmtJSON(jsonBytes)
+	j, err := s.res.FmtJSON(jsonBytes)
 	if err != nil {
-		h.log.Errorf("Error formatting error JSON: %v", err)
+		s.log.Errorf("Error formatting error JSON: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(status)
-	h.res.Json(w, j)
+	s.res.Json(w, j)
 }

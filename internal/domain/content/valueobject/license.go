@@ -253,6 +253,10 @@ func (l *License) ToUserDir() string {
 	return hash.MD5(l.ToEmail())[:16]
 }
 
+func (l *License) ToUserShortDir() string {
+	return hash.MD5(l.ToEmail())[:10]
+}
+
 // IsExpired 检查许可证是否过期
 func (l *License) IsExpired() bool {
 	return time.Now().UnixMilli() > l.ExpiryDate

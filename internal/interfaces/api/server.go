@@ -138,7 +138,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 	s.registerHandler()
 
 	//go application.PreviewSiteRecycle(contentApp, s.adminApp.Token())
-	go application.LicenseResourceRecycle(contentApp, s.Log)
+	go application.LicenseResourceRecycle(contentApp, s.adminApp, s.Log)
 
 	// 在生产环境启动备份调度器
 	if s.Env == PROD {
@@ -146,7 +146,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 			s.Log.Println("Starting backup scheduler for production environment...")
 			couchdbCfg := s.GetCouchDBConfig()
 			caddyCfg := s.GetCaddyConfig()
-			
+
 			if couchdbCfg != nil && caddyCfg != nil {
 				scheduler := application.NewBackupScheduler(couchdbCfg, caddyCfg, contentApp, s.Log)
 				scheduler.Start()

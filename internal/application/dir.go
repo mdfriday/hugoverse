@@ -125,6 +125,10 @@ func EnsureDirExists(dir string) error {
 	return nil
 }
 
+func DeleteDir(dir string) error {
+	return os.RemoveAll(dir)
+}
+
 type dir struct{}
 
 func (d *dir) DataDir() string {

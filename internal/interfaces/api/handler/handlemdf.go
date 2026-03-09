@@ -42,6 +42,16 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 		s.jsonError(res, "License key is required", http.StatusBadRequest)
 		return
 	}
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
+	if err != nil {
+		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	pt, ok := s.contentApp.GetContentCreator(t)
 	if !ok {
@@ -83,13 +93,6 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 			WithError(fmt.Errorf("error getting absolute asset path: %v", err)).
 			Logf("t: %s, id: %s", t, id)
 		res.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	// 验证 License 是否存在
-	license, err := s.contentApp.GetLicenseByKey(licenseKey)
-	if err != nil {
-		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
 

@@ -35,6 +35,11 @@ func (s *Handler) GetSubDomainHandler(res http.ResponseWriter, req *http.Request
 		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	// 检查 PublishEnabled 权限
 	if !license.GetFeatures().PublishEnabled {
@@ -93,9 +98,14 @@ func (s *Handler) CheckSubDomainHandler(res http.ResponseWriter, req *http.Reque
 	}
 
 	// 验证 License 是否存在
-	_, err = s.contentApp.GetLicenseByKey(licenseKey)
+	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -176,6 +186,11 @@ func (s *Handler) UpdateSubDomainHandler(res http.ResponseWriter, req *http.Requ
 	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -325,6 +340,11 @@ func (s *Handler) CheckDomainHandler(res http.ResponseWriter, req *http.Request)
 		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	// 检查 CustomDomain 权限
 	if !license.GetFeatures().CustomDomain {
@@ -388,6 +408,11 @@ func (s *Handler) AddDomainHandler(res http.ResponseWriter, req *http.Request) {
 	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -495,6 +520,11 @@ func (s *Handler) RemoveDomainHandler(res http.ResponseWriter, req *http.Request
 		s.jsonError(res, "License not found", http.StatusNotFound)
 		return
 	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
+		return
+	}
 
 	// 获取 PublishDomain 记录
 	pd, err := s.contentApp.GetPublishDomainByKey(license.LicenseKey)
@@ -549,6 +579,11 @@ func (s *Handler) GetDomainsHandler(res http.ResponseWriter, req *http.Request) 
 	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
@@ -725,6 +760,11 @@ func (s *Handler) DomainSSLStatusHandler(res http.ResponseWriter, req *http.Requ
 	license, err := s.contentApp.GetLicenseByKey(licenseKey)
 	if err != nil {
 		s.jsonError(res, "License not found", http.StatusNotFound)
+		return
+	}
+	if !license.IsValid() {
+		s.log.Errorf("License is not valid: %s", licenseKey)
+		s.jsonError(res, "License is not valid", http.StatusForbidden)
 		return
 	}
 
