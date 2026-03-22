@@ -11,7 +11,7 @@ func New(email string) (string, time.Time, error) {
 	// create new token
 	month := time.Now().Add(time.Hour * 24 * 30)
 	claims := map[string]interface{}{
-		"exp":   month,
+		"exp":   month.Unix(),
 		userKey: email,
 	}
 	token, err := jwt.New(claims)
