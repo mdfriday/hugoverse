@@ -103,7 +103,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 			s.jsonError(res, "Share feature not enabled for this license plan", http.StatusForbidden)
 			return
 		}
-		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), preview.Name)
+		previewDir = filepath.Join(application.PreviewDir(), s.db.UserDir(), preview.Path)
 	case "sub":
 		if !license.GetFeatures().CustomSubDomain {
 			s.jsonError(res, "Custom subdomain feature not enabled for this license plan", http.StatusForbidden)
@@ -147,7 +147,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 	link := ""
 	switch preview.Type {
 	case "share":
-		link = fmt.Sprintf("%s/%s/%s/%s", s.adminApp.CaddyURL(), application.PreviewFolder(), s.db.UserDir(), preview.Name)
+		link = fmt.Sprintf("%s/%s/%s/%s", s.adminApp.CaddyURL(), application.PreviewFolder(), s.db.UserDir(), preview.Path)
 	case "sub":
 		link = preview.Path
 	case "enterprise":
