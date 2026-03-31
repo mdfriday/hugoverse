@@ -55,8 +55,8 @@ func (s *Server) registerLicenseHandler() {
 	s.mux.HandleFunc("/api/license/trial", s.wrapCounterHandler(s.handler.GetTrialHandler))
 
 	// Friday 免费预览接口（不需要 token）
-	s.mux.HandleFunc("/api/mdf/preview/friday", s.wrapCounterHandler(s.handler.MDFPreviewHandler))
-	s.mux.HandleFunc("/api/mdf/preview/friday/deploy", s.wrapCounterHandler(s.handler.DeployMDFridayPreviewFridayHandler))
+	s.mux.HandleFunc("/api/mdf/preview/friday", s.wrapPreviewHandler(s.handler.MDFPreviewHandler))
+	s.mux.HandleFunc("/api/mdf/preview/friday/deploy", s.wrapPreviewHandler(s.handler.DeployMDFridayPreviewFridayHandler))
 }
 
 func (s *Server) registerContentHandler() {
