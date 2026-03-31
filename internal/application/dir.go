@@ -12,6 +12,7 @@ var cachedHugoverseDir string
 
 const folderEnterprise = "enterprise"
 const folderPreview = "s"
+const folderFriday = "f"
 const folderPublish = "publish"
 const folderSubDomain = "mdf_sub_domain"
 const folderCustomDomain = "mdf_custom_domain"
@@ -35,6 +36,11 @@ func init() {
 	}
 
 	err = EnsureDirExists(ImageStorageDir())
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = EnsureDirExists(FridayDir())
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -62,6 +68,14 @@ func PreviewDir() string {
 
 func PreviewFolder() string {
 	return folderPreview
+}
+
+func FridayDir() string {
+	return filepath.Join(DataDir(), folderFriday)
+}
+
+func FridayFolder() string {
+	return folderFriday
 }
 
 func SubDomainFolder() string {

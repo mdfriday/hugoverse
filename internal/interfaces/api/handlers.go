@@ -53,6 +53,10 @@ func (s *Server) registerLicenseHandler() {
 
 	// 申请试用 License
 	s.mux.HandleFunc("/api/license/trial", s.wrapCounterHandler(s.handler.GetTrialHandler))
+
+	// Friday 免费预览接口（不需要 token）
+	s.mux.HandleFunc("/api/mdf/preview/friday", s.wrapCounterHandler(s.handler.MDFPreviewHandler))
+	s.mux.HandleFunc("/api/mdf/preview/friday/deploy", s.wrapCounterHandler(s.handler.DeployMDFridayPreviewFridayHandler))
 }
 
 func (s *Server) registerContentHandler() {
@@ -192,5 +196,10 @@ func (s *Server) registerAdminHandler() {
 	s.mux.PathPrefix(previewPath).Handler(s.record.Collect(s.cors.Handle(s.cache.Control(
 		http.StripPrefix(previewPath,
 			http.FileServer(restrict(http.Dir(application.PreviewDir()))))))))
+
+	fridayPath := fmt.Sprintf("/%s/", application.FridayFolder())
+	s.mux.PathPrefix(fridayPath).Handler(s.record.Collect(s.cors.Handle(s.cache.Control(
+		http.StripPrefix(fridayPath,
+			http.FileServer(restrict(http.Dir(application.FridayDir()))))))))
 
 }

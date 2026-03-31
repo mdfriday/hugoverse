@@ -139,6 +139,7 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 
 	//go application.PreviewSiteRecycle(contentApp, s.adminApp.Token())
 	go application.LicenseResourceRecycle(contentApp, s.adminApp, s.Log)
+	go application.FridayResourceRecycle(s.Log)
 
 	// 在生产环境启动备份调度器
 	if s.Env == PROD {
