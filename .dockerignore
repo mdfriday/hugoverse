@@ -1,0 +1,57 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Docker
+docker-compose*.yml
+.dockerignore
+# 排除 Dockerfiles，但保留 entrypoint 脚本
+docker/*/Dockerfile
+docker/*/Dockerfile.*
+# 保留 docker-entrypoint.sh（构建时需要）
+
+# Environment
+.env
+.env.*
+*.env
+
+# Documentation
+*.md
+docs/
+examples/
+ADRs/
+prompts/
+requirements/
+
+# Deploy
+deploy/
+
+# Testing
+*_test.go
+testdata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+temp/
+*.tmp
+
+# Build artifacts
+bin/
+dist/
+build/

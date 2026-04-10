@@ -37,3 +37,21 @@ release-notes.md
 
 # SCP environment variables
 scripts/scp_env.sh
+
+# Docker
+.env
+.env.local
+.env.*.local
+docker-compose.override.yml
+
+# Data directories
+data/
+backups/
+
+# Build artifacts
+bin/
+dist/
+
+# Logs
+*.log
+logs/

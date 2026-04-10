@@ -1,0 +1,17 @@
+# 不使用 DNSPod 的简化 Dockerfile
+# 如果不需要泛域名 SSL，可以使用这个
+
+FROM caddy:2.9-alpine
+
+# 不需要自定义构建，直接使用官方镜像
+# 只支持 HTTP-01 验证（单域名）
+
+LABEL maintainer="MDFriday <support@mdfriday.com>"
+LABEL description="Caddy for Hugoverse (without DNSPod)"
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD caddy validate --config /etc/caddy/Caddyfile || exit 1
+
+EXPOSE 80 443 2019
+
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

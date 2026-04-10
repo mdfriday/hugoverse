@@ -105,6 +105,11 @@ func LogDir() string {
 }
 
 func hugoverseDir() string {
+	// 优先使用环境变量（Docker 部署）
+	if envDir := os.Getenv("HUGOVERSE_DATA_DIR"); envDir != "" {
+		return envDir
+	}
+
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Println("Error getting home directory:", err, "using current directory as working directory")

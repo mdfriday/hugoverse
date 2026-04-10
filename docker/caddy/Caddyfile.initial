@@ -1,0 +1,22 @@
+{
+	# Admin API 监听所有接口（允许容器内访问）
+	admin 0.0.0.0:2019
+	
+	# 关闭自动 HTTPS（由 Hugoverse 通过 API 动态管理）
+	auto_https off
+	
+	# 持久化配置关闭（使用动态 API 配置）
+	persist_config off
+	
+	# 日志
+	log {
+		output stdout
+		format console
+		level INFO
+	}
+}
+
+# 默认路由：等待 Hugoverse 初始化
+:80 {
+	respond "🚀 Hugoverse is initializing... Please wait." 503
+}

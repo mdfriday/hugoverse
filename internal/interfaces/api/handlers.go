@@ -59,6 +59,10 @@ func (s *Server) registerLicenseHandler() {
 	s.mux.HandleFunc("/api/mdf/preview/friday/deploy", s.wrapPreviewHandler(s.handler.DeployMDFridayPreviewFridayHandler))
 }
 
+func (s *Server) registerHealthHandler() {
+	s.mux.HandleFunc("/api/health", s.handler.HealthHandler).Methods("GET")
+}
+
 func (s *Server) registerContentHandler() {
 	s.mux.HandleFunc("/api/contents", s.wrapContentHandler(s.handler.ApiContentsHandler))
 	s.mux.HandleFunc("/api/content", s.wrapContentHandler(
@@ -159,7 +163,7 @@ func (s *Server) registerUserHandler() {
 }
 
 func (s *Server) wrapAdminHandler(handler http.HandlerFunc) http.HandlerFunc {
-	return s.db.Open(s.auth.CheckWithRedirect(handler))
+	return s.auth.CheckWithRedirect(s.db.Open(handler))
 }
 
 func (s *Server) registerAdminHandler() {

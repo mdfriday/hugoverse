@@ -1,0 +1,176 @@
+version: '3.8'
+
+services:
+  # ========== CouchDB 服务 ==========
+  couchdb:
+    image: couchdb:3.3
+    container_name: hugoverse-couchdb
+    restart: unless-stopped
+    environment:
+      - COUCHDB_USER=${COUCHDB_USER:-admin}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:-test123456}
+    volumes:
+      - couchdb_data:/opt/couchdb/data
+      - couchdb_config:/opt/couchdb/etc/local.d
+    networks:
+      - hugoverse-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5984/_up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========== Caddy 服务（自定义构建，带 DNSPod）==========
+  caddy:
+    build:
+      context: ./docker/caddy
+      dockerfile: Dockerfile
+    # 或使用预构建镜像
+    # image: mdfriday/hugoverse-caddy:${VERSION:-latest}
+    container_name: hugoverse-caddy
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+      - "2019:2019"  # Admin API
+    volumes:
+      - caddy_data:/data
+      - caddy_config:/config
+      - ./docker/caddy/Caddyfile.initial:/etc/caddy/Caddyfile:ro
+      # 与 hugoverse 共享发布目录
+      - sites:/srv
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+      # DNSPod 凭据（Caddy 通过环境变量使用）
+      - TENCENTCLOUD_SECRET_ID=${DNSPOD_ID}
+      - TENCENTCLOUD_SECRET_KEY=${DNSPOD_SECRET}
+    networks:
+      - hugoverse-network
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ========== Hugoverse 主服务 ==========
+  hugoverse:
+    build:
+      context: .
+      dockerfile: docker/hugoverse/Dockerfile
+    # 或使用预构建镜像
+    # image: mdfriday/hugoverse:${VERSION:-latest}
+    container_name: hugoverse-app
+    restart: unless-stopped
+    depends_on:
+      couchdb:
+        condition: service_healthy
+      caddy:
+        condition: service_started
+    environment:
+      # ---- Docker 环境标识 ----
+      - DOCKER_CONTAINER=true
+      - HUGOVERSE_DATA_DIR=/data
+      - HTTP_PORT=1314
+      - ENV=prod
+      
+      # ---- 自动初始化 ----
+      - AUTO_INIT=${AUTO_INIT:-false}
+      - VERSION=${VERSION:-latest}
+      
+      # ---- 域名配置 ----
+      - DOMAIN=${DOMAIN:-localhost}
+      - SERVER_IP=${SERVER_IP}
+      - SITE_NAME=${SITE_NAME:-Hugoverse}
+      
+      # ---- 管理员配置 ----
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      
+      # ---- CouchDB 配置（容器网络内地址）----
+      - COUCHDB_URL=http://couchdb:5984
+      - COUCHDB_USER=${COUCHDB_USER:-admin}
+      - COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
+      - COUCHDB_DB_PREFIX=${COUCHDB_DB_PREFIX:-userdb-}
+      
+      # ---- Caddy 配置（容器网络内地址）----
+      - CADDY_ADMIN_API=http://caddy:2019
+      - CADDY_HOST=caddy
+      - CADDY_PORT=2019
+      
+      # ---- DNSPod 配置 ----
+      - DNSPOD_ENABLED=${DNSPOD_ENABLED:-false}
+      - DNSPOD_ID=${DNSPOD_ID}
+      - DNSPOD_SECRET=${DNSPOD_SECRET}
+      
+      # ---- Master License 配置 ----
+      - MASTER_LICENSE=${MASTER_LICENSE}
+      
+      # ---- 企业 License 自动生成 ----
+      - AUTO_GENERATE_ENTERPRISE_LICENSE=${AUTO_GENERATE_ENTERPRISE_LICENSE:-true}
+      - ENTERPRISE_LICENSE_PLAN=${ENTERPRISE_LICENSE_PLAN:-enterprise}
+      - ENTERPRISE_LICENSE_COUNT=${ENTERPRISE_LICENSE_COUNT:-1}
+      - ENTERPRISE_LICENSE_KEY=${ENTERPRISE_LICENSE_KEY:-}
+      
+      # ---- 企业站点自动配置 ----
+      - AUTO_CONFIGURE_ENTERPRISE_SITE=${AUTO_CONFIGURE_ENTERPRISE_SITE:-true}
+      - ENTERPRISE_SITE_DOMAIN=${ENTERPRISE_SITE_DOMAIN:-${DOMAIN}}
+      - ENTERPRISE_SITE_PATH=${ENTERPRISE_SITE_PATH:-/data/enterprise}
+      
+      # ---- 备份配置 ----
+      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
+      
+    volumes:
+      # Hugoverse 数据目录（对应 ~/.local/share/hugoverse）
+      - hugoverse_data:/data
+      # 与 Caddy 共享发布目录
+      - sites:/data/publish
+      # 备份目录
+      - backups:/backups
+    networks:
+      - hugoverse-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:1314/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# ========== 网络配置 ==========
+networks:
+  hugoverse-network:
+    driver: bridge
+
+# ========== 数据卷配置 ==========
+volumes:
+  hugoverse_data:
+    driver: local
+  couchdb_data:
+    driver: local
+  couchdb_config:
+    driver: local
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+  sites:
+    driver: local
+  backups:
+    driver: local

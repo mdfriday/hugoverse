@@ -870,6 +870,87 @@ func (c *Client) Ping() error {
 	return nil
 }
 
+// ConfigureLocalhost 配置 localhost 的基础路由
+// 替换初始的 503 响应为反向代理到 Hugoverse
+func (c *Client) ConfigureLocalhost() error {
+	// 构建完整的 Caddy 配置
+	config := map[string]interface{}{
+		"apps": map[string]interface{}{
+			"http": map[string]interface{}{
+				"servers": map[string]interface{}{
+					"main": map[string]interface{}{
+						"listen": []string{":80"},
+						"routes": []interface{}{
+							// CouchDB 路由: cdb.localhost
+							map[string]interface{}{
+								"match": []map[string]interface{}{
+									{"host": []string{"cdb.localhost"}},
+								},
+								"handle": []map[string]interface{}{
+									{
+										"handler":   "reverse_proxy",
+										"upstreams": []map[string]interface{}{{"dial": c.config.CouchDBBackend}},
+										"headers": map[string]interface{}{
+											"request": map[string]interface{}{
+												"set": map[string][]string{
+													"X-Forwarded-Proto": {"http"},
+												},
+											},
+										},
+									},
+								},
+							},
+							// 默认路由: localhost -> Hugoverse
+							map[string]interface{}{
+								"handle": []map[string]interface{}{
+									{
+										"handler":   "reverse_proxy",
+										"upstreams": []map[string]interface{}{{"dial": c.config.DefaultBackend}},
+										"headers": map[string]interface{}{
+											"request": map[string]interface{}{
+												"set": map[string][]string{
+													"X-Forwarded-Proto": {"http"},
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// 通过 Admin API 应用配置
+	jsonData, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to apply config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to configure: %d, %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
 // Stop 停止 Caddy 服务器
 func (c *Client) Stop() error {
 	// 先尝试从 PID 文件读取

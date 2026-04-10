@@ -2,13 +2,13 @@ package cli
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
 	"strings"
 
 	"github.com/mdfriday/hugoverse/internal/infrastructure/licensekit"
@@ -129,7 +129,7 @@ func (cmd *licenseCmd) runRecover(args []string) error {
 
 	// 第一步：登录获取 token
 	fmt.Println("📝 Step 1: Logging in...")
-	token, err := cmd.login(*apiBase, *email, *password)
+	token, err := licensekit.LoginAndGetToken(*apiBase, *email, *password)
 	if err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
@@ -147,7 +147,7 @@ func (cmd *licenseCmd) runRecover(args []string) error {
 
 	// 步骤 2: 创建 license
 	fmt.Printf("        → Creating license\n")
-	licenseErr := cmd.createLicense(*apiBase, token, licenseKey, *plan, planConfig)
+	licenseErr := licensekit.CreateLicenseViaAPI(*apiBase, token, licenseKey, *plan, planConfig)
 	if licenseErr != nil {
 		fmt.Printf("        ❌ License creation failed: %v\n", licenseErr)
 	}
@@ -182,6 +182,7 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	apiBase := fs.String("api", "http://127.0.0.1:1314", "API base URL")
 	plan := fs.String("plan", "", "License plan (free|starter|creator|pro|lifetime)")
 	count := fs.Int("count", 1, "Number of licenses to generate")
+	masterLicenseFlag := fs.String("master", "", "Master License key (optional, defaults to env MASTER_LICENSE)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -220,9 +221,60 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	fmt.Printf("   Max IPs: %d\n", planConfig.MaxIPs)
 	fmt.Println()
 
+	// 【新增】验证 Master License 配额
+	masterLicense := *masterLicenseFlag
+	if masterLicense == "" {
+		masterLicense = os.Getenv("MASTER_LICENSE")
+	}
+
+	fmt.Println("🔑 Verifying Master License...")
+	masterInfo, err := licensekit.VerifyMasterLicenseOnline(masterLicense)
+	if err != nil {
+		fmt.Printf("⚠️  Master License verification failed: %v\n", err)
+		fmt.Println("   Falling back to FREE mode (1 license)\n")
+	}
+
+	// 显示配额信息
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Println("📊 License Quota Information")
+	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Printf("   Type: %s\n", masterInfo.Type)
+	fmt.Printf("   Max Sub-Licenses: %d\n", masterInfo.MaxSubLicenses)
+	fmt.Printf("   Used: %d\n", masterInfo.UsedLicenses)
+	fmt.Printf("   Remaining: %d\n", masterInfo.GetRemainingQuota())
+	if !masterInfo.ExpiryDate.IsZero() {
+		fmt.Printf("   Expires: %s\n", masterInfo.ExpiryDate.Format("2006-01-02"))
+	}
+	fmt.Println()
+
+	// 检查配额
+	if !masterInfo.CanGenerateMore(*count) {
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Println("❌ License Quota Exceeded")
+		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		fmt.Printf("   Current: %d / %d licenses\n", masterInfo.UsedLicenses, masterInfo.MaxSubLicenses)
+		fmt.Printf("   Requested: %d\n", *count)
+		fmt.Printf("   Available: %d\n", masterInfo.GetRemainingQuota())
+		fmt.Println()
+		fmt.Println("💡 To generate more licenses:")
+		fmt.Println("   1. Visit: https://mdfriday.com/pricing")
+		fmt.Println("   2. Purchase a Master License")
+		fmt.Println("   3. Set environment: export MASTER_LICENSE=YOUR_KEY")
+		fmt.Println("   4. Or use flag: -master YOUR_KEY")
+		fmt.Println()
+		return fmt.Errorf("license quota exceeded")
+	}
+
+	if masterInfo.Type == "free" {
+		fmt.Println("💡 Need more licenses?")
+		fmt.Println("   Visit: https://mdfriday.com/pricing")
+		fmt.Println("   Purchase a Master License to unlock more quotas")
+		fmt.Println()
+	}
+
 	// 第一步：登录获取 token
 	fmt.Println("📝 Step 1: Logging in...")
-	token, err := cmd.login(*apiBase, *email, *password)
+	token, err := licensekit.LoginAndGetToken(*apiBase, *email, *password)
 	if err != nil {
 		return fmt.Errorf("login failed: %w", err)
 	}
@@ -266,7 +318,7 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 
 		// 步骤 2: 创建 license
 		fmt.Printf("        → Creating license\n")
-		licenseErr := cmd.createLicense(*apiBase, token, licenseKey, *plan, planConfig)
+		licenseErr := licensekit.CreateLicenseViaAPI(*apiBase, token, licenseKey, *plan, planConfig)
 
 		if licenseErr != nil {
 			fmt.Printf("        ❌ License creation failed: %v\n", licenseErr)
@@ -282,6 +334,18 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 			})
 		}
 		fmt.Println() // 空行分隔每个 license
+	}
+
+	// 【新增】上报使用情况
+	if successCount > 0 && masterLicense != "" && masterLicense != "FREE" {
+		fmt.Println("📊 Reporting usage to license server...")
+		if err := licensekit.ReportUsage(masterLicense, successCount); err != nil {
+			fmt.Printf("⚠️  Failed to report usage: %v\n", err)
+			fmt.Println("   (This won't affect your licenses)")
+		} else {
+			fmt.Println("✅ Usage reported")
+		}
+		fmt.Println()
 	}
 
 	// 第三步：显示结果
@@ -313,127 +377,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	}
 
 	fmt.Println("🎉 All licenses and users created successfully!")
-	return nil
-}
-
-// login 登录获取 token
-func (cmd *licenseCmd) login(apiBase, email, password string) (string, error) {
-	loginURL := fmt.Sprintf("%s/api/login", apiBase)
-
-	// 构造表单数据
-	data := fmt.Sprintf("email=%s&password=%s", email, password)
-
-	req, err := http.NewRequest("POST", loginURL, strings.NewReader(data))
-	if err != nil {
-		return "", err
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	// 接受 200 OK 或 201 Created
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("login failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	// 解析响应
-	var result struct {
-		Success bool     `json:"success"`
-		Data    []string `json:"data"`
-		Error   string   `json:"error"`
-	}
-
-	if err := json.Unmarshal(body, &result); err != nil {
-		return "", fmt.Errorf("failed to parse login response: %w", err)
-	}
-
-	// 如果响应中有 data 字段且不为空，就认为登录成功
-	if len(result.Data) > 0 {
-		return result.Data[0], nil
-	}
-
-	// 检查 success 字段（兼容性）
-	if result.Success && len(result.Data) == 0 {
-		return "", fmt.Errorf("login successful but no token returned")
-	}
-
-	return "", fmt.Errorf("login failed: %s", result.Error)
-}
-
-// createLicense 创建 license
-func (cmd *licenseCmd) createLicense(apiBase, token, licenseKey, plan string, planConf licensekit.PlanConfig) error {
-	createURL := fmt.Sprintf("%s/api/content?type=License", apiBase)
-
-	// 构造 multipart 表单
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// 添加字段
-	fields := map[string]string{
-		"id":          "-1",
-		"license_key": licenseKey,
-		"plan":        plan,
-		"max_devices": fmt.Sprintf("%d", planConf.MaxDevices),
-		"max_ips":     fmt.Sprintf("%d", planConf.MaxIPs),
-
-		"sync_enabled": fmt.Sprintf("%t", planConf.SyncEnabled),
-		"sync_quota":   fmt.Sprintf("%d", planConf.SyncQuotaMB),
-
-		"publish_enabled":   fmt.Sprintf("%t", planConf.PublishEnabled),
-		"max_sites":         fmt.Sprintf("%d", planConf.MaxSites),
-		"max_storage":       fmt.Sprintf("%d", planConf.MaxStorageMB),
-		"custom_domain":     fmt.Sprintf("%t", planConf.CustomDomain),
-		"custom_sub_domain": fmt.Sprintf("%t", planConf.CustomSubDomain),
-
-		"validity_days": fmt.Sprintf("%d", planConf.ValidityDays),
-	}
-
-	for key, val := range fields {
-		if err := writer.WriteField(key, val); err != nil {
-			return err
-		}
-	}
-
-	if err := writer.Close(); err != nil {
-		return err
-	}
-
-	// 创建请求
-	req, err := http.NewRequest("POST", createURL, &buf)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
 	return nil
 }
 
