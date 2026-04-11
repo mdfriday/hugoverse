@@ -25,6 +25,8 @@ type Config struct {
 	LogFile        string `json:"log_file"`        // 日志文件路径
 	DNSPodToken    string `json:"dnspod_token"`    // 腾讯云 DNS API Token (格式: SecretId,SecretKey，用于 DNS-01 challenge)
 	ServerIP       string `json:"server_ip"`       // 服务器公网 IP (用于域名检查)
+	// LocalDevUseAppSubdomain 为 true 时：反向代理只匹配 app.<CoreDomain>，apex 留给 AddStaticSite（与生产 app. / 根域 分工一致）
+	LocalDevUseAppSubdomain bool `json:"-"`
 }
 
 // Client Caddy HTTP 客户端
@@ -147,6 +149,62 @@ type CertificateInfo struct {
 	Error      string    `json:"error,omitempty"`
 }
 
+// buildProductionMainServerConfig 生产环境 main 服务器：与 hugov caddy start（非 localhost）一致。
+// app.<CoreDomain> → DefaultBackend；cdb.<CoreDomain> → CouchDBBackend；
+// 若配置了 DNSPodToken，末尾增加 *.<CoreDomain> 占位路由以配合通配符证书。
+func (c *Client) buildProductionMainServerConfig() *ServerConfig {
+	routes := []Route{
+		{
+			ID: fmt.Sprintf("core-app.%s", c.config.CoreDomain),
+			Match: []MatchHost{
+				{Host: []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}},
+			},
+			Handle: []HandleConfig{
+				{
+					Handler: "reverse_proxy",
+					Upstreams: []Upstream{
+						{Dial: c.config.DefaultBackend},
+					},
+				},
+			},
+		},
+		{
+			ID: fmt.Sprintf("core-cdb.%s", c.config.CoreDomain),
+			Match: []MatchHost{
+				{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+			},
+			Handle: []HandleConfig{
+				{
+					Handler: "reverse_proxy",
+					Upstreams: []Upstream{
+						{Dial: c.config.CouchDBBackend},
+					},
+				},
+			},
+		},
+	}
+
+	if c.config.DNSPodToken != "" {
+		routes = append(routes, Route{
+			ID: fmt.Sprintf("wildcard-%s", c.config.CoreDomain),
+			Match: []MatchHost{
+				{Host: []string{fmt.Sprintf("*.%s", c.config.CoreDomain)}},
+			},
+			Handle: []HandleConfig{
+				{
+					Handler:    "static_response",
+					StatusCode: 404,
+				},
+			},
+		})
+	}
+
+	return &ServerConfig{
+		Listen: []string{":80", ":443"},
+		Routes: routes,
+	}
+}
+
 // StartServer 启动 Caddy 服务器
 // 使用默认配置启动，包含核心域名和 CouchDB 的反向代理
 func (c *Client) StartServer() error {
@@ -194,40 +252,8 @@ func (c *Client) StartServer() error {
 			},
 		}
 	} else {
-		// 生产环境：监听 80 和 443，启用自动 HTTPS
-		serverConfig = &ServerConfig{
-			Listen: []string{":80", ":443"},
-			Routes: []Route{
-				{
-					ID: fmt.Sprintf("core-%s", c.config.CoreDomain),
-					Match: []MatchHost{
-						{Host: []string{c.config.CoreDomain}},
-					},
-					Handle: []HandleConfig{
-						{
-							Handler: "reverse_proxy",
-							Upstreams: []Upstream{
-								{Dial: c.config.DefaultBackend},
-							},
-						},
-					},
-				},
-				{
-					ID: fmt.Sprintf("couchdb-%s", c.config.CoreDomain),
-					Match: []MatchHost{
-						{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
-					},
-					Handle: []HandleConfig{
-						{
-							Handler: "reverse_proxy",
-							Upstreams: []Upstream{
-								{Dial: c.config.CouchDBBackend},
-							},
-						},
-					},
-				},
-			},
-		}
+		// 生产环境与 hugov caddy start 一致：app.<domain> → 核心服务，cdb.<domain> → CouchDB
+		serverConfig = c.buildProductionMainServerConfig()
 	}
 
 	// 生成配置
@@ -242,6 +268,12 @@ func (c *Client) StartServer() error {
 				},
 			},
 		},
+	}
+
+	if !isDev {
+		if tlsCfg := c.GenerateTLSConfig(); tlsCfg != nil {
+			config.Apps.TLS = tlsCfg
+		}
 	}
 
 	// 如果指定了配置文件路径，保存到文件
@@ -364,60 +396,7 @@ func (c *Client) StartServerBackground() error {
 				},
 			}
 		} else {
-			// 生产环境路由配置
-			routes := []Route{
-				{
-					ID: fmt.Sprintf("core-app.%s", c.config.CoreDomain),
-					Match: []MatchHost{
-						{Host: []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}},
-					},
-					Handle: []HandleConfig{
-						{
-							Handler: "reverse_proxy",
-							Upstreams: []Upstream{
-								{Dial: c.config.DefaultBackend},
-							},
-						},
-					},
-				},
-				{
-					ID: fmt.Sprintf("core-cdb.%s", c.config.CoreDomain),
-					Match: []MatchHost{
-						{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
-					},
-					Handle: []HandleConfig{
-						{
-							Handler: "reverse_proxy",
-							Upstreams: []Upstream{
-								{Dial: c.config.CouchDBBackend},
-							},
-						},
-					},
-				},
-			}
-
-			// 如果配置了 DNSPodToken，添加通配符占位路由（触发通配符证书申请）
-			// 这个路由放在最后，作为 fallback，返回 404
-			// 所有 *.mdfriday.com 的子域名会复用这个通配符证书
-			if c.config.DNSPodToken != "" {
-				routes = append(routes, Route{
-					ID: fmt.Sprintf("wildcard-%s", c.config.CoreDomain),
-					Match: []MatchHost{
-						{Host: []string{fmt.Sprintf("*.%s", c.config.CoreDomain)}},
-					},
-					Handle: []HandleConfig{
-						{
-							Handler:    "static_response",
-							StatusCode: 404,
-						},
-					},
-				})
-			}
-
-			serverConfig = &ServerConfig{
-				Listen: []string{":80", ":443"},
-				Routes: routes,
-			}
+			serverConfig = c.buildProductionMainServerConfig()
 		}
 
 		// 生成配置
@@ -434,16 +413,10 @@ func (c *Client) StartServerBackground() error {
 			},
 		}
 
-		// 生产环境：添加平台域名的 Wildcard TLS 配置
-		// 这样所有 subdomain（如 user123.mdfriday.com）都会使用 Wildcard 证书
-		// 凭据直接在配置中传递（环境变量方式在某些 Caddy 版本不工作）
-		if !isDev && c.config.DNSPodToken != "" {
-			secretID, secretKey := c.parseDNSPodToken()
-			if secretID != "" && secretKey != "" {
-				tlsConfig := GeneratePlatformTLSConfig(c.config.CoreDomain, secretID, secretKey)
-				if tlsConfig != nil {
-					config.Apps.TLS = tlsConfig
-				}
+		// 生产环境：与 hugov caddy start 一致，DNSPod 时注入 Wildcard TLS
+		if !isDev {
+			if tlsCfg := c.GenerateTLSConfig(); tlsCfg != nil {
+				config.Apps.TLS = tlsCfg
 			}
 		}
 
@@ -870,11 +843,23 @@ func (c *Client) Ping() error {
 	return nil
 }
 
+// adminListenDocker 与 docker/caddy/Caddyfile.initial 一致：供其他容器访问 Admin API。
+// 仅 POST apps 时 Caddy 可能把 admin 收紧到 127.0.0.1，导致 hugoverse → caddy:2019 被拒绝。
+const adminListenDocker = "0.0.0.0:2019"
+
 // ConfigureLocalhost 配置 localhost 的基础路由
 // 替换初始的 503 响应为反向代理到 Hugoverse
 func (c *Client) ConfigureLocalhost() error {
+	proxyHosts := []string{"localhost", "127.0.0.1"}
+	if c.config.LocalDevUseAppSubdomain {
+		proxyHosts = []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}
+	}
+
 	// 构建完整的 Caddy 配置
 	config := map[string]interface{}{
+		"admin": map[string]interface{}{
+			"listen": adminListenDocker,
+		},
 		"apps": map[string]interface{}{
 			"http": map[string]interface{}{
 				"servers": map[string]interface{}{
@@ -900,8 +885,11 @@ func (c *Client) ConfigureLocalhost() error {
 									},
 								},
 							},
-							// 默认路由: localhost -> Hugoverse
+							// 核心服务：生产为 app.<domain>；本地若挂企业静态在 apex，则改为 app.localhost，避免与 file_server 同 Host 冲突
 							map[string]interface{}{
+								"match": []map[string]interface{}{
+									{"host": proxyHosts},
+								},
 								"handle": []map[string]interface{}{
 									{
 										"handler":   "reverse_proxy",
@@ -946,6 +934,67 @@ func (c *Client) ConfigureLocalhost() error {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to configure: %d, %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// ConfigureProductionPlatform 通过 Admin API 应用与 hugov caddy start 相同的生产路由与 TLS（非 localhost）。
+// 用于 Caddy 已由外部启动的场景（例如 Docker 中由 Caddyfile 拉起，再由 Hugoverse 注入 apps）。
+func (c *Client) ConfigureProductionPlatform() error {
+	isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
+	if isDev {
+		return fmt.Errorf("ConfigureProductionPlatform: use ConfigureLocalhost when CoreDomain is localhost")
+	}
+
+	mainServer := c.buildProductionMainServerConfig()
+	apps := &AppsConfig{
+		HTTP: &HTTPConfig{
+			Servers: map[string]*ServerConfig{
+				"main": mainServer,
+			},
+		},
+	}
+	if tlsCfg := c.GenerateTLSConfig(); tlsCfg != nil {
+		apps.TLS = tlsCfg
+	}
+
+	appsJSON, err := json.Marshal(apps)
+	if err != nil {
+		return fmt.Errorf("failed to marshal apps: %w", err)
+	}
+
+	var appsMap map[string]interface{}
+	if err := json.Unmarshal(appsJSON, &appsMap); err != nil {
+		return fmt.Errorf("failed to build apps map: %w", err)
+	}
+
+	payload := map[string]interface{}{
+		"admin": map[string]interface{}{"listen": adminListenDocker},
+		"apps":  appsMap,
+	}
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/config/", c.config.AdminAPI)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to apply config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("failed to configure production platform: %d, %s", resp.StatusCode, string(body))
 	}
 
 	return nil

@@ -123,11 +123,19 @@ if [ "$AUTO_INIT" = "true" ]; then
     
     echo ""
     echo "📍 After initialization, access:"
-    echo "   Admin Panel: http://${DOMAIN}/admin"
-    if [ "$DNSPOD_ENABLED" = "true" ]; then
-        echo "   CouchDB: https://cdb.${DOMAIN}"
-    else
+    # 与 hugov caddy start 一致：核心服务在 app.<DOMAIN>，CouchDB 在 cdb.<DOMAIN>（localhost 开发模式除外）
+    if [ "${DOMAIN}" = "localhost" ] || [ "${DOMAIN}" = "127.0.0.1" ]; then
+        echo "   Admin Panel: http://${DOMAIN}/admin"
         echo "   CouchDB: http://cdb.${DOMAIN}"
+    else
+        if [ "$DNSPOD_ENABLED" = "true" ]; then
+            echo "   Admin Panel: https://app.${DOMAIN}/admin"
+            echo "   CouchDB: https://cdb.${DOMAIN}"
+        else
+            echo "   Admin Panel: http://app.${DOMAIN}/admin (HTTPS after certificate)"
+            echo "   CouchDB: http://cdb.${DOMAIN}"
+        fi
+        echo "   Enterprise site (apex): https://${ENTERPRISE_SITE_DOMAIN:-$DOMAIN}"
     fi
 else
     echo "🛠️  Mode: Manual configuration"

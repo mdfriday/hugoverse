@@ -160,19 +160,19 @@ func configureEnterpriseFeatures(adminApp *entity.Admin, log loggers.Logger) err
 		// 不返回错误，继续其他配置
 	}
 
-	// 2. 自动生成企业 License（如果启用）
-	if os.Getenv("AUTO_GENERATE_ENTERPRISE_LICENSE") == "true" {
-		if err := generateEnterpriseLicense(log); err != nil {
-			log.Warnf("⚠️  Failed to generate enterprise license: %v", err)
-			// 不返回错误，用户可以手动生成
-		}
-	}
-
-	// 3. 自动配置企业站点（如果启用）
+	// 2. 自动配置企业站点（先于 License：与「先 caddy start 再 caddy add」一致，且避免长时间等待 API 时 Caddy 无企业路由）
 	if os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
 		if err := configureEnterpriseSite(log); err != nil {
 			log.Warnf("⚠️  Failed to configure enterprise site: %v", err)
 			// 不返回错误，用户可以手动配置
+		}
+	}
+
+	// 3. 自动生成企业 License（如果启用）
+	if os.Getenv("AUTO_GENERATE_ENTERPRISE_LICENSE") == "true" {
+		if err := generateEnterpriseLicense(log); err != nil {
+			log.Warnf("⚠️  Failed to generate enterprise license: %v", err)
+			// 不返回错误，用户可以手动生成
 		}
 	}
 
@@ -218,6 +218,10 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 		ServerIP:       os.Getenv("SERVER_IP"),
 		ConfigPath:     "/tmp/caddy-config.json",
 	}
+	// localhost 且自动挂企业站：核心走 app.localhost，apex 给静态站（与生产 app. / 根域 一致）
+	if isLocalhost && os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
+		config.LocalDevUseAppSubdomain = true
+	}
 
 	client := caddy.NewClient(config)
 
@@ -236,25 +240,36 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 
 	log.Println("✅ Caddy is ready")
 
-	// 配置基础路由（通过 Admin API）
+	// 配置基础路由（通过 Admin API），与 hugov caddy start 行为对齐
 	log.Println("   Configuring routes via Admin API...")
 
-	// 为 localhost 添加简单的反向代理配置
 	if isLocalhost {
-		log.Println("   Configuring localhost routes...")
+		log.Println("   Configuring localhost routes (HTTP :80)...")
 		if err := client.ConfigureLocalhost(); err != nil {
 			log.Warnf("⚠️  Failed to configure localhost routes: %v", err)
-			// 继续，不中断
 		} else {
 			log.Println("   ✅ Localhost routes configured")
 		}
-	}
-
-	log.Printf("   Main service: http://%s", domain)
-	log.Printf("   CouchDB: http://cdb.%s", domain)
-
-	if dnspodToken != "" {
-		log.Printf("   Wildcard SSL: *.%s (DNSPod)", domain)
+		if config.LocalDevUseAppSubdomain {
+			log.Printf("   Core / Admin (dev): http://app.%s  — 宿主机可执行: echo '127.0.0.1 app.%s' | sudo tee -a /etc/hosts", domain, domain)
+			log.Printf("   Enterprise static (apex): http://%s", domain)
+		} else {
+			log.Printf("   Core (dev): http://%s", domain)
+		}
+		log.Printf("   CouchDB (dev): http://cdb.%s", domain)
+	} else {
+		log.Println("   Configuring production routes (app. / cdb. / optional wildcard)...")
+		if err := client.ConfigureProductionPlatform(); err != nil {
+			log.Warnf("⚠️  Failed to configure production Caddy routes: %v", err)
+		} else {
+			log.Println("   ✅ Production routes configured (same as hugov caddy start)")
+		}
+		log.Printf("   Hugoverse API: https://app.%s (HTTP: http://app.%s)", domain, domain)
+		log.Printf("   CouchDB proxy: https://cdb.%s (HTTP: http://cdb.%s)", domain, domain)
+		log.Printf("   Enterprise static: use root domain (hugov caddy add -domain %s -path ...)", domain)
+		if dnspodToken != "" {
+			log.Printf("   Wildcard TLS: *.%s (DNSPod / tencentcloud)", domain)
+		}
 	}
 
 	return nil
@@ -470,6 +485,9 @@ func configureEnterpriseSite(log loggers.Logger) error {
 		domain = os.Getenv("DOMAIN")
 	}
 
+	coreDomain := os.Getenv("DOMAIN")
+	isLocalhost := coreDomain == "localhost" || coreDomain == "127.0.0.1"
+
 	sitePath := getEnvOrDefault("ENTERPRISE_SITE_PATH", "/data/enterprise")
 
 	// 确保目录存在
@@ -477,26 +495,57 @@ func configureEnterpriseSite(log loggers.Logger) error {
 		return fmt.Errorf("failed to create site directory: %w", err)
 	}
 
-	log.Printf("   Domain: %s", domain)
-	log.Printf("   Path: %s", sitePath)
+	caddyFileRoot := getEnvOrDefault("ENTERPRISE_SITE_CADDY_ROOT", sitePath)
 
-	// 创建 Caddy 客户端
+	log.Printf("   Site host (apex): %s — same as hugov caddy add -domain %s -path <dir>", domain, domain)
+	log.Printf("   Path (hugoverse): %s", sitePath)
+	log.Printf("   Path (Caddy file_server root): %s", caddyFileRoot)
+
+	// 与 initializeCaddyRoutes 一致，便于 AddStaticSite 处理通配符 route（wildcard-%s 依赖 CoreDomain）
 	caddyAdminAPI := getEnvOrDefault("CADDY_ADMIN_API", "http://caddy:2019")
+	dnspodToken := ""
+	if !isLocalhost && os.Getenv("DNSPOD_ENABLED") == "true" {
+		id, sec := os.Getenv("DNSPOD_ID"), os.Getenv("DNSPOD_SECRET")
+		if id != "" && sec != "" {
+			dnspodToken = fmt.Sprintf("%s,%s", id, sec)
+		}
+	}
 	config := &caddy.Config{
-		AdminAPI:   caddyAdminAPI,
-		CoreDomain: os.Getenv("DOMAIN"),
+		AdminAPI:       caddyAdminAPI,
+		CoreDomain:     coreDomain,
+		DNSPodToken:    dnspodToken,
+		DefaultBackend: "hugoverse:1314",
+		CouchDBBackend: "couchdb:5984",
 	}
 
 	client := caddy.NewClient(config)
 
-	// 添加站点路由
-	log.Println("   Adding site to Caddy...")
-	if err := client.AddStaticSite(domain, sitePath); err != nil {
-		return fmt.Errorf("failed to add site: %w", err)
+	// 等价于 hugov caddy add -domain <apex> -path <path>（企业站挂在根域名，与 app./cdb. 子域分离）
+	log.Println("   Adding static site to Caddy...")
+	var addErr error
+	for attempt := 1; attempt <= 30; attempt++ {
+		addErr = client.AddStaticSite(domain, caddyFileRoot)
+		if addErr == nil {
+			break
+		}
+		// ConfigureLocalhost / ConfigureProductionPlatform 后 Caddy 可能短暂重载，Admin API 会 connection refused
+		if attempt < 30 && strings.Contains(addErr.Error(), "connection refused") {
+			log.Printf("   Caddy Admin API reloading, retry %d/30...", attempt)
+			time.Sleep(time.Second)
+			continue
+		}
+		break
+	}
+	if addErr != nil {
+		return fmt.Errorf("failed to add site: %w", addErr)
 	}
 
 	log.Println("✅ Enterprise site configured")
-	log.Printf("   Access at: http://%s", domain)
+	if isLocalhost {
+		log.Printf("   Access at: http://%s", domain)
+	} else {
+		log.Printf("   Access at: https://%s (and http://%s)", domain, domain)
+	}
 
 	return nil
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -33,17 +34,17 @@ func (c *Command) Run() error {
 	if port == "" {
 		port = "1314"
 	}
-	
+
 	env := api.DEV
 	if os.Getenv("ENV") == "prod" {
 		env = api.PROD
 	}
-	
+
 	enableHttps := false
 	if os.Getenv("ENABLE_HTTPS") == "true" {
 		enableHttps = true
 	}
-	
+
 	// Docker 环境中绑定到 0.0.0.0，否则绑定到 localhost
 	bind := "localhost"
 	if os.Getenv("DOCKER_CONTAINER") == "true" {
@@ -97,13 +98,20 @@ func setupLogger(env api.ENV) func(s *api.Server) error {
 			return nil
 		}
 
+		// Docker 下同时写入文件与 stdout/stderr，便于 docker logs 看到 AutoInitialize、Caddy 企业配置等
+		outW, errW := io.Writer(f), io.Writer(f)
+		if os.Getenv("DOCKER_CONTAINER") == "true" {
+			outW = io.MultiWriter(os.Stdout, f)
+			errW = io.MultiWriter(os.Stderr, f)
+		}
+
 		switch env {
 		case api.DEV:
 			s.Log = loggers.New(loggers.Options{
 				Level:         logg.LevelDebug,
 				DistinctLevel: logg.LevelDebug,
-				Stdout:        f,
-				Stderr:        f,
+				Stdout:        outW,
+				Stderr:        errW,
 				WithColor:     false,
 			})
 			s.LogFile = f
@@ -112,8 +120,8 @@ func setupLogger(env api.ENV) func(s *api.Server) error {
 			s.Log = loggers.New(loggers.Options{
 				Level:         logg.LevelInfo,
 				DistinctLevel: logg.LevelInfo,
-				Stdout:        f,
-				Stderr:        f,
+				Stdout:        outW,
+				Stderr:        errW,
 				WithColor:     false,
 			})
 			s.LogFile = f
