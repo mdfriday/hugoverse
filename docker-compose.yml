@@ -10,8 +10,9 @@ services:
       - COUCHDB_USER=${COUCHDB_USER:-admin}
       - COUCHDB_PASSWORD=${COUCHDB_PASSWORD:-test123456}
     volumes:
-      - couchdb_data:/opt/couchdb/data
-      - couchdb_config:/opt/couchdb/etc/local.d
+      # 本机可备份：库文件与本地配置（默认 ./data/couchdb）
+      - ${COUCHDB_HOST_DATA_DIR:-./data/couchdb}/data:/opt/couchdb/data
+      - ${COUCHDB_HOST_DATA_DIR:-./data/couchdb}/local.d:/opt/couchdb/etc/local.d
     networks:
       - hugoverse-network
     healthcheck:
@@ -40,12 +41,13 @@ services:
       - "${HTTPS_PORT:-443}:443"
       - "2019:2019"  # Admin API
     volumes:
-      - caddy_data:/data
-      - caddy_config:/config
+      # 本机可备份：证书、OCSP 等（默认 ./data/caddy）
+      - ${CADDY_HOST_DATA_DIR:-./data/caddy}/data:/data
+      - ${CADDY_HOST_DATA_DIR:-./data/caddy}/config:/config
       - ./docker/caddy/Caddyfile.initial:/etc/caddy/Caddyfile:ro
-      # 与 hugoverse 共享发布目录（子路径挂载仍保留 /srv 根来自命名卷）
-      - sites:/srv
-      # file_server 在 Caddy 进程内读盘：与 hugoverse 的 enterprise 目录同源挂载
+      # 与 hugoverse /data/publish 同源，便于发布与备份
+      - ${PUBLISH_HOST_DIR:-./data/publish}:/srv
+      # file_server 在 Caddy 进程内读盘：与 hugoverse enterprise 同源挂载
       - ${HUGOVERSE_HOST_DATA_DIR:-./data/hugoverse}/enterprise:/srv/enterprise:ro
     environment:
       - DOMAIN=${DOMAIN:-localhost}
@@ -140,10 +142,10 @@ services:
       # 本机目录（默认 ./data/hugoverse → 容器 /data，企业站：./data/hugoverse/enterprise）
       # 若改回匿名 Docker 卷：在 .env 设置 HUGOVERSE_HOST_DATA_DIR=hugoverse_data
       - ${HUGOVERSE_HOST_DATA_DIR:-./data/hugoverse}:/data
-      # 与 Caddy 共享发布目录
-      - sites:/data/publish
-      # 备份目录
-      - backups:/backups
+      # 与 Caddy /srv 同源（默认 ./data/publish）
+      - ${PUBLISH_HOST_DIR:-./data/publish}:/data/publish
+      # 备份输出目录（默认 ./data/backups）
+      - ${BACKUPS_HOST_DIR:-./data/backups}:/backups
     networks:
       - hugoverse-network
     healthcheck:
@@ -164,19 +166,9 @@ networks:
     driver: bridge
 
 # ========== 数据卷配置 ==========
+# 默认全部使用本机绑定挂载（./data/...），整目录打包即可迁移/恢复。
+# 若需改回 Docker 命名卷，可为对应服务单独写 override 文件覆盖 volumes。
 volumes:
-  # 可选：HUGOVERSE_HOST_DATA_DIR=hugoverse_data 时使用
+  # 可选：在 .env 设置 HUGOVERSE_HOST_DATA_DIR=hugoverse_data 且挂载命名卷时使用
   hugoverse_data:
-    driver: local
-  couchdb_data:
-    driver: local
-  couchdb_config:
-    driver: local
-  caddy_data:
-    driver: local
-  caddy_config:
-    driver: local
-  sites:
-    driver: local
-  backups:
     driver: local
