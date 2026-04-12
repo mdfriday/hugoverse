@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -488,18 +489,21 @@ func configureEnterpriseSite(log loggers.Logger) error {
 	coreDomain := os.Getenv("DOMAIN")
 	isLocalhost := coreDomain == "localhost" || coreDomain == "127.0.0.1"
 
-	sitePath := getEnvOrDefault("ENTERPRISE_SITE_PATH", "/data/enterprise")
+	sitePath := os.Getenv("ENTERPRISE_SITE_PATH")
+	if sitePath == "" {
+		sitePath = filepath.Join(getEnvOrDefault("HUGOVERSE_DATA_DIR", "/data"), "enterprise")
+	}
 
 	// 确保目录存在
 	if err := EnsureDirExists(sitePath); err != nil {
 		return fmt.Errorf("failed to create site directory: %w", err)
 	}
 
-	caddyFileRoot := getEnvOrDefault("ENTERPRISE_SITE_CADDY_ROOT", sitePath)
-
 	log.Printf("   Site host (apex): %s — same as hugov caddy add -domain %s -path <dir>", domain, domain)
-	log.Printf("   Path (hugoverse): %s", sitePath)
-	log.Printf("   Path (Caddy file_server root): %s", caddyFileRoot)
+	log.Printf("   Path (Hugoverse): %s", sitePath)
+	if mapped := caddy.ToCaddySiteRootPath(sitePath); mapped != sitePath {
+		log.Printf("   Path (Caddy file_server root): %s (HUGOVERSE_DATA_DIR → CADDY_SITE_ROOT)", mapped)
+	}
 
 	// 与 initializeCaddyRoutes 一致，便于 AddStaticSite 处理通配符 route（wildcard-%s 依赖 CoreDomain）
 	caddyAdminAPI := getEnvOrDefault("CADDY_ADMIN_API", "http://caddy:2019")
@@ -524,7 +528,7 @@ func configureEnterpriseSite(log loggers.Logger) error {
 	log.Println("   Adding static site to Caddy...")
 	var addErr error
 	for attempt := 1; attempt <= 30; attempt++ {
-		addErr = client.AddStaticSite(domain, caddyFileRoot)
+		addErr = client.AddStaticSite(domain, sitePath)
 		if addErr == nil {
 			break
 		}

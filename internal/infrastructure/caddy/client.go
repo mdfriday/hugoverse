@@ -524,7 +524,7 @@ func (c *Client) GetPID() (int, error) {
 
 // AddStaticSite 动态添加自定义域名的静态站点
 // domain: 自定义域名 (如 example.com)
-// sitePath: 静态站点文件路径 (如 /web/sites/example-com)
+// sitePath: 静态站点文件路径（Hugoverse 容器内路径；若设置了 HUGOVERSE_DATA_DIR 与 CADDY_SITE_ROOT，会映射为 Caddy 容器内路径）
 // A     mdfriday.com        →  <server-ip>
 // A     *.mdfriday.com      →  <server-ip>
 //
@@ -533,6 +533,7 @@ func (c *Client) GetPID() (int, error) {
 // 2. 添加新 route
 // 3. 重新添加通配符 route（保持在最后）
 func (c *Client) AddStaticSite(domain, sitePath string) error {
+	sitePath = ToCaddySiteRootPath(sitePath)
 	route := Route{
 		ID: fmt.Sprintf("site-%s", sanitizeDomainForID(domain)),
 		Match: []MatchHost{

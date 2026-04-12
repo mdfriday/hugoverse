@@ -45,12 +45,11 @@ services:
       - ${CADDY_HOST_DATA_DIR:-./data/caddy}/data:/data
       - ${CADDY_HOST_DATA_DIR:-./data/caddy}/config:/config
       - ./docker/caddy/Caddyfile.initial:/etc/caddy/Caddyfile:ro
-      # 与 hugoverse /data/publish 同源，便于发布与备份
-      - ${PUBLISH_HOST_DIR:-./data/publish}:/srv
-      # file_server 在 Caddy 进程内读盘：与 hugoverse enterprise 同源挂载
-      - ${HUGOVERSE_HOST_DATA_DIR:-./data/hugoverse}/enterprise:/srv/enterprise:ro
+      # 整棵 Hugoverse 数据树（与 hugoverse 服务同源），Caddy 内挂载点为 CADDY_SITE_ROOT（默认 /srv）
+      - ${HUGOVERSE_HOST_DATA_DIR:-./data/hugoverse}:${CADDY_SITE_ROOT:-/srv}:ro
     environment:
       - DOMAIN=${DOMAIN:-localhost}
+      - CADDY_SITE_ROOT=${CADDY_SITE_ROOT:-/srv}
       # DNSPod 凭据（Caddy 通过环境变量使用）
       - TENCENTCLOUD_SECRET_ID=${DNSPOD_ID}
       - TENCENTCLOUD_SECRET_KEY=${DNSPOD_SECRET}
@@ -86,6 +85,8 @@ services:
       # ---- Docker 环境标识 ----
       - DOCKER_CONTAINER=true
       - HUGOVERSE_DATA_DIR=/data
+      # 与 caddy 服务中整树挂载点一致，供 AddStaticSite 路径映射
+      - CADDY_SITE_ROOT=${CADDY_SITE_ROOT:-/srv}
       - HTTP_PORT=1314
       - ENV=prod
       
@@ -131,19 +132,15 @@ services:
       - AUTO_CONFIGURE_ENTERPRISE_SITE=${AUTO_CONFIGURE_ENTERPRISE_SITE:-true}
       - ENTERPRISE_SITE_DOMAIN=${ENTERPRISE_SITE_DOMAIN:-${DOMAIN}}
       - ENTERPRISE_SITE_PATH=${ENTERPRISE_SITE_PATH:-/data/enterprise}
-      # Caddy 容器内路径（与上面对 caddy 的 /srv/enterprise 挂载一致）
-      - ENTERPRISE_SITE_CADDY_ROOT=${ENTERPRISE_SITE_CADDY_ROOT:-/srv/enterprise}
       
       # ---- 备份配置 ----
       - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
       - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
       
     volumes:
-      # 本机目录（默认 ./data/hugoverse → 容器 /data，企业站：./data/hugoverse/enterprise）
+      # 本机目录（默认 ./data/hugoverse → 容器 /data；publish/enterprise 等均在此树下）
       # 若改回匿名 Docker 卷：在 .env 设置 HUGOVERSE_HOST_DATA_DIR=hugoverse_data
       - ${HUGOVERSE_HOST_DATA_DIR:-./data/hugoverse}:/data
-      # 与 Caddy /srv 同源（默认 ./data/publish）
-      - ${PUBLISH_HOST_DIR:-./data/publish}:/data/publish
       # 备份输出目录（默认 ./data/backups）
       - ${BACKUPS_HOST_DIR:-./data/backups}:/backups
     networks:
