@@ -41,8 +41,10 @@ func NewView(name string, ts map[string]content.Creator) *View {
 	}
 }
 
-func (v *View) RefreshAdmin(email string) {
-	v.IsAdmin = email == v.AdminEmail
+// RefreshAdmin 动态检查用户是否为管理员
+// adminEmail 参数应该从 adminApp.Conf.AdminEmail 获取，以确保使用最新的配置
+func (v *View) RefreshAdmin(email string, adminEmail string) {
+	v.IsAdmin = email == adminEmail
 }
 
 // SubView ...

@@ -17,7 +17,8 @@ func (s *Handler) refreshAdminFlag(req *http.Request) {
 	}
 
 	if email != "" {
-		s.adminView.RefreshAdmin(email)
+		// 动态读取最新的 AdminEmail 配置，避免初始化时的缓存问题
+		s.adminView.RefreshAdmin(email, s.adminApp.Conf.AdminEmail)
 	}
 }
 

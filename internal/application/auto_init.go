@@ -65,6 +65,8 @@ func AutoInitialize(adminApp *entity.Admin, db SystemDatabase, log loggers.Logge
 	log.Printf("🌐 Admin panel: http://%s/admin", os.Getenv("DOMAIN"))
 	log.Printf("🔒 Admin login: %s", email)
 
+	// 注意：adminApp.Conf.AdminEmail 已被更新，handler 中的 RefreshAdmin 会动态读取最新值
+
 	// 7. 等待配置生效
 	time.Sleep(2 * time.Second)
 
