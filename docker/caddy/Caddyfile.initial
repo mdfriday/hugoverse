@@ -5,8 +5,11 @@
 	# 关闭自动 HTTPS（由 Hugoverse 通过 API 动态管理）
 	auto_https off
 	
-	# 持久化配置关闭（使用动态 API 配置）
-	persist_config off
+	# 配置持久化已启用（默认行为）
+	# Caddy 启动逻辑（通过 entrypoint.sh）：
+	#   - 如果 autosave.json 存在 → 使用 --resume 恢复完整配置
+	#   - 如果不存在 → 使用此 Caddyfile，然后 Hugoverse 通过 Admin API 配置路由
+	# 这样可以保留动态添加的路由（自定义域名、二级域名、发布站点等）
 	
 	# 日志
 	log {
@@ -17,6 +20,7 @@
 }
 
 # 默认路由：等待 Hugoverse 初始化
+# 注意：只在第一次启动时使用，后续 restart 会从 autosave.json 恢复完整配置
 :80 {
 	respond "🚀 Hugoverse is initializing... Please wait." 503
 }

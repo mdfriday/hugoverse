@@ -106,7 +106,7 @@ cat << 'EOF'
 └─────────────────────────────────────────────────────────────┘
 
   # 重新构建所有镜像
-  docker compose --env-file .env.local build
+  docker-compose --env-file .env.local build
   
   # 重新构建特定镜像
   docker compose --env-file .env.local build hugoverse

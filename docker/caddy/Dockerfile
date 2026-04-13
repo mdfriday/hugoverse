@@ -22,15 +22,19 @@ RUN caddy list-modules | grep dns.providers.tencentcloud || \
 # 创建必要的目录
 RUN mkdir -p /data/caddy /config/caddy /srv
 
+# 复制启动脚本
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
 # 设置标签
 LABEL maintainer="MDFriday <support@mdfriday.com>"
 LABEL description="Caddy with Tencent Cloud DNS plugin for Hugoverse"
 
-# 健康检查
+# 健康检查（使用 Admin API 检查，因为可能没有 Caddyfile）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD caddy validate --config /etc/caddy/Caddyfile || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:2019/config/ || exit 1
 
 EXPOSE 80 443 2019
 
-# 使用 Caddyfile 启动
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+# 使用智能启动脚本
+ENTRYPOINT ["/entrypoint.sh"]

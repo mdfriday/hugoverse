@@ -26,6 +26,19 @@ func (c *Content) GetLicenseByKey(licenseKey string) (*valueobject.License, erro
 	return &license, nil
 }
 
+// GetLicenseCount 获取 License 总数
+// 用于判断是否已经生成过企业 License
+func (c *Content) GetLicenseCount() int {
+	allLicenses := c.AllContents("License")
+	return len(allLicenses)
+}
+
+// HasAnyLicense 检查是否存在任何 License
+// 用于判断企业功能是否已配置
+func (c *Content) HasAnyLicense() bool {
+	return c.GetLicenseCount() > 0
+}
+
 // UpdateLicense 更新 License
 func (c *Content) UpdateLicense(license *valueobject.License) error {
 	return c.UpdateContentObject(license)

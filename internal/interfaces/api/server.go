@@ -138,7 +138,8 @@ func NewServer(options ...func(s *Server) error) (*Server, error) {
 	s.registerHandler()
 
 	// 尝试自动初始化（在启动后台任务之前）
-	if err := application.AutoInitialize(s.adminApp, s.db, s.Log); err != nil {
+	// 传入 contentApp 以便检查 License 数量
+	if err := application.AutoInitialize(s.adminApp, s.db, contentApp, s.Log); err != nil {
 		s.Log.Warnf("Auto-initialization failed: %v", err)
 		s.Log.Println("Please visit /admin/init to configure manually")
 	}
@@ -243,10 +244,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// 记录请求详情（调试用）
 	xForwardedProto := r.Header.Get("X-Forwarded-Proto")
 	dockerContainer := os.Getenv("DOCKER_CONTAINER")
-	
-	s.Log.Printf("[REQUEST] Path=%s Host=%s Scheme=%s X-Forwarded-Proto=%s Env=%s Docker=%s", 
+
+	s.Log.Printf("[REQUEST] Path=%s Host=%s Scheme=%s X-Forwarded-Proto=%s Env=%s Docker=%s",
 		r.URL.Path, r.Host, r.URL.Scheme, xForwardedProto, s.Env, dockerContainer)
-	
+
 	// 只在生产环境且非 Docker 容器时才强制重定向到 HTTPS
 	if s.Env == PROD && xForwardedProto == "http" && dockerContainer != "true" {
 		s.Log.Printf("[REDIRECT] Redirecting to HTTPS: %s -> https://%s%s", r.URL.String(), r.Host, r.URL.Path)
@@ -255,11 +256,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, r.URL.String(), http.StatusFound)
 		return
 	}
-	
+
 	if xForwardedProto == "https" {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; preload")
 	}
-	
+
 	s.mux.ServeHTTP(w, r)
 }
 

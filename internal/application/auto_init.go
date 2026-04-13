@@ -2,7 +2,9 @@ package application
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -16,14 +18,60 @@ import (
 	"github.com/mdfriday/hugoverse/pkg/loggers"
 )
 
+// LicenseChecker 接口定义
+type LicenseChecker interface {
+	GetLicenseCount() int
+	HasAnyLicense() bool
+}
+
 // AutoInitialize 从环境变量自动初始化系统
-func AutoInitialize(adminApp *entity.Admin, db SystemDatabase, log loggers.Logger) error {
+func AutoInitialize(adminApp *entity.Admin, db SystemDatabase, contentApp LicenseChecker, log loggers.Logger) error {
 	// 1. 检查是否已初始化
 	if db.SystemInitComplete() {
 		log.Println("✅ System already initialized")
 
-		// 即使系统已初始化，也检查是否需要配置企业功能（延迟执行）
-		go delayedEnterpriseFeatures(adminApp, log)
+		// 检查企业功能是否已配置（通过 License 数量判断）
+		licenseCount := contentApp.GetLicenseCount()
+		hasLicense := licenseCount > 0
+
+		if hasLicense {
+			log.Printf("ℹ️  Found %d license(s) in database", licenseCount)
+		}
+
+		// 检查 Caddy 配置是否完整
+		caddyConfigured, err := isCaddyProperlyConfigured(log)
+		if err != nil {
+			log.Warnf("⚠️  Failed to check Caddy configuration: %v", err)
+			caddyConfigured = false
+		}
+
+		// 检查是否需要强制重新配置企业功能
+		forceReconfigure := os.Getenv("FORCE_RECONFIGURE_ENTERPRISE") == "true"
+
+		if forceReconfigure {
+			log.Println("⚠️  FORCE_RECONFIGURE_ENTERPRISE=true detected")
+			log.Println("   Re-configuring enterprise features...")
+			go delayedEnterpriseFeaturesWithLicenseCheck(adminApp, contentApp, log)
+		} else if !hasLicense {
+			// 系统已初始化，但没有 License，可能是企业功能配置失败
+			log.Println("⚠️  No licenses found, enterprise features may not be configured")
+			log.Println("   Attempting to configure enterprise features...")
+			go delayedEnterpriseFeaturesWithLicenseCheck(adminApp, contentApp, log)
+		} else if !caddyConfigured {
+			// 有 License 但 Caddy 配置不完整
+			// 这种情况可能发生在：data/caddy 目录被清理但数据库保留的情况下
+			// Caddy 从 Caddyfile.initial 启动（只有 503），但 Hugoverse 数据库中有完整的用户/License
+			log.Println("⚠️  Caddy configuration incomplete (only default routes found)")
+			log.Println("   This can happen if data/caddy was deleted but database was preserved")
+			log.Println("   Re-initializing Caddy routes and enterprise site...")
+			go delayedCaddyAndSiteReinitialize(adminApp, log)
+		} else {
+			// 系统已初始化、有 License、Caddy 配置完整，跳过企业功能配置
+			// Caddy 已通过 --resume 从 autosave.json 恢复完整配置（包括动态添加的路由）
+			log.Println("   ℹ️  Enterprise features already configured")
+			log.Println("   ℹ️  Caddy configuration is complete")
+			log.Println("   💡 To force reconfigure: set FORCE_RECONFIGURE_ENTERPRISE=true")
+		}
 
 		return nil
 	}
@@ -71,13 +119,28 @@ func AutoInitialize(adminApp *entity.Admin, db SystemDatabase, log loggers.Logge
 	time.Sleep(2 * time.Second)
 
 	// 8. 配置企业功能（延迟执行，等待服务器启动）
-	go delayedEnterpriseFeatures(adminApp, log)
+	// 只在首次初始化时执行
+	go delayedEnterpriseFeaturesWithLicenseCheck(adminApp, contentApp, log)
 
 	return nil
 }
 
-// delayedEnterpriseFeatures 延迟执行企业功能配置
+// delayedEnterpriseFeaturesWithLicenseCheck 延迟执行企业功能配置（带 License 检查）
 // 在独立的 goroutine 中运行，等待服务器启动后再执行
+func delayedEnterpriseFeaturesWithLicenseCheck(adminApp *entity.Admin, contentApp LicenseChecker, log loggers.Logger) {
+	// 等待一段时间，确保服务器已经启动
+	log.Println("⏳ Waiting for server to start before configuring enterprise features...")
+	time.Sleep(5 * time.Second)
+
+	if err := configureEnterpriseFeaturesWithLicenseCheck(adminApp, contentApp, log); err != nil {
+		log.Warnf("⚠️  Failed to configure enterprise features: %v", err)
+		log.Println("   You can configure them manually later")
+	}
+}
+
+// delayedEnterpriseFeatures 延迟执行企业功能配置（向后兼容，已废弃）
+// 在独立的 goroutine 中运行，等待服务器启动后再执行
+// 已废弃：请使用 delayedEnterpriseFeaturesWithLicenseCheck
 func delayedEnterpriseFeatures(adminApp *entity.Admin, log loggers.Logger) {
 	// 等待一段时间，确保服务器已经启动
 	log.Println("⏳ Waiting for server to start before configuring enterprise features...")
@@ -149,7 +212,54 @@ func buildConfigFormData(adminApp *entity.Admin) url.Values {
 	return formData
 }
 
-// configureEnterpriseFeatures 配置企业功能
+// configureEnterpriseFeaturesWithLicenseCheck 配置企业功能（带 License 检查）
+func configureEnterpriseFeaturesWithLicenseCheck(adminApp *entity.Admin, contentApp LicenseChecker, log loggers.Logger) error {
+	log.Println("")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("🏢 Configuring Enterprise Features")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("")
+
+	// 1. 初始化 Caddy 路由
+	if err := initializeCaddyRoutes(log); err != nil {
+		log.Warnf("⚠️  Failed to initialize Caddy: %v", err)
+		// 不返回错误，继续其他配置
+	}
+
+	// 2. 自动配置企业站点（先于 License：与「先 caddy start 再 caddy add」一致，且避免长时间等待 API 时 Caddy 无企业路由）
+	if os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
+		if err := configureEnterpriseSite(log); err != nil {
+			log.Warnf("⚠️  Failed to configure enterprise site: %v", err)
+			// 不返回错误，用户可以手动配置
+		}
+	}
+
+	// 3. 检查 License 是否已存在
+	licenseCount := contentApp.GetLicenseCount()
+	if licenseCount > 0 {
+		log.Printf("ℹ️  Found %d existing license(s), skipping license generation", licenseCount)
+		log.Println("   💡 To force regenerate: set FORCE_RECONFIGURE_ENTERPRISE=true")
+	} else {
+		// 4. 自动生成企业 License（如果启用且不存在）
+		if os.Getenv("AUTO_GENERATE_ENTERPRISE_LICENSE") == "true" {
+			if err := generateEnterpriseLicense(log); err != nil {
+				log.Warnf("⚠️  Failed to generate enterprise license: %v", err)
+				// 不返回错误，用户可以手动生成
+			}
+		}
+	}
+
+	log.Println("")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("✅ Enterprise Features Configuration Complete")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("")
+
+	return nil
+}
+
+// configureEnterpriseFeatures 配置企业功能（向后兼容，已废弃）
+// 已废弃：请使用 configureEnterpriseFeaturesWithLicenseCheck
 func configureEnterpriseFeatures(adminApp *entity.Admin, log loggers.Logger) error {
 	log.Println("")
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -559,6 +669,133 @@ func configureEnterpriseSite(log loggers.Logger) error {
 // SystemDatabase 接口定义
 type SystemDatabase interface {
 	SystemInitComplete() bool
+}
+
+// LicenseChecker 接口定义（已移到文件顶部，此处保留注释以便理解）
+// type LicenseChecker interface {
+//     GetLicenseCount() int
+//     HasAnyLicense() bool
+// }
+
+// isCaddyProperlyConfigured 检查 Caddy 配置是否完整
+// 通过查询 Caddy Admin API 检查是否包含必要的路由（不仅仅是默认的 503 响应）
+func isCaddyProperlyConfigured(log loggers.Logger) (bool, error) {
+	caddyAdminAPI := os.Getenv("CADDY_ADMIN_API")
+	if caddyAdminAPI == "" {
+		caddyAdminAPI = "http://caddy:2019"
+	}
+
+	// 查询当前 Caddy 配置
+	resp, err := http.Get(caddyAdminAPI + "/config/")
+	if err != nil {
+		return false, fmt.Errorf("failed to query Caddy config: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("Caddy returned status %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return false, fmt.Errorf("failed to read Caddy config: %w", err)
+	}
+
+	var config map[string]interface{}
+	if err := json.Unmarshal(body, &config); err != nil {
+		return false, fmt.Errorf("failed to parse Caddy config: %w", err)
+	}
+
+	// 检查是否有 HTTP 服务器配置
+	apps, ok := config["apps"].(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	httpApp, ok := apps["http"].(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	servers, ok := httpApp["servers"].(map[string]interface{})
+	if !ok {
+		return false, nil
+	}
+
+	// 检查所有服务器的路由
+	for _, server := range servers {
+		serverMap, ok := server.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		routes, ok := serverMap["routes"].([]interface{})
+		if !ok || len(routes) == 0 {
+			continue
+		}
+
+		// 如果只有一个路由，检查是否是默认的 503 响应
+		if len(routes) == 1 {
+			route, ok := routes[0].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			handlers, ok := route["handle"].([]interface{})
+			if !ok || len(handlers) != 1 {
+				continue
+			}
+
+			handler, ok := handlers[0].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			// 检查是否是 503 初始化响应
+			if handler["handler"] == "static_response" {
+				statusCode, ok := handler["status_code"].(float64)
+				if ok && statusCode == 503 {
+					// 只有默认的 503 响应，配置不完整
+					log.Println("   🔍 Caddy only has default 503 route")
+					return false, nil
+				}
+			}
+		}
+
+		// 有多个路由或非 503 路由，认为配置完整
+		log.Printf("   ✅ Caddy has %d route(s) configured", len(routes))
+		return true, nil
+	}
+
+	// 没有找到合适的路由配置
+	return false, nil
+}
+
+// delayedCaddyAndSiteReinitialize 延迟重新初始化 Caddy 路由和企业站点
+// 用于修复 Caddy 配置丢失的情况（例如 data 目录被清理后）
+func delayedCaddyAndSiteReinitialize(adminApp *entity.Admin, log loggers.Logger) {
+	// 等待服务器启动
+	time.Sleep(3 * time.Second)
+
+	log.Println("")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("🔧 Re-initializing Caddy & Enterprise Site")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("")
+
+	// 1. 重新配置 Caddy 路由
+	if err := initializeCaddyRoutes(log); err != nil {
+		log.Warnf("⚠️  Failed to configure Caddy routes: %v", err)
+	}
+
+	// 2. 重新配置企业站点
+	if err := configureEnterpriseSite(log); err != nil {
+		log.Warnf("⚠️  Failed to configure enterprise site: %v", err)
+	}
+
+	log.Println("")
+	log.Println("✅ Caddy and Enterprise Site re-initialized")
+	log.Println("")
 }
 
 func getEnvOrDefault(key, defaultValue string) string {
