@@ -147,7 +147,7 @@ func (s *Handler) DeployMDFridayPreviewHandler(res http.ResponseWriter, req *htt
 	link := ""
 	switch preview.Type {
 	case "share":
-		link = fmt.Sprintf("%s/%s/%s/%s", s.adminApp.CaddyURL(), application.PreviewFolder(), s.db.UserDir(), preview.Path)
+		link = fmt.Sprintf("%s/%s/%s/%s", s.adminApp.HugoverseDomain(), application.PreviewFolder(), s.db.UserDir(), preview.Path)
 	case "sub":
 		link = preview.Path
 	case "enterprise":
@@ -256,7 +256,7 @@ func (s *Handler) DeployMDFridayPreviewFridayHandler(res http.ResponseWriter, re
 	}
 
 	// 返回 Friday 访问链接
-	link := fmt.Sprintf("%s/%s/%s", s.adminApp.CaddyURL(), application.FridayFolder(), preview.Path)
+	link := fmt.Sprintf("%s/%s/%s", s.adminApp.HugoverseDomain(), application.FridayFolder(), preview.Path)
 
 	jsonBytes, err := json.Marshal(link)
 	if err != nil {

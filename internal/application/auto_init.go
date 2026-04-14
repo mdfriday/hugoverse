@@ -184,19 +184,23 @@ func buildConfigFormData(adminApp *entity.Admin) url.Values {
 	formData.Set("domain", os.Getenv("DOMAIN"))
 	formData.Set("server_ip", os.Getenv("SERVER_IP"))
 
+	// 子域名配置（对外服务地址）
+	formData.Set("couchdb_subdomain", getEnvOrDefault("COUCHDB_SUBDOMAIN", "cdb"))
+	formData.Set("hugoverse_subdomain", getEnvOrDefault("HUGOVERSE_SUBDOMAIN", "app"))
+
 	// 管理员配置
 	email := strings.ToLower(os.Getenv("ADMIN_EMAIL"))
 	formData.Set("email", email)
 	formData.Set("password", os.Getenv("ADMIN_PASSWORD"))
 	formData.Set("admin_email", email)
 
-	// CouchDB 配置
+	// CouchDB 配置（对内：容器网络内地址）
 	formData.Set("url", getEnvOrDefault("COUCHDB_URL", "http://couchdb:5984"))
 	formData.Set("admin_user", getEnvOrDefault("COUCHDB_USER", "admin"))
 	formData.Set("admin_pass", os.Getenv("COUCHDB_PASSWORD"))
 	formData.Set("db_prefix", getEnvOrDefault("COUCHDB_DB_PREFIX", "userdb-"))
 
-	// Caddy 配置
+	// Caddy 配置（对内：容器网络内地址）
 	formData.Set("caddy_host", getEnvOrDefault("CADDY_HOST", "caddy"))
 	formData.Set("caddy_port", getEnvOrDefault("CADDY_PORT", "2019"))
 
@@ -206,8 +210,9 @@ func buildConfigFormData(adminApp *entity.Admin) url.Values {
 	formData.Set("client_secret", secret)
 	formData.Set("etag", adminApp.NewETage())
 
-	// 设置 HTTP 端口
-	formData.Set("http_port", adminApp.HttpPort())
+	// 设置端口
+	formData.Set("http_port", adminApp.HttpPort())                            // Hugoverse 内部端口
+	formData.Set("external_http_port", getEnvOrDefault("EXTERNAL_HTTP_PORT", "80")) // Caddy 对外端口
 
 	return formData
 }
@@ -323,13 +328,15 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 
 	// 创建 Caddy 客户端
 	config := &caddy.Config{
-		AdminAPI:       caddyAdminAPI,
-		DefaultBackend: "hugoverse:1314",
-		CouchDBBackend: "couchdb:5984",
-		CoreDomain:     domain,
-		DNSPodToken:    dnspodToken,
-		ServerIP:       os.Getenv("SERVER_IP"),
-		ConfigPath:     "/tmp/caddy-config.json",
+		AdminAPI:           caddyAdminAPI,
+		DefaultBackend:     "hugoverse:1314",
+		CouchDBBackend:     "couchdb:5984",
+		CoreDomain:         domain,
+		CouchDBSubdomain:   getEnvOrDefault("COUCHDB_SUBDOMAIN", "cdb"),
+		HugoverseSubdomain: getEnvOrDefault("HUGOVERSE_SUBDOMAIN", "app"),
+		DNSPodToken:        dnspodToken,
+		ServerIP:           os.Getenv("SERVER_IP"),
+		ConfigPath:         "/tmp/caddy-config.json",
 	}
 	// localhost 且自动挂企业站：核心走 app.localhost，apex 给静态站（与生产 app. / 根域 一致）
 	if isLocalhost && os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
@@ -364,12 +371,12 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 			log.Println("   ✅ Localhost routes configured")
 		}
 		if config.LocalDevUseAppSubdomain {
-			log.Printf("   Core / Admin (dev): http://app.%s  — 宿主机可执行: echo '127.0.0.1 app.%s' | sudo tee -a /etc/hosts", domain, domain)
+			log.Printf("   Core / Admin (dev): http://%s.%s  — 宿主机可执行: echo '127.0.0.1 %s.%s' | sudo tee -a /etc/hosts", config.HugoverseSubdomain, domain, config.HugoverseSubdomain, domain)
 			log.Printf("   Enterprise static (apex): http://%s", domain)
 		} else {
 			log.Printf("   Core (dev): http://%s", domain)
 		}
-		log.Printf("   CouchDB (dev): http://cdb.%s", domain)
+		log.Printf("   CouchDB (dev): http://%s.%s", config.CouchDBSubdomain, domain)
 	} else {
 		log.Println("   Configuring production routes (app. / cdb. / optional wildcard)...")
 		if err := client.ConfigureProductionPlatform(); err != nil {
@@ -377,8 +384,8 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 		} else {
 			log.Println("   ✅ Production routes configured (same as hugov caddy start)")
 		}
-		log.Printf("   Hugoverse API: https://app.%s (HTTP: http://app.%s)", domain, domain)
-		log.Printf("   CouchDB proxy: https://cdb.%s (HTTP: http://cdb.%s)", domain, domain)
+		log.Printf("   Hugoverse API: https://%s.%s (HTTP: http://%s.%s)", config.HugoverseSubdomain, domain, config.HugoverseSubdomain, domain)
+		log.Printf("   CouchDB proxy: https://%s.%s (HTTP: http://%s.%s)", config.CouchDBSubdomain, domain, config.CouchDBSubdomain, domain)
 		log.Printf("   Enterprise static: use root domain (hugov caddy add -domain %s -path ...)", domain)
 		if dnspodToken != "" {
 			log.Printf("   Wildcard TLS: *.%s (DNSPod / tencentcloud)", domain)
@@ -627,11 +634,13 @@ func configureEnterpriseSite(log loggers.Logger) error {
 		}
 	}
 	config := &caddy.Config{
-		AdminAPI:       caddyAdminAPI,
-		CoreDomain:     coreDomain,
-		DNSPodToken:    dnspodToken,
-		DefaultBackend: "hugoverse:1314",
-		CouchDBBackend: "couchdb:5984",
+		AdminAPI:           caddyAdminAPI,
+		CoreDomain:         coreDomain,
+		CouchDBSubdomain:   getEnvOrDefault("COUCHDB_SUBDOMAIN", "cdb"),
+		HugoverseSubdomain: getEnvOrDefault("HUGOVERSE_SUBDOMAIN", "app"),
+		DNSPodToken:        dnspodToken,
+		DefaultBackend:     "hugoverse:1314",
+		CouchDBBackend:     "couchdb:5984",
 	}
 
 	client := caddy.NewClient(config)

@@ -87,7 +87,7 @@ services:
       - HUGOVERSE_DATA_DIR=/data
       # 与 caddy 服务中整树挂载点一致，供 AddStaticSite 路径映射
       - CADDY_SITE_ROOT=${CADDY_SITE_ROOT:-/srv}
-      - HTTP_PORT=1314
+      - HTTP_PORT=1314  # Hugoverse 内部监听端口
       - ENV=prod
       
       # ---- 自动初始化 ----
@@ -98,6 +98,13 @@ services:
       - DOMAIN=${DOMAIN:-localhost}
       - SERVER_IP=${SERVER_IP}
       - SITE_NAME=${SITE_NAME:-Hugoverse}
+      
+      # ---- 外部访问端口（Caddy 对外端口）----
+      - EXTERNAL_HTTP_PORT=${HTTP_PORT:-80}  # 对外 HTTP 端口（给用户访问）
+      
+      # ---- 子域名配置（对外服务地址）----
+      - COUCHDB_SUBDOMAIN=${COUCHDB_SUBDOMAIN:-cdb}
+      - HUGOVERSE_SUBDOMAIN=${HUGOVERSE_SUBDOMAIN:-app}
       
       # ---- 管理员配置 ----
       - ADMIN_EMAIL=${ADMIN_EMAIL}

@@ -55,9 +55,50 @@ func (h *Http) BaseURL() string {
 	return "https://" + h.Host()
 }
 
+// CouchDBDomain 返回 CouchDB 对外访问地址（给客户端使用）
+// 对内连接地址使用 CouchDB entity 的 CouchDBURL() 方法
 func (h *Http) CouchDBDomain() string {
-	if h.Env == "dev" {
-		return "http://localhost:5984"
+	subdomain := h.Conf.CouchDBSubDomain
+	if subdomain == "" {
+		subdomain = "cdb" // 默认值
 	}
-	return fmt.Sprintf("https://cdb.%s", h.RootDomain())
+
+	domain := h.Domain()
+	isLocalhost := (domain == "localhost" || domain == "127.0.0.1")
+
+	if h.Env == "dev" || isLocalhost {
+		// 开发环境或 localhost：使用 HTTP + Caddy 对外端口
+		externalPort := h.Conf.ExternalHTTPPort
+		if externalPort == "" || externalPort == "80" {
+			return fmt.Sprintf("http://%s.%s", subdomain, domain)
+		}
+		return fmt.Sprintf("http://%s.%s:%s", subdomain, domain, externalPort)
+	}
+
+	// 生产环境：使用 HTTPS + 根域名
+	return fmt.Sprintf("https://%s.%s", subdomain, h.RootDomain())
+}
+
+// HugoverseDomain 返回 Hugoverse 对外访问地址（给客户端使用）
+// 对内连接地址使用 hugoverse:1314
+func (h *Http) HugoverseDomain() string {
+	subdomain := h.Conf.HugoverseSubDomain
+	if subdomain == "" {
+		subdomain = "app" // 默认值
+	}
+
+	domain := h.Domain()
+	isLocalhost := (domain == "localhost" || domain == "127.0.0.1")
+
+	if h.Env == "dev" || isLocalhost {
+		// 开发环境或 localhost：使用 HTTP + Caddy 对外端口
+		externalPort := h.Conf.ExternalHTTPPort
+		if externalPort == "" || externalPort == "80" {
+			return fmt.Sprintf("http://%s.%s", subdomain, domain)
+		}
+		return fmt.Sprintf("http://%s.%s:%s", subdomain, domain, externalPort)
+	}
+
+	// 生产环境：使用 HTTPS + 根域名
+	return fmt.Sprintf("https://%s.%s", subdomain, h.RootDomain())
 }

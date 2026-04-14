@@ -15,16 +15,18 @@ import (
 
 // Config Caddy 配置
 type Config struct {
-	AdminAPI       string `json:"admin_api"`       // Caddy Admin API 地址 (如 http://127.0.0.1:2019)
-	ConfigPath     string `json:"config_path"`     // Caddy 配置文件路径
-	BinaryPath     string `json:"binary_path"`     // Caddy 二进制文件路径
-	DefaultBackend string `json:"default_backend"` // 默认后端服务地址 (如 127.0.0.1:1314)
-	CouchDBBackend string `json:"couchdb_backend"` // CouchDB 服务地址 (如 127.0.0.1:5984)
-	CoreDomain     string `json:"core_domain"`     // 核心域名 (如 mdfriday.site)
-	PidFile        string `json:"pid_file"`        // PID 文件路径 (用于后台运行)
-	LogFile        string `json:"log_file"`        // 日志文件路径
-	DNSPodToken    string `json:"dnspod_token"`    // 腾讯云 DNS API Token (格式: SecretId,SecretKey，用于 DNS-01 challenge)
-	ServerIP       string `json:"server_ip"`       // 服务器公网 IP (用于域名检查)
+	AdminAPI            string `json:"admin_api"`             // Caddy Admin API 地址 (如 http://127.0.0.1:2019)
+	ConfigPath          string `json:"config_path"`           // Caddy 配置文件路径
+	BinaryPath          string `json:"binary_path"`           // Caddy 二进制文件路径
+	DefaultBackend      string `json:"default_backend"`       // 默认后端服务地址 (如 127.0.0.1:1314)
+	CouchDBBackend      string `json:"couchdb_backend"`       // CouchDB 服务地址 (如 127.0.0.1:5984)
+	CoreDomain          string `json:"core_domain"`           // 核心域名 (如 mdfriday.site)
+	CouchDBSubdomain    string `json:"couchdb_subdomain"`     // CouchDB 子域名 (默认 cdb)
+	HugoverseSubdomain  string `json:"hugoverse_subdomain"`   // Hugoverse 子域名 (默认 app)
+	PidFile             string `json:"pid_file"`              // PID 文件路径 (用于后台运行)
+	LogFile             string `json:"log_file"`              // 日志文件路径
+	DNSPodToken         string `json:"dnspod_token"`          // 腾讯云 DNS API Token (格式: SecretId,SecretKey，用于 DNS-01 challenge)
+	ServerIP            string `json:"server_ip"`             // 服务器公网 IP (用于域名检查)
 	// LocalDevUseAppSubdomain 为 true 时：反向代理只匹配 app.<CoreDomain>，apex 留给 AddStaticSite（与生产 app. / 根域 分工一致）
 	LocalDevUseAppSubdomain bool `json:"-"`
 }
@@ -54,6 +56,12 @@ func NewClient(config *Config) *Client {
 	}
 	if config.CoreDomain == "" {
 		config.CoreDomain = "mdfriday.com"
+	}
+	if config.CouchDBSubdomain == "" {
+		config.CouchDBSubdomain = "cdb"
+	}
+	if config.HugoverseSubdomain == "" {
+		config.HugoverseSubdomain = "app"
 	}
 	if config.PidFile == "" {
 		config.PidFile = "/tmp/caddy.pid"
@@ -150,14 +158,14 @@ type CertificateInfo struct {
 }
 
 // buildProductionMainServerConfig 生产环境 main 服务器：与 hugov caddy start（非 localhost）一致。
-// app.<CoreDomain> → DefaultBackend；cdb.<CoreDomain> → CouchDBBackend；
+// {HugoverseSubdomain}.<CoreDomain> → DefaultBackend；{CouchDBSubdomain}.<CoreDomain> → CouchDBBackend；
 // 若配置了 DNSPodToken，末尾增加 *.<CoreDomain> 占位路由以配合通配符证书。
 func (c *Client) buildProductionMainServerConfig() *ServerConfig {
 	routes := []Route{
 		{
-			ID: fmt.Sprintf("core-app.%s", c.config.CoreDomain),
+			ID: fmt.Sprintf("core-%s.%s", c.config.HugoverseSubdomain, c.config.CoreDomain),
 			Match: []MatchHost{
-				{Host: []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}},
+				{Host: []string{fmt.Sprintf("%s.%s", c.config.HugoverseSubdomain, c.config.CoreDomain)}},
 			},
 			Handle: []HandleConfig{
 				{
@@ -169,9 +177,9 @@ func (c *Client) buildProductionMainServerConfig() *ServerConfig {
 			},
 		},
 		{
-			ID: fmt.Sprintf("core-cdb.%s", c.config.CoreDomain),
+			ID: fmt.Sprintf("core-%s.%s", c.config.CouchDBSubdomain, c.config.CoreDomain),
 			Match: []MatchHost{
-				{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+				{Host: []string{fmt.Sprintf("%s.%s", c.config.CouchDBSubdomain, c.config.CoreDomain)}},
 			},
 			Handle: []HandleConfig{
 				{
@@ -235,7 +243,7 @@ func (c *Client) StartServer() error {
 				{
 					ID: "couchdb-localhost",
 					Match: []MatchHost{
-						{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
+						{Host: []string{fmt.Sprintf("%s.%s", c.config.CouchDBSubdomain, c.config.CoreDomain)}},
 					},
 					Handle: []HandleConfig{
 						{
@@ -252,7 +260,7 @@ func (c *Client) StartServer() error {
 			},
 		}
 	} else {
-		// 生产环境与 hugov caddy start 一致：app.<domain> → 核心服务，cdb.<domain> → CouchDB
+		// 生产环境与 hugov caddy start 一致：{HugoverseSubdomain}.<domain> → 核心服务，{CouchDBSubdomain}.<domain> → CouchDB
 		serverConfig = c.buildProductionMainServerConfig()
 	}
 
@@ -376,20 +384,20 @@ func (c *Client) StartServerBackground() error {
 							},
 						},
 					},
-					{
-						ID: "couchdb-localhost",
-						Match: []MatchHost{
-							{Host: []string{fmt.Sprintf("cdb.%s", c.config.CoreDomain)}},
-						},
-						Handle: []HandleConfig{
-							{
-								Handler: "reverse_proxy",
-								Upstreams: []Upstream{
-									{Dial: c.config.CouchDBBackend},
+						{
+							ID: "couchdb-localhost",
+							Match: []MatchHost{
+								{Host: []string{fmt.Sprintf("%s.%s", c.config.CouchDBSubdomain, c.config.CoreDomain)}},
+							},
+							Handle: []HandleConfig{
+								{
+									Handler: "reverse_proxy",
+									Upstreams: []Upstream{
+										{Dial: c.config.CouchDBBackend},
+									},
 								},
 							},
 						},
-					},
 				},
 				AutoHTTPS: &AutoHTTPSConfig{
 					Disable: true,
@@ -853,7 +861,7 @@ const adminListenDocker = "0.0.0.0:2019"
 func (c *Client) ConfigureLocalhost() error {
 	proxyHosts := []string{"localhost", "127.0.0.1"}
 	if c.config.LocalDevUseAppSubdomain {
-		proxyHosts = []string{fmt.Sprintf("app.%s", c.config.CoreDomain)}
+		proxyHosts = []string{fmt.Sprintf("%s.%s", c.config.HugoverseSubdomain, c.config.CoreDomain)}
 	}
 
 	// 构建完整的 Caddy 配置
@@ -867,10 +875,10 @@ func (c *Client) ConfigureLocalhost() error {
 					"main": map[string]interface{}{
 						"listen": []string{":80"},
 						"routes": []interface{}{
-							// CouchDB 路由: cdb.localhost
+							// CouchDB 路由: {CouchDBSubdomain}.localhost
 							map[string]interface{}{
 								"match": []map[string]interface{}{
-									{"host": []string{"cdb.localhost"}},
+									{"host": []string{fmt.Sprintf("%s.localhost", c.config.CouchDBSubdomain)}},
 								},
 								"handle": []map[string]interface{}{
 									{
@@ -886,7 +894,7 @@ func (c *Client) ConfigureLocalhost() error {
 									},
 								},
 							},
-							// 核心服务：生产为 app.<domain>；本地若挂企业静态在 apex，则改为 app.localhost，避免与 file_server 同 Host 冲突
+							// 核心服务：生产为 {HugoverseSubdomain}.<domain>；本地若挂企业静态在 apex，则改为 {HugoverseSubdomain}.localhost，避免与 file_server 同 Host 冲突
 							map[string]interface{}{
 								"match": []map[string]interface{}{
 									{"host": proxyHosts},

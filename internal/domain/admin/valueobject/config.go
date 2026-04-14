@@ -22,10 +22,13 @@ type Config struct {
 
 	Name                    string   `json:"name"`
 	Domain                  string   `json:"domain"`
+	CouchDBSubDomain        string   `json:"couchdb_subdomain"`
+	HugoverseSubDomain      string   `json:"hugoverse_subdomain"`
 	Netlify                 string   `json:"netlify"`
 	BindAddress             string   `json:"bind_addr"`
-	HTTPPort                string   `json:"http_port"`
-	HTTPSPort               string   `json:"https_port"`
+	HTTPPort                string   `json:"http_port"`         // Hugoverse 内部监听端口 (如 1314)
+	HTTPSPort               string   `json:"https_port"`        // HTTPS 端口 (如 443)
+	ExternalHTTPPort        string   `json:"external_http_port"` // Caddy 对外 HTTP 端口 (如 80 或 8080)
 	DevHTTPSPort            string   `json:"dev_https_port"`
 	AdminEmail              string   `json:"admin_email"`
 	ClientSecret            string   `json:"client_secret"`
@@ -147,6 +150,18 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 			}),
 		},
 		editor.Field{
+			View: editor.Input("CouchDBSubDomain", c, map[string]string{
+				"label":       "CouchDB Subdomain (for Caddy reverse proxy)",
+				"placeholder": "e.g. cdb",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("HugoverseSubDomain", c, map[string]string{
+				"label":       "Hugoverse Subdomain (for Caddy reverse proxy)",
+				"placeholder": "e.g. app",
+			}),
+		},
+		editor.Field{
 			View: editor.Input("Netlify", c, map[string]string{
 				"label":       "Netlify Token (required for deployment)",
 				"placeholder": "e.g. nfp_Z4c2Defcv57ddXcJHd626rNQKBk9VT1rbf43",
@@ -164,6 +179,11 @@ func (c *Config) MarshalEditor() ([]byte, error) {
 		},
 		editor.Field{
 			View: editor.Input("HTTPSPort", c, map[string]string{
+				"type": "hidden",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("ExternalHTTPPort", c, map[string]string{
 				"type": "hidden",
 			}),
 		},
