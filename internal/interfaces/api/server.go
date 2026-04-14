@@ -324,13 +324,15 @@ func (s *Server) GetCaddyConfig() *caddy.Config {
 	}
 
 	return &caddy.Config{
-		AdminAPI:       "http://127.0.0.1:2019",
-		DefaultBackend: "127.0.0.1:1314",
-		CouchDBBackend: "127.0.0.1:5984",
-		CoreDomain:     s.adminApp.Conf.Domain,
-		ServerIP:       s.adminApp.Conf.ServerIP,
-		DNSPodToken:    "", // DNSPod Token 不存储在配置中，只在启动时使用
-		PidFile:        "/tmp/caddy.pid",
-		LogFile:        "/tmp/caddy.log",
+		AdminAPI:           s.adminApp.CaddyAdminAPI(),
+		DefaultBackend:     s.adminApp.Conf.CaddyHost + ":1314", // 使用配置的 Caddy host（Docker 中是容器名）
+		CouchDBBackend:     s.adminApp.CouchDBURL(),              // 使用内部 CouchDB URL
+		CoreDomain:         s.adminApp.Conf.Domain,
+		CouchDBSubdomain:   s.adminApp.Conf.CouchDBSubDomain,
+		HugoverseSubdomain: s.adminApp.Conf.HugoverseSubDomain,
+		ServerIP:           s.adminApp.Conf.ServerIP,
+		DNSPodToken:        "", // DNSPod Token 不存储在配置中，只在启动时使用
+		PidFile:            "/tmp/caddy.pid",
+		LogFile:            "/tmp/caddy.log",
 	}
 }

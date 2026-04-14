@@ -70,6 +70,7 @@ func New(log loggers.Logger, db *database.Database,
 	})
 
 	caddyClient := caddy.NewClient(&caddy.Config{
+		AdminAPI:           adminApp.CaddyAdminAPI(),
 		ServerIP:           adminApp.ServerIP(),
 		CoreDomain:         adminApp.RootDomain(),
 		CouchDBSubdomain:   adminApp.Conf.CouchDBSubDomain,

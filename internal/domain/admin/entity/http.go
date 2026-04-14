@@ -2,6 +2,7 @@ package entity
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/mdfriday/hugoverse/internal/domain/admin/valueobject"
@@ -19,7 +20,19 @@ func (h *Http) Host() string {
 	return h.Conf.Domain
 }
 
-func (h *Http) Domain() string   { return h.Conf.Domain }
+// Domain 返回配置的域名
+func (h *Http) Domain() string {
+	domain := h.Conf.Domain
+	if domain == "" {
+		// 从环境变量读取（首次启动时配置可能为空）
+		domain = os.Getenv("DOMAIN")
+		if domain == "" {
+			domain = "localhost" // 最后的默认值
+		}
+	}
+	return domain
+}
+
 func (h *Http) HttpPort() string { return h.Conf.HTTPPort }
 
 // RootDomain extracts the root domain (last two parts) from Domain()
@@ -35,7 +48,15 @@ func (h *Http) RootDomain() string {
 
 func (h *Http) DevHttpsPort() string { return h.Conf.DevHTTPSPort }
 func (h *Http) BindAddress() string  { return h.Conf.BindAddress }
-func (h *Http) ServerIP() string     { return h.Conf.ServerIP }
+
+// ServerIP 返回服务器公网 IP
+func (h *Http) ServerIP() string {
+	ip := h.Conf.ServerIP
+	if ip == "" {
+		ip = os.Getenv("SERVER_IP")
+	}
+	return ip
+}
 
 func (h *Http) DevPort() string {
 	return "8080"
@@ -69,7 +90,14 @@ func (h *Http) CouchDBDomain() string {
 	if h.Env == "dev" || isLocalhost {
 		// 开发环境或 localhost：使用 HTTP + Caddy 对外端口
 		externalPort := h.Conf.ExternalHTTPPort
-		if externalPort == "" || externalPort == "80" {
+		if externalPort == "" {
+			// 从环境变量读取（首次启动时配置可能为空）
+			externalPort = os.Getenv("EXTERNAL_HTTP_PORT")
+			if externalPort == "" {
+				externalPort = "80"
+			}
+		}
+		if externalPort == "80" {
 			return fmt.Sprintf("http://%s.%s", subdomain, domain)
 		}
 		return fmt.Sprintf("http://%s.%s:%s", subdomain, domain, externalPort)
@@ -93,7 +121,14 @@ func (h *Http) HugoverseDomain() string {
 	if h.Env == "dev" || isLocalhost {
 		// 开发环境或 localhost：使用 HTTP + Caddy 对外端口
 		externalPort := h.Conf.ExternalHTTPPort
-		if externalPort == "" || externalPort == "80" {
+		if externalPort == "" {
+			// 从环境变量读取（首次启动时配置可能为空）
+			externalPort = os.Getenv("EXTERNAL_HTTP_PORT")
+			if externalPort == "" {
+				externalPort = "80"
+			}
+		}
+		if externalPort == "80" {
 			return fmt.Sprintf("http://%s.%s", subdomain, domain)
 		}
 		return fmt.Sprintf("http://%s.%s:%s", subdomain, domain, externalPort)
