@@ -71,6 +71,9 @@ func prepareAdminTypes(c *entity.Content) {
 	c.AdminTypes["LicenseUsage"] = func() interface{} { return new(valueobject.LicenseUsage) }
 	c.AdminTypes["LicenseTrial"] = func() interface{} { return new(valueobject.LicenseTrial) }
 
+	// Instance 管理
+	c.AdminTypes["Instance"] = func() interface{} { return new(valueobject.Instance) }
+
 	// Sync 相关
 	c.AdminTypes["SyncAccount"] = func() interface{} { return new(valueobject.SyncAccount) }
 
