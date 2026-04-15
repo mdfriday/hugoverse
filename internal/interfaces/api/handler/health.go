@@ -20,7 +20,7 @@ func (s *Handler) HealthHandler(res http.ResponseWriter, req *http.Request) {
 		Status:      "healthy",
 		Docker:      isDockerEnvironment(),
 		Initialized: s.db.SystemInitComplete(),
-		Version:     os.Getenv("VERSION"),
+		Version:     "26.4.1",
 	}
 
 	res.Header().Set("Content-Type", "application/json")

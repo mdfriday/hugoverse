@@ -76,16 +76,6 @@ func AutoInitialize(adminApp *entity.Admin, db SystemDatabase, contentApp Licens
 		return nil
 	}
 
-	// 2. 检查是否启用自动初始化
-	if os.Getenv("AUTO_INIT") != "true" {
-		log.Println("ℹ️  AUTO_INIT is not enabled")
-		log.Println("   Please visit /admin/init to configure manually")
-		log.Printf("📍 Configuration URL: http://%s/admin/init", getEnvOrDefault("DOMAIN", "localhost"))
-		return nil
-	}
-
-	log.Println("🔧 AUTO_INIT=true, initializing from environment variables...")
-
 	// 3. 验证必需的环境变量
 	if err := validateRequiredEnv(); err != nil {
 		return err
@@ -138,20 +128,6 @@ func delayedEnterpriseFeaturesWithLicenseCheck(adminApp *entity.Admin, contentAp
 	}
 }
 
-// delayedEnterpriseFeatures 延迟执行企业功能配置（向后兼容，已废弃）
-// 在独立的 goroutine 中运行，等待服务器启动后再执行
-// 已废弃：请使用 delayedEnterpriseFeaturesWithLicenseCheck
-func delayedEnterpriseFeatures(adminApp *entity.Admin, log loggers.Logger) {
-	// 等待一段时间，确保服务器已经启动
-	log.Println("⏳ Waiting for server to start before configuring enterprise features...")
-	time.Sleep(5 * time.Second)
-
-	if err := configureEnterpriseFeatures(adminApp, log); err != nil {
-		log.Warnf("⚠️  Failed to configure enterprise features: %v", err)
-		log.Println("   You can configure them manually later")
-	}
-}
-
 // validateRequiredEnv 验证必需的环境变量
 func validateRequiredEnv() error {
 	required := map[string]string{
@@ -180,7 +156,7 @@ func buildConfigFormData(adminApp *entity.Admin) url.Values {
 	formData := url.Values{}
 
 	// 基础配置
-	formData.Set("name", getEnvOrDefault("SITE_NAME", "Hugoverse"))
+	formData.Set("name", "MDFriday")
 	formData.Set("domain", os.Getenv("DOMAIN"))
 	formData.Set("server_ip", os.Getenv("SERVER_IP"))
 
@@ -198,7 +174,7 @@ func buildConfigFormData(adminApp *entity.Admin) url.Values {
 	formData.Set("url", getEnvOrDefault("COUCHDB_URL", "http://couchdb:5984"))
 	formData.Set("admin_user", getEnvOrDefault("COUCHDB_USER", "admin"))
 	formData.Set("admin_pass", os.Getenv("COUCHDB_PASSWORD"))
-	formData.Set("db_prefix", getEnvOrDefault("COUCHDB_DB_PREFIX", "userdb-"))
+	formData.Set("db_prefix", "userdb-")
 
 	// Caddy 配置（对内：容器网络内地址）
 	formData.Set("caddy_host", getEnvOrDefault("CADDY_HOST", "caddy"))
@@ -211,7 +187,7 @@ func buildConfigFormData(adminApp *entity.Admin) url.Values {
 	formData.Set("etag", adminApp.NewETage())
 
 	// 设置端口
-	formData.Set("http_port", adminApp.HttpPort())                            // Hugoverse 内部端口
+	formData.Set("http_port", adminApp.HttpPort())                                  // Hugoverse 内部端口
 	formData.Set("external_http_port", getEnvOrDefault("EXTERNAL_HTTP_PORT", "80")) // Caddy 对外端口
 
 	return formData
@@ -232,11 +208,9 @@ func configureEnterpriseFeaturesWithLicenseCheck(adminApp *entity.Admin, content
 	}
 
 	// 2. 自动配置企业站点（先于 License：与「先 caddy start 再 caddy add」一致，且避免长时间等待 API 时 Caddy 无企业路由）
-	if os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
-		if err := configureEnterpriseSite(log); err != nil {
-			log.Warnf("⚠️  Failed to configure enterprise site: %v", err)
-			// 不返回错误，用户可以手动配置
-		}
+	if err := configureEnterpriseSite(log); err != nil {
+		log.Warnf("⚠️  Failed to configure enterprise site: %v", err)
+		// 不返回错误，用户可以手动配置
 	}
 
 	// 3. 检查 License 是否已存在
@@ -246,48 +220,6 @@ func configureEnterpriseFeaturesWithLicenseCheck(adminApp *entity.Admin, content
 		log.Println("   💡 To force regenerate: set FORCE_RECONFIGURE_ENTERPRISE=true")
 	} else {
 		// 4. 自动生成企业 License（如果启用且不存在）
-		if os.Getenv("AUTO_GENERATE_ENTERPRISE_LICENSE") == "true" {
-			if err := generateEnterpriseLicense(log); err != nil {
-				log.Warnf("⚠️  Failed to generate enterprise license: %v", err)
-				// 不返回错误，用户可以手动生成
-			}
-		}
-	}
-
-	log.Println("")
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Println("✅ Enterprise Features Configuration Complete")
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Println("")
-
-	return nil
-}
-
-// configureEnterpriseFeatures 配置企业功能（向后兼容，已废弃）
-// 已废弃：请使用 configureEnterpriseFeaturesWithLicenseCheck
-func configureEnterpriseFeatures(adminApp *entity.Admin, log loggers.Logger) error {
-	log.Println("")
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Println("🏢 Configuring Enterprise Features")
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Println("")
-
-	// 1. 初始化 Caddy 路由
-	if err := initializeCaddyRoutes(log); err != nil {
-		log.Warnf("⚠️  Failed to initialize Caddy: %v", err)
-		// 不返回错误，继续其他配置
-	}
-
-	// 2. 自动配置企业站点（先于 License：与「先 caddy start 再 caddy add」一致，且避免长时间等待 API 时 Caddy 无企业路由）
-	if os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
-		if err := configureEnterpriseSite(log); err != nil {
-			log.Warnf("⚠️  Failed to configure enterprise site: %v", err)
-			// 不返回错误，用户可以手动配置
-		}
-	}
-
-	// 3. 自动生成企业 License（如果启用）
-	if os.Getenv("AUTO_GENERATE_ENTERPRISE_LICENSE") == "true" {
 		if err := generateEnterpriseLicense(log); err != nil {
 			log.Warnf("⚠️  Failed to generate enterprise license: %v", err)
 			// 不返回错误，用户可以手动生成
@@ -339,7 +271,7 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 		ConfigPath:         "/tmp/caddy-config.json",
 	}
 	// localhost 且自动挂企业站：核心走 app.localhost，apex 给静态站（与生产 app. / 根域 一致）
-	if isLocalhost && os.Getenv("AUTO_CONFIGURE_ENTERPRISE_SITE") == "true" {
+	if isLocalhost {
 		config.LocalDevUseAppSubdomain = true
 	}
 
@@ -403,71 +335,6 @@ func generateEnterpriseLicense(log loggers.Logger) error {
 	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	log.Println("")
 
-	// 1. 获取 Master License
-	masterLicenseKey := os.Getenv("MASTER_LICENSE")
-
-	if masterLicenseKey == "" {
-		log.Println("ℹ️  No Master License provided")
-		log.Println("   Using FREE mode (1 enterprise license)")
-	} else {
-		log.Println("🔑 Master License provided")
-		log.Println("   Verifying online...")
-	}
-
-	// 2. 在线验证 Master License
-	masterInfo, err := licensekit.VerifyMasterLicenseOnline(masterLicenseKey)
-	if err != nil {
-		log.Warnf("⚠️  Master License verification failed: %v", err)
-		log.Println("   Falling back to FREE mode (1 enterprise license)")
-	}
-
-	log.Println("")
-	log.Println("📊 License Quota Information")
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Printf("   Type: %s", masterInfo.Type)
-	log.Printf("   Max Sub-Licenses: %d", masterInfo.MaxSubLicenses)
-	log.Printf("   Used: %d", masterInfo.UsedLicenses)
-	log.Printf("   Remaining: %d", masterInfo.GetRemainingQuota())
-	if !masterInfo.ExpiryDate.IsZero() {
-		log.Printf("   Expires: %s", masterInfo.ExpiryDate.Format("2006-01-02"))
-	}
-
-	if masterInfo.Type == "free" {
-		log.Println("")
-		log.Println("💡 Need more licenses?")
-		log.Println("   Visit: https://mdfriday.com/pricing")
-		log.Println("   Purchase a Master License and add to .env:")
-		log.Println("   MASTER_LICENSE=YOUR_LICENSE_KEY")
-	}
-	log.Println("")
-
-	// 3. 检查是否还能生成
-	requestCount := 1
-	if countStr := os.Getenv("ENTERPRISE_LICENSE_COUNT"); countStr != "" {
-		fmt.Sscanf(countStr, "%d", &requestCount)
-	}
-
-	if requestCount < 1 {
-		requestCount = 1
-	}
-
-	if !masterInfo.CanGenerateMore(requestCount) {
-		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		log.Println("❌ License Quota Exceeded")
-		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		log.Printf("   Current: %d / %d licenses\n", masterInfo.UsedLicenses, masterInfo.MaxSubLicenses)
-		log.Printf("   Requested: %d\n", requestCount)
-		log.Printf("   Available: %d\n", masterInfo.GetRemainingQuota())
-		log.Println("")
-		log.Println("💡 To generate more licenses:")
-		log.Println("   1. Visit: https://mdfriday.com/pricing")
-		log.Println("   2. Purchase a Master License")
-		log.Println("   3. Add to .env: MASTER_LICENSE=YOUR_KEY")
-		log.Println("   4. Restart: docker-compose restart hugoverse")
-		log.Println("")
-		return fmt.Errorf("license quota exceeded")
-	}
-
 	// 4. 等待 API 就绪
 	apiBase := "http://localhost:1314"
 	log.Println("🔄 Waiting for Hugoverse API...")
@@ -492,7 +359,7 @@ func generateEnterpriseLicense(log loggers.Logger) error {
 	// 5. 登录获取 token
 	adminEmail := os.Getenv("ADMIN_EMAIL")
 	adminPassword := os.Getenv("ADMIN_PASSWORD")
-	plan := getEnvOrDefault("ENTERPRISE_LICENSE_PLAN", "enterprise")
+	plan := "enterprise"
 
 	log.Println("")
 	log.Println("🔐 Logging in as admin...")
@@ -501,11 +368,6 @@ func generateEnterpriseLicense(log loggers.Logger) error {
 		return fmt.Errorf("failed to login: %w", err)
 	}
 	log.Println("✅ Login successful")
-
-	// 6. 生成 License
-	log.Println("")
-	log.Printf("🔨 Generating %d enterprise license(s)...\n", requestCount)
-	log.Println("")
 
 	planConfig := licensekit.GetPlanConfig(plan)
 	successCount := 0
@@ -518,16 +380,9 @@ func generateEnterpriseLicense(log loggers.Logger) error {
 
 	results := []LicenseResult{}
 
-	for i := 0; i < requestCount; i++ {
+	for i := 0; i < 1; i++ {
 		// 使用预定义的 Key 或生成新 Key
-		var licenseKey string
-		if i == 0 && os.Getenv("ENTERPRISE_LICENSE_KEY") != "" {
-			licenseKey = os.Getenv("ENTERPRISE_LICENSE_KEY")
-		} else {
-			licenseKey = licensekit.GenerateLicenseKey()
-		}
-
-		log.Printf("   [%d/%d] Creating: %s", i+1, requestCount, licenseKey)
+		var licenseKey = licensekit.GenerateLicenseKey()
 
 		// 创建用户
 		email := licensekit.LicenseKeyToEmail(licenseKey)
@@ -554,27 +409,6 @@ func generateEnterpriseLicense(log loggers.Logger) error {
 		log.Println("")
 	}
 
-	// 7. 上报使用情况（仅付费版）
-	if masterLicenseKey != "" && masterLicenseKey != "FREE" && successCount > 0 {
-		log.Println("📊 Reporting usage to license server...")
-		if err := licensekit.ReportUsage(masterLicenseKey, successCount); err != nil {
-			log.Warnf("⚠️  Failed to report usage: %v", err)
-			log.Println("   (This won't affect your licenses)")
-		} else {
-			log.Println("✅ Usage reported")
-		}
-		log.Println("")
-	}
-
-	// 8. 显示结果
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Println("📋 Generation Summary")
-	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	log.Printf("   Requested: %d\n", requestCount)
-	log.Printf("   Success: %d\n", successCount)
-	log.Printf("   Failed: %d\n", requestCount-successCount)
-	log.Println("")
-
 	if len(results) > 0 {
 		log.Println("✅ Generated Licenses:")
 		log.Println("")
@@ -600,13 +434,9 @@ func configureEnterpriseSite(log loggers.Logger) error {
 	log.Println("")
 	log.Println("🌐 Configuring Enterprise Site...")
 
-	domain := os.Getenv("ENTERPRISE_SITE_DOMAIN")
-	if domain == "" {
-		domain = os.Getenv("DOMAIN")
-	}
-
 	coreDomain := os.Getenv("DOMAIN")
 	isLocalhost := coreDomain == "localhost" || coreDomain == "127.0.0.1"
+	domain := coreDomain
 
 	sitePath := os.Getenv("ENTERPRISE_SITE_PATH")
 	if sitePath == "" {

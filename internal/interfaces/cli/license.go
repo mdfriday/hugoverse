@@ -8,7 +8,6 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/mdfriday/hugoverse/internal/infrastructure/licensekit"
@@ -182,7 +181,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	apiBase := fs.String("api", "http://127.0.0.1:1314", "API base URL")
 	plan := fs.String("plan", "", "License plan (free|starter|creator|pro|lifetime)")
 	count := fs.Int("count", 1, "Number of licenses to generate")
-	masterLicenseFlag := fs.String("master", "", "Master License key (optional, defaults to env MASTER_LICENSE)")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -220,57 +218,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 	fmt.Printf("   Max Devices: %d\n", planConfig.MaxDevices)
 	fmt.Printf("   Max IPs: %d\n", planConfig.MaxIPs)
 	fmt.Println()
-
-	// 【新增】验证 Master License 配额
-	masterLicense := *masterLicenseFlag
-	if masterLicense == "" {
-		masterLicense = os.Getenv("MASTER_LICENSE")
-	}
-
-	fmt.Println("🔑 Verifying Master License...")
-	masterInfo, err := licensekit.VerifyMasterLicenseOnline(masterLicense)
-	if err != nil {
-		fmt.Printf("⚠️  Master License verification failed: %v\n", err)
-		fmt.Println("   Falling back to FREE mode (1 license)\n")
-	}
-
-	// 显示配额信息
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Println("📊 License Quota Information")
-	fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Printf("   Type: %s\n", masterInfo.Type)
-	fmt.Printf("   Max Sub-Licenses: %d\n", masterInfo.MaxSubLicenses)
-	fmt.Printf("   Used: %d\n", masterInfo.UsedLicenses)
-	fmt.Printf("   Remaining: %d\n", masterInfo.GetRemainingQuota())
-	if !masterInfo.ExpiryDate.IsZero() {
-		fmt.Printf("   Expires: %s\n", masterInfo.ExpiryDate.Format("2006-01-02"))
-	}
-	fmt.Println()
-
-	// 检查配额
-	if !masterInfo.CanGenerateMore(*count) {
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		fmt.Println("❌ License Quota Exceeded")
-		fmt.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-		fmt.Printf("   Current: %d / %d licenses\n", masterInfo.UsedLicenses, masterInfo.MaxSubLicenses)
-		fmt.Printf("   Requested: %d\n", *count)
-		fmt.Printf("   Available: %d\n", masterInfo.GetRemainingQuota())
-		fmt.Println()
-		fmt.Println("💡 To generate more licenses:")
-		fmt.Println("   1. Visit: https://mdfriday.com/pricing")
-		fmt.Println("   2. Purchase a Master License")
-		fmt.Println("   3. Set environment: export MASTER_LICENSE=YOUR_KEY")
-		fmt.Println("   4. Or use flag: -master YOUR_KEY")
-		fmt.Println()
-		return fmt.Errorf("license quota exceeded")
-	}
-
-	if masterInfo.Type == "free" {
-		fmt.Println("💡 Need more licenses?")
-		fmt.Println("   Visit: https://mdfriday.com/pricing")
-		fmt.Println("   Purchase a Master License to unlock more quotas")
-		fmt.Println()
-	}
 
 	// 第一步：登录获取 token
 	fmt.Println("📝 Step 1: Logging in...")
@@ -334,18 +281,6 @@ func (cmd *licenseCmd) runGenerate(args []string) error {
 			})
 		}
 		fmt.Println() // 空行分隔每个 license
-	}
-
-	// 【新增】上报使用情况
-	if successCount > 0 && masterLicense != "" && masterLicense != "FREE" {
-		fmt.Println("📊 Reporting usage to license server...")
-		if err := licensekit.ReportUsage(masterLicense, successCount); err != nil {
-			fmt.Printf("⚠️  Failed to report usage: %v\n", err)
-			fmt.Println("   (This won't affect your licenses)")
-		} else {
-			fmt.Println("✅ Usage reported")
-		}
-		fmt.Println()
 	}
 
 	// 第三步：显示结果
