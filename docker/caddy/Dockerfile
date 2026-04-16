@@ -15,6 +15,9 @@ FROM caddy:2.10-alpine
 # 从构建阶段复制自定义 Caddy
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy
 
+# 复制初始 Caddyfile
+COPY Caddyfile.initial /etc/caddy/Caddyfile
+
 # 验证 DNSPod 插件已安装
 RUN caddy list-modules | grep dns.providers.tencentcloud || \
     (echo "ERROR: tencentcloud DNS module not found" && exit 1)

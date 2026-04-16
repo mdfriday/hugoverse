@@ -11,6 +11,31 @@ echo "📁 Data Directory: ${HUGOVERSE_DATA_DIR:-/data}"
 echo "🕒 Timezone: $(date +%Z) ($(date +%Y-%m-%d\ %H:%M:%S))"
 echo ""
 
+# ========== 初始化数据目录 ==========
+echo "📁 Initializing data directories..."
+
+# 确保必要的子目录存在
+DATA_DIR="${HUGOVERSE_DATA_DIR:-/data}"
+for dir in logs publish enterprise static backups cache; do
+    if [ ! -d "$DATA_DIR/$dir" ]; then
+        mkdir -p "$DATA_DIR/$dir" 2>/dev/null || true
+    fi
+done
+
+# 检查并修复权限（如果当前用户无法写入）
+if [ ! -w "$DATA_DIR" ]; then
+    echo "⚠️  Warning: No write permission to $DATA_DIR"
+    echo "   This is expected when using host directory mounts."
+    echo "   Please ensure the host directory is writable by UID 1000 (hugoverse user)"
+    echo ""
+    echo "   Quick fix on the host machine:"
+    echo "   sudo chown -R 1000:1000 ./data/hugoverse"
+    echo ""
+fi
+
+echo "✅ Data directories initialized"
+echo ""
+
 # ========== 函数：等待服务就绪 ==========
 wait_for_service() {
     local name=$1
