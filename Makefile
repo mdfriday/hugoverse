@@ -9,6 +9,10 @@
 VERSION ?= latest
 COUCHDB_VERSION ?= 3.3
 
+# Platform configuration (for multi-architecture builds)
+PLATFORM ?= linux/amd64
+BUILD_PLATFORMS ?= linux/amd64,linux/arm64
+
 # Docker Hub configuration
 DOCKER_ORG = mdfriday
 CADDY_IMAGE = $(DOCKER_ORG)/caddy
@@ -69,11 +73,18 @@ help:
 	@echo "  make release-all               - Build and push to all registries"
 	@echo ""
 	@echo "💡 Examples:"
-	@echo "  make release VERSION=2.0.0           - Release to Docker Hub only"
-	@echo "  make release-all VERSION=2.0.0       - Release to all registries"
-	@echo "  make aliyun-push-all                 - Push existing images to Aliyun"
-	@echo "  make aliyun-pull-couchdb             - Pull CouchDB:3.3"
-	@echo "  make aliyun-push-couchdb             - Push CouchDB to Aliyun"
+	@echo "  make release VERSION=2.0.0                    - Release to Docker Hub only"
+	@echo "  make release-all VERSION=2.0.0                - Release to all registries"
+	@echo "  make aliyun-push-all                          - Push existing images to Aliyun"
+	@echo "  make aliyun-pull-couchdb                      - Pull CouchDB:3.3"
+	@echo "  make aliyun-push-couchdb                      - Push CouchDB to Aliyun"
+	@echo ""
+	@echo "🏗️  Platform Options:"
+	@echo "  make docker-build-all PLATFORM=linux/amd64    - Build for AMD64 (x86_64)"
+	@echo "  make docker-build-all PLATFORM=linux/arm64    - Build for ARM64 (Apple Silicon)"
+	@echo "  make aliyun-pull-couchdb PLATFORM=linux/amd64 - Pull AMD64 CouchDB"
+	@echo ""
+	@echo "  Default PLATFORM: linux/amd64 (for cloud servers)"
 	@echo ""
 
 # Build Go binary
@@ -178,15 +189,38 @@ docker-login:
 docker-build-caddy:
 	@echo "🏗️  Building Caddy image..."
 	@echo "   Version: $(VERSION)"
-	@if [ "$(VERSION)" = "latest" ]; then \
-		docker build -t $(CADDY_IMAGE):latest \
-			-f docker/caddy/Dockerfile \
-			docker/caddy/; \
+	@echo "   Platform: $(PLATFORM)"
+	@if command -v docker-buildx >/dev/null 2>&1 || docker buildx version >/dev/null 2>&1; then \
+		echo "   Using buildx for cross-platform build"; \
+		if [ "$(VERSION)" = "latest" ]; then \
+			docker buildx build --platform $(PLATFORM) \
+				-t $(CADDY_IMAGE):latest \
+				-f docker/caddy/Dockerfile \
+				--load \
+				docker/caddy/; \
+		else \
+			docker buildx build --platform $(PLATFORM) \
+				-t $(CADDY_IMAGE):$(VERSION) \
+				-t $(CADDY_IMAGE):latest \
+				-f docker/caddy/Dockerfile \
+				--load \
+				docker/caddy/; \
+		fi; \
 	else \
-		docker build -t $(CADDY_IMAGE):$(VERSION) \
-			-t $(CADDY_IMAGE):latest \
-			-f docker/caddy/Dockerfile \
-			docker/caddy/; \
+		echo "   Using standard docker build (buildx not available)"; \
+		echo "   ⚠️  Note: Building for current platform only"; \
+		if [ "$(VERSION)" = "latest" ]; then \
+			docker build \
+				-t $(CADDY_IMAGE):latest \
+				-f docker/caddy/Dockerfile \
+				docker/caddy/; \
+		else \
+			docker build \
+				-t $(CADDY_IMAGE):$(VERSION) \
+				-t $(CADDY_IMAGE):latest \
+				-f docker/caddy/Dockerfile \
+				docker/caddy/; \
+		fi; \
 	fi
 	@echo "✅ Caddy image built: $(CADDY_IMAGE):$(VERSION)"
 
@@ -194,15 +228,38 @@ docker-build-caddy:
 docker-build-hugoverse:
 	@echo "🏗️  Building Hugoverse image..."
 	@echo "   Version: $(VERSION)"
-	@if [ "$(VERSION)" = "latest" ]; then \
-		docker build -t $(HUGOVERSE_IMAGE):latest \
-			-f docker/hugoverse/Dockerfile \
-			.; \
+	@echo "   Platform: $(PLATFORM)"
+	@if command -v docker-buildx >/dev/null 2>&1 || docker buildx version >/dev/null 2>&1; then \
+		echo "   Using buildx for cross-platform build"; \
+		if [ "$(VERSION)" = "latest" ]; then \
+			docker buildx build --platform $(PLATFORM) \
+				-t $(HUGOVERSE_IMAGE):latest \
+				-f docker/hugoverse/Dockerfile \
+				--load \
+				.; \
+		else \
+			docker buildx build --platform $(PLATFORM) \
+				-t $(HUGOVERSE_IMAGE):$(VERSION) \
+				-t $(HUGOVERSE_IMAGE):latest \
+				-f docker/hugoverse/Dockerfile \
+				--load \
+				.; \
+		fi; \
 	else \
-		docker build -t $(HUGOVERSE_IMAGE):$(VERSION) \
-			-t $(HUGOVERSE_IMAGE):latest \
-			-f docker/hugoverse/Dockerfile \
-			.; \
+		echo "   Using standard docker build (buildx not available)"; \
+		echo "   ⚠️  Note: Building for current platform only"; \
+		if [ "$(VERSION)" = "latest" ]; then \
+			docker build \
+				-t $(HUGOVERSE_IMAGE):latest \
+				-f docker/hugoverse/Dockerfile \
+				.; \
+		else \
+			docker build \
+				-t $(HUGOVERSE_IMAGE):$(VERSION) \
+				-t $(HUGOVERSE_IMAGE):latest \
+				-f docker/hugoverse/Dockerfile \
+				.; \
+		fi; \
 	fi
 	@echo "✅ Hugoverse image built: $(HUGOVERSE_IMAGE):$(VERSION)"
 
@@ -302,7 +359,13 @@ aliyun-login:
 # Pull CouchDB from Docker Hub
 aliyun-pull-couchdb:
 	@echo "📥 Pulling CouchDB $(COUCHDB_VERSION) from Docker Hub..."
-	@docker pull $(COUCHDB_IMAGE):$(COUCHDB_VERSION)
+	@if docker pull --help 2>&1 | grep -q -- --platform; then \
+		echo "   Platform: $(PLATFORM)"; \
+		docker pull --platform $(PLATFORM) $(COUCHDB_IMAGE):$(COUCHDB_VERSION); \
+	else \
+		echo "   ⚠️  Note: --platform not supported, pulling default architecture"; \
+		docker pull $(COUCHDB_IMAGE):$(COUCHDB_VERSION); \
+	fi
 	@echo "✅ CouchDB image pulled: $(COUCHDB_IMAGE):$(COUCHDB_VERSION)"
 
 # Tag CouchDB image for Aliyun
