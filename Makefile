@@ -1,12 +1,27 @@
 .PHONY: help build build-docker up down restart logs clean test test-local verify-local \
         docker-login docker-build-caddy docker-build-hugoverse docker-build-all \
-        docker-push-caddy docker-push-hugoverse docker-push-all release
+        docker-push-caddy docker-push-hugoverse docker-push-all release \
+        aliyun-login aliyun-pull-couchdb aliyun-tag-couchdb aliyun-tag-caddy aliyun-tag-hugoverse aliyun-tag-all \
+        aliyun-push-couchdb aliyun-push-caddy aliyun-push-hugoverse aliyun-push-all \
+        publish-all release-all
 
 # Version management
 VERSION ?= latest
+COUCHDB_VERSION ?= 3.3
+
+# Docker Hub configuration
 DOCKER_ORG = mdfriday
 CADDY_IMAGE = $(DOCKER_ORG)/caddy
 HUGOVERSE_IMAGE = $(DOCKER_ORG)/hugoverse
+COUCHDB_IMAGE = couchdb
+
+# Aliyun Container Registry configuration
+ALIYUN_REGISTRY = registry.cn-hangzhou.aliyuncs.com
+ALIYUN_REGISTRY_VPC = registry-vpc.cn-hangzhou.aliyuncs.com
+ALIYUN_NAMESPACE = mdfriday
+ALIYUN_CADDY_IMAGE = $(ALIYUN_REGISTRY)/$(ALIYUN_NAMESPACE)/caddy
+ALIYUN_HUGOVERSE_IMAGE = $(ALIYUN_REGISTRY)/$(ALIYUN_NAMESPACE)/hugoverse
+ALIYUN_COUCHDB_IMAGE = $(ALIYUN_REGISTRY)/$(ALIYUN_NAMESPACE)/couchdb
 
 # Default target
 help:
@@ -32,14 +47,33 @@ help:
 	@echo "  make docker-build-caddy    - Build Caddy image"
 	@echo "  make docker-build-hugoverse- Build Hugoverse image"
 	@echo "  make docker-build-all      - Build all images"
-	@echo "  make docker-push-caddy     - Push Caddy image"
-	@echo "  make docker-push-hugoverse - Push Hugoverse image"
-	@echo "  make docker-push-all       - Push all images"
-	@echo "  make release               - Build and push all images (with version)"
+	@echo "  make docker-push-caddy     - Push Caddy image to Docker Hub"
+	@echo "  make docker-push-hugoverse - Push Hugoverse image to Docker Hub"
+	@echo "  make docker-push-all       - Push all images to Docker Hub"
+	@echo "  make release               - Build and push to Docker Hub"
+	@echo ""
+	@echo "☁️  Aliyun Container Registry:"
+	@echo "  make aliyun-login              - Login to Aliyun Registry"
+	@echo "  make aliyun-pull-couchdb       - Pull CouchDB from Docker Hub"
+	@echo "  make aliyun-tag-couchdb        - Tag CouchDB for Aliyun"
+	@echo "  make aliyun-tag-caddy          - Tag Caddy for Aliyun"
+	@echo "  make aliyun-tag-hugoverse      - Tag Hugoverse for Aliyun"
+	@echo "  make aliyun-tag-all            - Tag all images for Aliyun"
+	@echo "  make aliyun-push-couchdb       - Push CouchDB to Aliyun"
+	@echo "  make aliyun-push-caddy         - Push Caddy to Aliyun"
+	@echo "  make aliyun-push-hugoverse     - Push Hugoverse to Aliyun"
+	@echo "  make aliyun-push-all           - Push all images to Aliyun"
+	@echo ""
+	@echo "🚀 Publish to All Registries:"
+	@echo "  make publish-all               - Push to Docker Hub + Aliyun"
+	@echo "  make release-all               - Build and push to all registries"
 	@echo ""
 	@echo "💡 Examples:"
-	@echo "  make release VERSION=2.0.0   - Release version 2.0.0"
-	@echo "  make docker-build-all        - Build with 'latest' tag"
+	@echo "  make release VERSION=2.0.0           - Release to Docker Hub only"
+	@echo "  make release-all VERSION=2.0.0       - Release to all registries"
+	@echo "  make aliyun-push-all                 - Push existing images to Aliyun"
+	@echo "  make aliyun-pull-couchdb             - Pull CouchDB:3.3"
+	@echo "  make aliyun-push-couchdb             - Push CouchDB to Aliyun"
 	@echo ""
 
 # Build Go binary
@@ -252,6 +286,190 @@ release:
 	@echo "   2. Create .env.local with your configuration"
 	@echo "   3. Run: docker-compose --env-file .env.local pull"
 	@echo "   4. Run: docker-compose --env-file .env.local up -d"
+	@echo ""
+
+# ========== Aliyun Container Registry Commands ==========
+
+# Login to Aliyun Container Registry
+aliyun-login:
+	@echo "🔐 Logging in to Aliyun Container Registry..."
+	@echo "   Registry: $(ALIYUN_REGISTRY)"
+	@echo ""
+	@echo "Please enter your Aliyun credentials:"
+	@docker login $(ALIYUN_REGISTRY)
+	@echo "✅ Aliyun login successful"
+
+# Pull CouchDB from Docker Hub
+aliyun-pull-couchdb:
+	@echo "📥 Pulling CouchDB $(COUCHDB_VERSION) from Docker Hub..."
+	@docker pull $(COUCHDB_IMAGE):$(COUCHDB_VERSION)
+	@echo "✅ CouchDB image pulled: $(COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+
+# Tag CouchDB image for Aliyun
+aliyun-tag-couchdb:
+	@echo "🏷️  Tagging CouchDB image for Aliyun..."
+	@docker tag $(COUCHDB_IMAGE):$(COUCHDB_VERSION) $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)
+	@docker tag $(COUCHDB_IMAGE):$(COUCHDB_VERSION) $(ALIYUN_COUCHDB_IMAGE):latest
+	@echo "✅ Tagged: $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+	@echo "✅ Tagged: $(ALIYUN_COUCHDB_IMAGE):latest"
+
+# Tag Caddy image for Aliyun
+aliyun-tag-caddy:
+	@echo "🏷️  Tagging Caddy image for Aliyun..."
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker tag $(CADDY_IMAGE):latest $(ALIYUN_CADDY_IMAGE):latest; \
+		echo "✅ Tagged: $(ALIYUN_CADDY_IMAGE):latest"; \
+	else \
+		docker tag $(CADDY_IMAGE):$(VERSION) $(ALIYUN_CADDY_IMAGE):$(VERSION); \
+		docker tag $(CADDY_IMAGE):latest $(ALIYUN_CADDY_IMAGE):latest; \
+		echo "✅ Tagged: $(ALIYUN_CADDY_IMAGE):$(VERSION)"; \
+		echo "✅ Tagged: $(ALIYUN_CADDY_IMAGE):latest"; \
+	fi
+
+# Tag Hugoverse image for Aliyun
+aliyun-tag-hugoverse:
+	@echo "🏷️  Tagging Hugoverse image for Aliyun..."
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker tag $(HUGOVERSE_IMAGE):latest $(ALIYUN_HUGOVERSE_IMAGE):latest; \
+		echo "✅ Tagged: $(ALIYUN_HUGOVERSE_IMAGE):latest"; \
+	else \
+		docker tag $(HUGOVERSE_IMAGE):$(VERSION) $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION); \
+		docker tag $(HUGOVERSE_IMAGE):latest $(ALIYUN_HUGOVERSE_IMAGE):latest; \
+		echo "✅ Tagged: $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION)"; \
+		echo "✅ Tagged: $(ALIYUN_HUGOVERSE_IMAGE):latest"; \
+	fi
+
+# Tag all images for Aliyun
+aliyun-tag-all: aliyun-tag-couchdb aliyun-tag-caddy aliyun-tag-hugoverse
+	@echo ""
+	@echo "✅ All images tagged for Aliyun successfully"
+	@echo "   - $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+	@echo "   - $(ALIYUN_CADDY_IMAGE):$(VERSION)"
+	@echo "   - $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION)"
+
+# Push CouchDB image to Aliyun
+aliyun-push-couchdb: aliyun-tag-couchdb
+	@echo "📤 Pushing CouchDB image to Aliyun Registry..."
+	@docker push $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)
+	@docker push $(ALIYUN_COUCHDB_IMAGE):latest
+	@echo "✅ CouchDB image pushed: $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+
+# Push Caddy image to Aliyun
+aliyun-push-caddy: aliyun-tag-caddy
+	@echo "📤 Pushing Caddy image to Aliyun Registry..."
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker push $(ALIYUN_CADDY_IMAGE):latest; \
+	else \
+		docker push $(ALIYUN_CADDY_IMAGE):$(VERSION); \
+		docker push $(ALIYUN_CADDY_IMAGE):latest; \
+	fi
+	@echo "✅ Caddy image pushed: $(ALIYUN_CADDY_IMAGE):$(VERSION)"
+
+# Push Hugoverse image to Aliyun
+aliyun-push-hugoverse: aliyun-tag-hugoverse
+	@echo "📤 Pushing Hugoverse image to Aliyun Registry..."
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker push $(ALIYUN_HUGOVERSE_IMAGE):latest; \
+	else \
+		docker push $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION); \
+		docker push $(ALIYUN_HUGOVERSE_IMAGE):latest; \
+	fi
+	@echo "✅ Hugoverse image pushed: $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION)"
+
+# Push all images to Aliyun
+aliyun-push-all: aliyun-tag-all aliyun-push-couchdb aliyun-push-caddy aliyun-push-hugoverse
+	@echo ""
+	@echo "✅ All images pushed to Aliyun successfully"
+	@echo "   - $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+	@echo "   - $(ALIYUN_CADDY_IMAGE):$(VERSION)"
+	@echo "   - $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION)"
+
+# ========== Publish to All Registries ==========
+
+# Push to Docker Hub + Aliyun
+publish-all:
+	@echo ""
+	@echo "🚀 Publishing to All Registries"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "Step 1/2: Pushing to Docker Hub..."
+	@$(MAKE) docker-push-all VERSION=$(VERSION)
+	@echo ""
+	@echo "Step 2/2: Pushing to Aliyun Registry..."
+	@$(MAKE) aliyun-push-all VERSION=$(VERSION)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Published to all registries successfully!"
+	@echo ""
+	@echo "📋 Docker Hub:"
+	@echo "   • $(CADDY_IMAGE):$(VERSION)"
+	@echo "   • $(HUGOVERSE_IMAGE):$(VERSION)"
+	@echo ""
+	@echo "📋 Aliyun Registry:"
+	@echo "   • $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+	@echo "   • $(ALIYUN_CADDY_IMAGE):$(VERSION)"
+	@echo "   • $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION)"
+	@echo ""
+
+# Build and push to all registries
+release-all:
+	@if [ "$(VERSION)" = "latest" ]; then \
+		echo "⚠️  Warning: Releasing with 'latest' tag"; \
+		echo "   Use 'make release-all VERSION=x.y.z' to specify a version"; \
+		read -p "Continue? (y/N): " confirm; \
+		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
+			echo "❌ Release cancelled"; \
+			exit 1; \
+		fi; \
+	fi
+	@echo ""
+	@echo "📦 Releasing Hugoverse $(VERSION) to All Registries"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "Step 1/4: Building images..."
+	@$(MAKE) docker-build-all VERSION=$(VERSION)
+	@echo ""
+	@echo "Step 2/4: Verifying Docker Hub login..."
+	@docker info > /dev/null 2>&1 || (echo "❌ Docker not running" && exit 1)
+	@if ! docker info 2>/dev/null | grep -q "Username:"; then \
+		echo "⚠️  Not logged in to Docker Hub"; \
+		$(MAKE) docker-login; \
+	fi
+	@echo ""
+	@echo "Step 3/4: Pushing to Docker Hub..."
+	@$(MAKE) docker-push-all VERSION=$(VERSION)
+	@echo ""
+	@echo "Step 4/4: Pushing to Aliyun Registry..."
+	@$(MAKE) aliyun-push-all VERSION=$(VERSION)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Release $(VERSION) published to all registries!"
+	@echo ""
+	@echo "📋 Docker Hub:"
+	@echo "   • $(CADDY_IMAGE):$(VERSION)"
+	@echo "   • $(HUGOVERSE_IMAGE):$(VERSION)"
+	@if [ "$(VERSION)" != "latest" ]; then \
+		echo "   • $(CADDY_IMAGE):latest"; \
+		echo "   • $(HUGOVERSE_IMAGE):latest"; \
+	fi
+	@echo ""
+	@echo "📋 Aliyun Registry:"
+	@echo "   • $(ALIYUN_COUCHDB_IMAGE):$(COUCHDB_VERSION)"
+	@echo "   • $(ALIYUN_COUCHDB_IMAGE):latest"
+	@echo "   • $(ALIYUN_CADDY_IMAGE):$(VERSION)"
+	@echo "   • $(ALIYUN_HUGOVERSE_IMAGE):$(VERSION)"
+	@if [ "$(VERSION)" != "latest" ]; then \
+		echo "   • $(ALIYUN_CADDY_IMAGE):latest"; \
+		echo "   • $(ALIYUN_HUGOVERSE_IMAGE):latest"; \
+	fi
+	@echo ""
+	@echo "🚀 Deploy on your server:"
+	@echo ""
+	@echo "From Docker Hub:"
+	@echo "   docker-compose --env-file .env.local pull"
+	@echo ""
+	@echo "From Aliyun Registry (faster in China):"
+	@echo "   docker-compose -f docker-compose.yml -f docker-compose.aliyun.yml --env-file .env.local pull"
 	@echo ""
 
 # Install

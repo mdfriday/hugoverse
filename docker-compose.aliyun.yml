@@ -1,0 +1,18 @@
+# Docker Compose configuration for Aliyun Container Registry
+# Use this file to pull images from Aliyun Registry (faster in China)
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.aliyun.yml --env-file .env.local up -d
+
+services:
+  couchdb:
+    # 使用阿里云镜像仓库
+    image: registry.cn-hangzhou.aliyuncs.com/mdfriday/couchdb:3.3
+
+  caddy:
+    # 使用阿里云镜像仓库
+    image: registry.cn-hangzhou.aliyuncs.com/mdfriday/caddy:${VERSION:-latest}
+
+  hugoverse:
+    # 使用阿里云镜像仓库
+    image: registry.cn-hangzhou.aliyuncs.com/mdfriday/hugoverse:${VERSION:-latest}
