@@ -81,6 +81,7 @@ func (m *InstanceManager) GetOrCreateInstance() (*contentVO.Instance, error) {
 	}
 
 	// 3. 创建新实例
+	now := time.Now().Unix()
 	instance := &contentVO.Instance{
 		InstanceID:          instanceID,
 		TotalLicenses:       0,
@@ -89,9 +90,14 @@ func (m *InstanceManager) GetOrCreateInstance() (*contentVO.Instance, error) {
 		IPAddress:           m.getServerIP(),
 		UserAgent:           m.getUserAgent(),
 		Status:              contentVO.InstanceActive,
-		LastSeenAt:          time.Now().Unix(),
-		CreatedAt:           time.Now().Unix(),
+		LastSeenAt:          now,
+		CreatedAt:           now,
 		AllowOfflineSeconds: halfYearSeconds,
+		Item: contentVO.Item{
+			Timestamp: now,
+			Updated:   now,
+			Namespace: "Instance",
+		},
 	}
 
 	// 4. 保存到本地文件
@@ -374,6 +380,7 @@ func (m *InstanceManager) SaveLocalDataDirect(localData *LocalInstanceData) erro
 
 // buildInstanceFromLocal 从本地数据构建 Instance 对象
 func (m *InstanceManager) buildInstanceFromLocal(localData *LocalInstanceData) *contentVO.Instance {
+	now := time.Now().Unix()
 	return &contentVO.Instance{
 		InstanceID:          localData.InstanceID,
 		TotalLicenses:       localData.TotalLicenses,
@@ -385,5 +392,10 @@ func (m *InstanceManager) buildInstanceFromLocal(localData *LocalInstanceData) *
 		LastSeenAt:          localData.LastSeenAt,
 		CreatedAt:           localData.CreatedAt,
 		AllowOfflineSeconds: localData.AllowOfflineSeconds,
+		Item: contentVO.Item{
+			Timestamp: localData.CreatedAt,
+			Updated:   now,
+			Namespace: "Instance",
+		},
 	}
 }

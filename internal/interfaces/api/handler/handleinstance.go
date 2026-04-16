@@ -96,6 +96,11 @@ func (s *Handler) CreateInstanceHandler(res http.ResponseWriter, req *http.Reque
 		LastSeenAt:          now,
 		CreatedAt:           now,
 		AllowOfflineSeconds: allowOfflineSeconds,
+		Item: contentVO.Item{
+			Timestamp: now,
+			Updated:   now,
+			Namespace: "Instance",
+		},
 	}
 
 	// 设置默认值
@@ -216,8 +221,10 @@ func (s *Handler) UpdateInstanceHandler(res http.ResponseWriter, req *http.Reque
 		}
 	}
 
-	// 更新心跳时间
-	instance.LastSeenAt = time.Now().Unix()
+	// 更新心跳时间和 Item 时间戳
+	now := time.Now().Unix()
+	instance.LastSeenAt = now
+	instance.Item.Updated = now
 
 	// 保存到数据库
 	if err := s.contentApp.UpdateInstance(instance); err != nil {
