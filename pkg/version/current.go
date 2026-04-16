@@ -3,6 +3,6 @@ package version
 var CurrentVersion = Version{
     Major:      0,
     Minor:      2,
-    PatchLevel: 48,
+    PatchLevel: 49,
     Suffix:     "",
 }

@@ -20,6 +20,7 @@ type Instance struct {
 
 	// 唯一标识
 	InstanceID string `json:"instance_id"` // SHA256(machine_id + salt)
+	Domain     string `json:"domain"`      // 实例域名
 
 	// 总体统计
 	TotalLicenses int `json:"total_licenses"`
@@ -49,6 +50,13 @@ func (l *Instance) MarshalEditor() ([]byte, error) {
 				"label":       "Instance ID",
 				"type":        "text",
 				"placeholder": "Enter the Instance ID here",
+			}),
+		},
+		editor.Field{
+			View: editor.Input("Domain", l, map[string]string{
+				"label":       "Domain",
+				"type":        "text",
+				"placeholder": "example.com",
 			}),
 		},
 		editor.Field{

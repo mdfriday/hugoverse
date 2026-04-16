@@ -44,6 +44,7 @@ func NewInstanceManager(log loggers.Logger, version string) *InstanceManager {
 // LocalInstanceData 本地实例数据（持久化到 JSON）
 type LocalInstanceData struct {
 	InstanceID          string `json:"instance_id"`
+	Domain              string `json:"domain"`                // 实例域名
 	LastSeenAt          int64  `json:"last_seen_at"`          // 最后心跳时间（用于判断离线）
 	LastSyncAt          int64  `json:"last_sync_at"`          // 最后同步时间（用于判断缓存是否过期）
 	CreatedAt           int64  `json:"created_at"`            // 首次安装时间
@@ -84,6 +85,7 @@ func (m *InstanceManager) GetOrCreateInstance() (*contentVO.Instance, error) {
 	now := time.Now().Unix()
 	instance := &contentVO.Instance{
 		InstanceID:          instanceID,
+		Domain:              m.getDomain(),
 		TotalLicenses:       0,
 		TotalTrials:         0,
 		Version:             m.version,
@@ -118,26 +120,54 @@ func (m *InstanceManager) GetLocalInstance() (*LocalInstanceData, error) {
 	return m.loadLocalData()
 }
 
+// IsLocalDevelopment 检测是否为本地开发环境
+func (m *InstanceManager) IsLocalDevelopment() bool {
+	domain := m.getDomain()
+	if domain == "" {
+		return false
+	}
+
+	// 检测本地开发环境的域名
+	localPatterns := []string{
+		"localhost",
+		"127.0.0.1",
+		"::1",
+	}
+
+	for _, pattern := range localPatterns {
+		if domain == pattern || strings.HasSuffix(domain, ".localhost") {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getDomain 获取实例域名
+func (m *InstanceManager) getDomain() string {
+	return getEnvOrDefault("DOMAIN", "localhost")
+}
+
 // CheckOfflineStatus 检查实例是否离线超时
 func (m *InstanceManager) CheckOfflineStatus() error {
 	localData, err := m.loadLocalData()
 	if err != nil {
 		return fmt.Errorf("failed to load local instance data: %w", err)
 	}
-	
+
 	if localData == nil {
 		return fmt.Errorf("no local instance data found")
 	}
-	
+
 	now := time.Now().Unix()
 	if localData.LastSeenAt > 0 && localData.AllowOfflineSeconds > 0 {
 		offlineDuration := now - localData.LastSeenAt
 		if offlineDuration > localData.AllowOfflineSeconds {
-			return fmt.Errorf("instance offline too long: %d seconds (allowed: %d)", 
+			return fmt.Errorf("instance offline too long: %d seconds (allowed: %d)",
 				offlineDuration, localData.AllowOfflineSeconds)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -147,12 +177,12 @@ func (m *InstanceManager) IsCacheValid() bool {
 	if err != nil || localData == nil {
 		return false
 	}
-	
+
 	// 如果从未同步过，缓存无效
 	if localData.LastSyncAt == 0 {
 		return false
 	}
-	
+
 	now := time.Now().Unix()
 	elapsed := now - localData.LastSyncAt
 	return elapsed < cacheValidSeconds
@@ -164,7 +194,7 @@ func (m *InstanceManager) UpdateFromRemote(remoteInstance *contentVO.Instance) e
 	if err != nil || localData == nil {
 		return fmt.Errorf("failed to load local data: %w", err)
 	}
-	
+
 	// 更新本地数据
 	now := time.Now().Unix()
 	localData.Status = string(remoteInstance.Status)
@@ -173,7 +203,7 @@ func (m *InstanceManager) UpdateFromRemote(remoteInstance *contentVO.Instance) e
 	localData.AllowOfflineSeconds = remoteInstance.AllowOfflineSeconds
 	localData.LastSeenAt = now
 	localData.LastSyncAt = now
-	
+
 	// 保存到文件
 	return m.SaveLocalDataDirect(localData)
 }
@@ -346,6 +376,7 @@ func (m *InstanceManager) saveLocalData(instance *contentVO.Instance) error {
 	now := time.Now().Unix()
 	localData := &LocalInstanceData{
 		InstanceID:          instance.InstanceID,
+		Domain:              instance.Domain,
 		LastSeenAt:          instance.LastSeenAt,
 		LastSyncAt:          now, // 更新同步时间
 		CreatedAt:           instance.CreatedAt,
@@ -354,7 +385,7 @@ func (m *InstanceManager) saveLocalData(instance *contentVO.Instance) error {
 		TotalLicenses:       instance.TotalLicenses,
 		TotalTrials:         instance.TotalTrials,
 	}
-	
+
 	return m.SaveLocalDataDirect(localData)
 }
 
@@ -364,17 +395,17 @@ func (m *InstanceManager) SaveLocalDataDirect(localData *LocalInstanceData) erro
 	if err != nil {
 		return fmt.Errorf("failed to marshal instance data: %w", err)
 	}
-	
+
 	// 确保目录存在
 	dir := filepath.Dir(m.localPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-	
+
 	if err := os.WriteFile(m.localPath, data, 0644); err != nil {
 		return fmt.Errorf("failed to write instance file: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -383,6 +414,7 @@ func (m *InstanceManager) buildInstanceFromLocal(localData *LocalInstanceData) *
 	now := time.Now().Unix()
 	return &contentVO.Instance{
 		InstanceID:          localData.InstanceID,
+		Domain:              localData.Domain,
 		TotalLicenses:       localData.TotalLicenses,
 		TotalTrials:         localData.TotalTrials,
 		Version:             m.version,

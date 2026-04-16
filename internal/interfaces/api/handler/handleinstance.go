@@ -34,6 +34,7 @@ func (s *Handler) CreateInstanceHandler(res http.ResponseWriter, req *http.Reque
 	}
 
 	instanceID := req.PostForm.Get("instance_id")
+	domain := req.PostForm.Get("domain")
 	version := req.PostForm.Get("version")
 	ipAddress := req.PostForm.Get("ip_address")
 	userAgent := req.PostForm.Get("user_agent")
@@ -87,6 +88,7 @@ func (s *Handler) CreateInstanceHandler(res http.ResponseWriter, req *http.Reque
 	now := time.Now().Unix()
 	instance := &contentVO.Instance{
 		InstanceID:          instanceID,
+		Domain:              domain,
 		TotalLicenses:       totalLicenses,
 		TotalTrials:         totalTrials,
 		Version:             version,
@@ -283,6 +285,14 @@ func (s *Handler) CheckInstanceStatus(next http.HandlerFunc) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		// 获取 InstanceManager
 		instanceMgr := application.NewInstanceManager(s.log, version.CurrentVersion.String())
+		
+		// 检测本地开发环境，直接放行
+		if instanceMgr.IsLocalDevelopment() {
+			s.log.Println("Local development environment detected, skipping instance check")
+			next(res, req)
+			return
+		}
+		
 		localData, err := instanceMgr.GetLocalInstance()
 
 		if err != nil || localData == nil {
@@ -411,6 +421,13 @@ func (s *Handler) updateInstanceStats() {
 // updateRemoteInstanceStats 异步更新远端实例统计数据
 // 统计当前运行实例的真实 license 和 trial 数量，并同步到远端数据库
 func (s *Handler) updateRemoteInstanceStats(instanceID string) {
+	// 检测本地开发环境，跳过远端更新
+	instanceMgr := application.NewInstanceManager(s.log, version.CurrentVersion.String())
+	if instanceMgr.IsLocalDevelopment() {
+		s.log.Println("Local development environment detected, skipping remote stats update")
+		return
+	}
+	
 	// 统计激活的 licenses
 	allLicenses := s.contentApp.AllContents("License")
 	licenseCount := len(allLicenses)

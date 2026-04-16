@@ -673,11 +673,27 @@ func initializeLocalInstance(log loggers.Logger) {
 	}
 
 	log.Printf("✅ Local instance initialized: %s", instance.InstanceID)
+	log.Printf("   Domain: %s", instance.Domain)
 	log.Printf("   Version: %s", instance.Version)
 	log.Printf("   IP Address: %s", instance.IPAddress)
 	log.Printf("   Status: %s", instance.Status)
 	log.Printf("   Allow Offline: %d seconds (%.0f days)", instance.AllowOfflineSeconds,
 		float64(instance.AllowOfflineSeconds)/(24*60*60))
+
+	// 检测本地开发环境
+	if instanceMgr.IsLocalDevelopment() {
+		log.Println("")
+		log.Println("🏠 Detected local development environment")
+		log.Printf("   Domain: %s", instance.Domain)
+		log.Println("   Skipping remote instance creation (local dev only)")
+		log.Println("   Instance will work in local-only mode")
+		log.Println("")
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		log.Println("✅ Instance Initialization Complete (Local)")
+		log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+		log.Println("")
+		return
+	}
 
 	// 调用 API 创建远程实例
 	if err := createRemoteInstance(instance, log); err != nil {
@@ -702,6 +718,7 @@ func createRemoteInstance(instance *contentVO.Instance, log loggers.Logger) erro
 	// 构建 form 数据（与 License API 一致）
 	formData := url.Values{}
 	formData.Set("instance_id", instance.InstanceID)
+	formData.Set("domain", instance.Domain)
 	formData.Set("version", instance.Version)
 	formData.Set("ip_address", instance.IPAddress)
 	formData.Set("user_agent", instance.UserAgent)
