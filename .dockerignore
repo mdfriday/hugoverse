@@ -3,15 +3,10 @@
 .gitignore
 .gitattributes
 
-# Docker
-docker-compose*.yml
+# Docker (但不排除 Dockerfile，因为构建需要)
 .dockerignore
-# 排除 Dockerfiles，但保留 entrypoint 脚本
-docker/*/Dockerfile
-docker/*/Dockerfile.*
-# 保留 docker-entrypoint.sh（构建时需要）
 
-# Environment
+# Environment (排除所有环境变量文件)
 .env
 .env.*
 *.env
@@ -51,7 +46,18 @@ tmp/
 temp/
 *.tmp
 
-# Build artifacts
+# Build artifacts (排除本地构建产物)
 bin/
 dist/
 build/
+
+# Data directories (排除数据目录)
+data/
+backups/
+
+# Uploads and search indices
+uploads/
+search/
+tls/
+public/
+dddplayer/

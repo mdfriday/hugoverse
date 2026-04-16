@@ -27,11 +27,12 @@ services:
 
   # ========== Caddy 服务（自定义构建，带 DNSPod）==========
   caddy:
-    build:
-      context: ./docker/caddy
-      dockerfile: Dockerfile
-    # 或使用预构建镜像
-    # image: mdfriday/hugoverse-caddy:${VERSION:-latest}
+    # 生产环境：使用预构建镜像（推荐）
+    image: mdfriday/caddy:${VERSION:-latest}
+    # 开发环境：本地构建
+    # build:
+    #   context: ./docker/caddy
+    #   dockerfile: Dockerfile
     container_name: hugoverse-caddy
     restart: unless-stopped
     ports:
@@ -67,11 +68,12 @@ services:
 
   # ========== Hugoverse 主服务 ==========
   hugoverse:
-    build:
-      context: .
-      dockerfile: docker/hugoverse/Dockerfile
-    # 或使用预构建镜像
-    # image: mdfriday/hugoverse:${VERSION:-latest}
+    # 生产环境：使用预构建镜像（推荐）
+    image: mdfriday/hugoverse:${VERSION:-latest}
+    # 开发环境：本地构建
+    # build:
+    #   context: .
+    #   dockerfile: docker/hugoverse/Dockerfile
     container_name: hugoverse-app
     restart: unless-stopped
     depends_on:

@@ -1,4 +1,12 @@
-.PHONY: help build build-docker up down restart logs clean test test-local verify-local
+.PHONY: help build build-docker up down restart logs clean test test-local verify-local \
+        docker-login docker-build-caddy docker-build-hugoverse docker-build-all \
+        docker-push-caddy docker-push-hugoverse docker-push-all release
+
+# Version management
+VERSION ?= latest
+DOCKER_ORG = mdfriday
+CADDY_IMAGE = $(DOCKER_ORG)/caddy
+HUGOVERSE_IMAGE = $(DOCKER_ORG)/hugoverse
 
 # Default target
 help:
@@ -19,8 +27,19 @@ help:
 	@echo "  make logs          - View logs"
 	@echo "  make clean         - Clean up containers and volumes"
 	@echo ""
-	@echo "📦 Release:"
-	@echo "  make release       - Build and push Docker images"
+	@echo "📦 Docker Hub:"
+	@echo "  make docker-login          - Login to Docker Hub"
+	@echo "  make docker-build-caddy    - Build Caddy image"
+	@echo "  make docker-build-hugoverse- Build Hugoverse image"
+	@echo "  make docker-build-all      - Build all images"
+	@echo "  make docker-push-caddy     - Push Caddy image"
+	@echo "  make docker-push-hugoverse - Push Hugoverse image"
+	@echo "  make docker-push-all       - Push all images"
+	@echo "  make release               - Build and push all images (with version)"
+	@echo ""
+	@echo "💡 Examples:"
+	@echo "  make release VERSION=2.0.0   - Release version 2.0.0"
+	@echo "  make docker-build-all        - Build with 'latest' tag"
 	@echo ""
 
 # Build Go binary
@@ -113,19 +132,127 @@ clean-local:
 	docker-compose --env-file .env.local down -v
 	rm -rf .env.local
 
-# Release: build and push images
+# ========== Docker Hub Commands ==========
+
+# Login to Docker Hub
+docker-login:
+	@echo "🔐 Logging in to Docker Hub..."
+	@docker login
+	@echo "✅ Docker login successful"
+
+# Build Caddy image
+docker-build-caddy:
+	@echo "🏗️  Building Caddy image..."
+	@echo "   Version: $(VERSION)"
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker build -t $(CADDY_IMAGE):latest \
+			-f docker/caddy/Dockerfile \
+			docker/caddy/; \
+	else \
+		docker build -t $(CADDY_IMAGE):$(VERSION) \
+			-t $(CADDY_IMAGE):latest \
+			-f docker/caddy/Dockerfile \
+			docker/caddy/; \
+	fi
+	@echo "✅ Caddy image built: $(CADDY_IMAGE):$(VERSION)"
+
+# Build Hugoverse image
+docker-build-hugoverse:
+	@echo "🏗️  Building Hugoverse image..."
+	@echo "   Version: $(VERSION)"
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker build -t $(HUGOVERSE_IMAGE):latest \
+			-f docker/hugoverse/Dockerfile \
+			.; \
+	else \
+		docker build -t $(HUGOVERSE_IMAGE):$(VERSION) \
+			-t $(HUGOVERSE_IMAGE):latest \
+			-f docker/hugoverse/Dockerfile \
+			.; \
+	fi
+	@echo "✅ Hugoverse image built: $(HUGOVERSE_IMAGE):$(VERSION)"
+
+# Build all images
+docker-build-all: docker-build-caddy docker-build-hugoverse
+	@echo ""
+	@echo "✅ All images built successfully"
+	@echo "   - $(CADDY_IMAGE):$(VERSION)"
+	@echo "   - $(HUGOVERSE_IMAGE):$(VERSION)"
+
+# Push Caddy image
+docker-push-caddy:
+	@echo "📤 Pushing Caddy image to Docker Hub..."
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker push $(CADDY_IMAGE):latest; \
+	else \
+		docker push $(CADDY_IMAGE):$(VERSION); \
+		docker push $(CADDY_IMAGE):latest; \
+	fi
+	@echo "✅ Caddy image pushed: $(CADDY_IMAGE):$(VERSION)"
+
+# Push Hugoverse image
+docker-push-hugoverse:
+	@echo "📤 Pushing Hugoverse image to Docker Hub..."
+	@if [ "$(VERSION)" = "latest" ]; then \
+		docker push $(HUGOVERSE_IMAGE):latest; \
+	else \
+		docker push $(HUGOVERSE_IMAGE):$(VERSION); \
+		docker push $(HUGOVERSE_IMAGE):latest; \
+	fi
+	@echo "✅ Hugoverse image pushed: $(HUGOVERSE_IMAGE):$(VERSION)"
+
+# Push all images
+docker-push-all: docker-push-caddy docker-push-hugoverse
+	@echo ""
+	@echo "✅ All images pushed successfully"
+	@echo "   - $(CADDY_IMAGE):$(VERSION)"
+	@echo "   - $(HUGOVERSE_IMAGE):$(VERSION)"
+
+# Release: build and push all images
 release:
-	@echo "📦 Building release images..."
-	@read -p "Enter version (e.g., 2.0.0): " VERSION; \
-	echo "Building version $$VERSION..."; \
-	docker build -t mdfriday/hugoverse:$$VERSION -t mdfriday/hugoverse:latest -f docker/hugoverse/Dockerfile .; \
-	docker build -t mdfriday/hugoverse-caddy:$$VERSION -t mdfriday/hugoverse-caddy:latest -f docker/caddy/Dockerfile docker/caddy/; \
-	echo "Pushing to Docker Hub..."; \
-	docker push mdfriday/hugoverse:$$VERSION; \
-	docker push mdfriday/hugoverse:latest; \
-	docker push mdfriday/hugoverse-caddy:$$VERSION; \
-	docker push mdfriday/hugoverse-caddy:latest; \
-	echo "✅ Release $$VERSION published"
+	@if [ "$(VERSION)" = "latest" ]; then \
+		echo "⚠️  Warning: Releasing with 'latest' tag"; \
+		echo "   Use 'make release VERSION=x.y.z' to specify a version"; \
+		read -p "Continue? (y/N): " confirm; \
+		if [ "$$confirm" != "y" ] && [ "$$confirm" != "Y" ]; then \
+			echo "❌ Release cancelled"; \
+			exit 1; \
+		fi; \
+	fi
+	@echo ""
+	@echo "📦 Releasing Hugoverse $(VERSION)"
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo ""
+	@echo "Step 1/3: Building images..."
+	@$(MAKE) docker-build-all VERSION=$(VERSION)
+	@echo ""
+	@echo "Step 2/3: Verifying Docker login..."
+	@docker info > /dev/null 2>&1 || (echo "❌ Docker not running" && exit 1)
+	@if ! docker info 2>/dev/null | grep -q "Username:"; then \
+		echo "⚠️  Not logged in to Docker Hub"; \
+		$(MAKE) docker-login; \
+	fi
+	@echo ""
+	@echo "Step 3/3: Pushing images to Docker Hub..."
+	@$(MAKE) docker-push-all VERSION=$(VERSION)
+	@echo ""
+	@echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+	@echo "✅ Release $(VERSION) published successfully!"
+	@echo ""
+	@echo "📋 Published images:"
+	@echo "   • $(CADDY_IMAGE):$(VERSION)"
+	@echo "   • $(HUGOVERSE_IMAGE):$(VERSION)"
+	@if [ "$(VERSION)" != "latest" ]; then \
+		echo "   • $(CADDY_IMAGE):latest"; \
+		echo "   • $(HUGOVERSE_IMAGE):latest"; \
+	fi
+	@echo ""
+	@echo "🚀 Deploy on your server:"
+	@echo "   1. Copy docker-compose.yml and .env.example to your server"
+	@echo "   2. Create .env.local with your configuration"
+	@echo "   3. Run: docker-compose --env-file .env.local pull"
+	@echo "   4. Run: docker-compose --env-file .env.local up -d"
+	@echo ""
 
 # Install
 install:
