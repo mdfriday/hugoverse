@@ -1,0 +1,20 @@
+# Docker Compose Override for Local Development
+# This file is automatically used by docker-compose when present
+# Use this for local development to build images locally instead of pulling from Docker Hub
+
+services:
+  caddy:
+    # 本地开发：使用本地构建
+    build:
+      context: ./docker/caddy
+      dockerfile: Dockerfile
+    # 覆盖主配置文件中的 image 设置
+    image: hugoverse-caddy:local
+
+  hugoverse:
+    # 本地开发：使用本地构建
+    build:
+      context: .
+      dockerfile: docker/hugoverse/Dockerfile
+    # 覆盖主配置文件中的 image 设置
+    image: hugoverse:local

@@ -43,11 +43,7 @@ data/
 backups/
 
 # Environment files
-.env.local
 .env.prod
-
-# Docker override files (local development)
-docker-compose.override.yml
 
 # Build artifacts
 bin/
