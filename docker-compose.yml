@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # ========== CouchDB 服务 ==========
   couchdb:
@@ -91,7 +89,6 @@ services:
       - ENV=prod
       
       # ---- 自动初始化 ----
-      - AUTO_INIT=${AUTO_INIT:-false}
       - VERSION=${VERSION:-latest}
       
       # ---- 域名配置 ----
@@ -125,24 +122,6 @@ services:
       - DNSPOD_ENABLED=${DNSPOD_ENABLED:-false}
       - DNSPOD_ID=${DNSPOD_ID}
       - DNSPOD_SECRET=${DNSPOD_SECRET}
-      
-      # ---- Master License 配置 ----
-      - MASTER_LICENSE=${MASTER_LICENSE}
-      
-      # ---- 企业 License 自动生成 ----
-      - AUTO_GENERATE_ENTERPRISE_LICENSE=${AUTO_GENERATE_ENTERPRISE_LICENSE:-true}
-      - ENTERPRISE_LICENSE_PLAN=${ENTERPRISE_LICENSE_PLAN:-enterprise}
-      - ENTERPRISE_LICENSE_COUNT=${ENTERPRISE_LICENSE_COUNT:-1}
-      - ENTERPRISE_LICENSE_KEY=${ENTERPRISE_LICENSE_KEY:-}
-      
-      # ---- 企业站点自动配置 ----
-      - AUTO_CONFIGURE_ENTERPRISE_SITE=${AUTO_CONFIGURE_ENTERPRISE_SITE:-true}
-      - ENTERPRISE_SITE_DOMAIN=${ENTERPRISE_SITE_DOMAIN:-${DOMAIN}}
-      - ENTERPRISE_SITE_PATH=${ENTERPRISE_SITE_PATH:-/data/enterprise}
-      
-      # ---- 备份配置 ----
-      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
-      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-7}
       
     volumes:
       # 本机目录（默认 ./data/hugoverse → 容器 /data；publish/enterprise 等均在此树下）

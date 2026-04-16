@@ -93,14 +93,6 @@ if [ "$AUTO_INIT" = "true" ]; then
     echo "   Caddy: ${CADDY_ADMIN_API:-not set}"
     echo ""
     
-    # Master License 信息
-    if [ -n "$MASTER_LICENSE" ]; then
-        echo "🔑 Master License: Provided (will verify online)"
-    else
-        echo "🆓 Master License: Not provided (FREE mode - 1 license)"
-    fi
-    echo ""
-    
     # DNSPod 配置
     if [ "$DNSPOD_ENABLED" = "true" ] && [ -n "$DNSPOD_ID" ]; then
         echo "🌐 DNSPod: ✅ Enabled (wildcard SSL for *.${DOMAIN})"
@@ -108,18 +100,6 @@ if [ "$AUTO_INIT" = "true" ]; then
         echo "🌐 DNSPod: ❌ Disabled (HTTP-01 validation only)"
     fi
     echo ""
-    
-    # 企业功能
-    if [ "$AUTO_GENERATE_ENTERPRISE_LICENSE" = "true" ]; then
-        echo "🏢 Enterprise License: ✅ Auto-generate"
-        echo "   Plan: ${ENTERPRISE_LICENSE_PLAN:-enterprise}"
-        echo "   Count: ${ENTERPRISE_LICENSE_COUNT:-1}"
-    fi
-    
-    if [ "$AUTO_CONFIGURE_ENTERPRISE_SITE" = "true" ]; then
-        echo "📁 Enterprise Site: ✅ Auto-configure"
-        echo "   Domain: ${ENTERPRISE_SITE_DOMAIN:-$DOMAIN}"
-    fi
     
     echo ""
     echo "📍 After initialization, access:"
