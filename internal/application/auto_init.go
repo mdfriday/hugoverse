@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"github.com/mdfriday/hugoverse/pkg/version"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/mdfriday/hugoverse/internal/domain/admin/entity"
+	contentVO "github.com/mdfriday/hugoverse/internal/domain/content/valueobject"
 	"github.com/mdfriday/hugoverse/internal/infrastructure/caddy"
 	"github.com/mdfriday/hugoverse/internal/infrastructure/licensekit"
 	"github.com/mdfriday/hugoverse/pkg/loggers"
@@ -108,7 +110,10 @@ func AutoInitialize(adminApp *entity.Admin, db SystemDatabase, contentApp Licens
 	// 7. 等待配置生效
 	time.Sleep(2 * time.Second)
 
-	// 8. 配置企业功能（延迟执行，等待服务器启动）
+	// 8. 初始化本地实例（首次）
+	go initializeLocalInstance(log)
+
+	// 9. 配置企业功能（延迟执行，等待服务器启动）
 	// 只在首次初始化时执行
 	go delayedEnterpriseFeaturesWithLicenseCheck(adminApp, contentApp, log)
 
@@ -642,4 +647,94 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// initializeLocalInstance 初始化本地实例
+// 在独立的 goroutine 中运行，等待服务器启动后再执行
+func initializeLocalInstance(log loggers.Logger) {
+	// 等待服务器启动
+	log.Println("⏳ Waiting for server to start before initializing instance...")
+	time.Sleep(5 * time.Second)
+
+	log.Println("")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("🖥️  Initializing Local Instance")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("")
+
+	// 创建 InstanceManager
+	instanceMgr := NewInstanceManager(log, version.CurrentVersion.String())
+
+	// 获取或创建实例
+	instance, err := instanceMgr.GetOrCreateInstance()
+	if err != nil {
+		log.Warnf("⚠️  Failed to create local instance: %v", err)
+		return
+	}
+
+	log.Printf("✅ Local instance initialized: %s", instance.InstanceID)
+	log.Printf("   Version: %s", instance.Version)
+	log.Printf("   IP Address: %s", instance.IPAddress)
+	log.Printf("   Status: %s", instance.Status)
+	log.Printf("   Allow Offline: %d seconds (%.0f days)", instance.AllowOfflineSeconds,
+		float64(instance.AllowOfflineSeconds)/(24*60*60))
+
+	// 调用 API 创建远程实例
+	if err := createRemoteInstance(instance, log); err != nil {
+		log.Warnf("⚠️  Failed to create remote instance: %v", err)
+		log.Println("   Instance will work in offline mode")
+	} else {
+		log.Println("✅ Remote instance created successfully")
+	}
+
+	log.Println("")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("✅ Instance Initialization Complete")
+	log.Println("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	log.Println("")
+}
+
+// createRemoteInstance 调用远端 API 创建实例
+// MDFriday 使用相同的代码库，提供相同的接口
+func createRemoteInstance(instance *contentVO.Instance, log loggers.Logger) error {
+	apiBase := "https://app.mdfriday.com"
+
+	// 构建 form 数据（与 License API 一致）
+	formData := url.Values{}
+	formData.Set("instance_id", instance.InstanceID)
+	formData.Set("version", instance.Version)
+	formData.Set("ip_address", instance.IPAddress)
+	formData.Set("user_agent", instance.UserAgent)
+	formData.Set("total_licenses", fmt.Sprintf("%d", instance.TotalLicenses))
+	formData.Set("total_trials", fmt.Sprintf("%d", instance.TotalTrials))
+	formData.Set("status", string(instance.Status))
+	formData.Set("allow_offline_seconds", fmt.Sprintf("%d", instance.AllowOfflineSeconds))
+
+	// 调用远端创建 API（MDFriday 使用相同的接口）
+	log.Printf("📡 Creating instance on remote server: %s", apiBase)
+	resp, err := http.Post(
+		apiBase+"/api/instance/create",
+		"application/x-www-form-urlencoded",
+		strings.NewReader(formData.Encode()),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to call remote API: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("remote API returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var response map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		return fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if success, ok := response["success"].(bool); !ok || !success {
+		return fmt.Errorf("remote API call failed: %v", response)
+	}
+
+	return nil
 }

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"github.com/mdfriday/hugoverse/pkg/version"
 	"net/http"
 	"os"
 )
@@ -20,7 +21,7 @@ func (s *Handler) HealthHandler(res http.ResponseWriter, req *http.Request) {
 		Status:      "healthy",
 		Docker:      isDockerEnvironment(),
 		Initialized: s.db.SystemInitComplete(),
-		Version:     "26.4.1",
+		Version:     version.CurrentVersion.String(),
 	}
 
 	res.Header().Set("Content-Type", "application/json")

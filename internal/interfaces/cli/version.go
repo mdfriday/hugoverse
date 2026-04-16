@@ -3,6 +3,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"github.com/mdfriday/hugoverse/pkg/version"
 	"runtime/debug"
 	"sync"
 )
@@ -38,14 +39,14 @@ func (oc *versionCmd) Run() error {
 func BuildVersionString() string {
 	program := "hugoverse"
 
-	version := "v" + CurrentVersion.String()
+	v := "v" + version.CurrentVersion.String()
 
 	bi := getBuildInfo()
 	if bi == nil {
-		return version
+		return v
 	}
 	if bi.Revision != "" {
-		version += "-" + bi.Revision
+		v += "-" + bi.Revision
 	}
 
 	osArch := bi.GoOS + "/" + bi.GoArch
@@ -56,7 +57,7 @@ func BuildVersionString() string {
 	}
 
 	versionString := fmt.Sprintf("%s %s %s BuildDate=%s",
-		program, version, osArch, date)
+		program, v, osArch, date)
 
 	return versionString
 }
@@ -106,26 +107,4 @@ func getBuildInfo() *buildInfo {
 	})
 
 	return bInfo
-}
-
-// Version represents the Hugo build version.
-type Version struct {
-	Major int
-
-	Minor int
-
-	// Increment this for bug releases
-	PatchLevel int
-
-	// HugoVersionSuffix is the suffix used in the Hugo version string.
-	// It will be blank for release versions.
-	Suffix string
-}
-
-func (v Version) String() string {
-	return version(v.Major, v.Minor, v.PatchLevel, v.Suffix)
-}
-
-func version(major, minor, patch int, suffix string) string {
-	return fmt.Sprintf("%d.%d.%d%s", major, minor, patch, suffix)
 }

@@ -342,6 +342,9 @@ func (s *Handler) ActivateLicenseHandler(res http.ResponseWriter, req *http.Requ
 		}
 	}
 
+	// 更新 Instance 统计信息（如果存在）
+	s.updateInstanceStats()
+
 	s.jsonResponse(res, response)
 }
 

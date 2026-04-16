@@ -188,6 +188,7 @@ func (s *Server) Close() {
 
 func (s *Server) registerHandler() {
 	s.registerHealthHandler()
+	s.registerInstanceHandler()
 	s.registerLicenseHandler()
 	s.registerContentHandler()
 	s.registerAdminHandler()

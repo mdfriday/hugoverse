@@ -10,6 +10,7 @@ import (
 
 var cachedHugoverseDir string
 
+const folderMDFriday = ".mdf"
 const folderEnterprise = "enterprise"
 const folderPreview = "s"
 const folderFriday = "f"
@@ -44,6 +45,11 @@ func init() {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	err = EnsureDirExists(MDFridayDir())
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
 
 func TLSDir() string {
@@ -72,6 +78,10 @@ func PreviewFolder() string {
 
 func FridayDir() string {
 	return filepath.Join(DataDir(), folderFriday)
+}
+
+func MDFridayDir() string {
+	return filepath.Join(DataDir(), folderMDFriday)
 }
 
 func FridayFolder() string {

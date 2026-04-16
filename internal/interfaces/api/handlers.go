@@ -11,8 +11,8 @@ func (s *Server) registerLicenseHandler() {
 	// Register License API endpoints
 	// 所有 License API 都需要认证 (需要 TOKEN)
 
-	// License 激活 (需要认证)
-	s.mux.HandleFunc("/api/license/activate", s.wrapContentHandler(s.handler.ActivateLicenseHandler))
+	// License 激活 (需要认证 + Instance 状态检查)
+	s.mux.HandleFunc("/api/license/activate", s.wrapLicenseWithInstanceCheck(s.handler.ActivateLicenseHandler))
 	s.mux.HandleFunc("/api/license/recover", s.wrapContentHandler(s.handler.RecoverLicenseHandler))
 
 	// License 信息查询 (需要认证)
@@ -61,6 +61,12 @@ func (s *Server) registerLicenseHandler() {
 
 func (s *Server) registerHealthHandler() {
 	s.mux.HandleFunc("/api/health", s.handler.HealthHandler).Methods("GET")
+}
+
+func (s *Server) registerInstanceHandler() {
+	s.mux.HandleFunc("/api/instance/create", s.wrapCounterHandler(s.handler.CreateInstanceHandler))
+	s.mux.HandleFunc("/api/instance", s.wrapCounterHandler(s.handler.GetInstanceHandler))
+	s.mux.HandleFunc("/api/instance/update", s.wrapCounterHandler(s.handler.UpdateInstanceHandler))
 }
 
 func (s *Server) registerContentHandler() {
@@ -155,6 +161,17 @@ func (s *Server) wrapCounterHandler(handler http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) wrapPreviewHandler(handler http.HandlerFunc) http.HandlerFunc {
 	return s.record.Collect(s.cors.Handle(s.db.OpenPublic(s.auth.CheckPostMethod(handler))))
+}
+
+// wrapLicenseWithInstanceCheck wraps license handlers with instance status check
+// 用于 License 激活时检查实例状态
+func (s *Server) wrapLicenseWithInstanceCheck(handler http.HandlerFunc) http.HandlerFunc {
+	return s.record.Collect(
+		s.cors.Handle(
+			s.comp.Gzip(
+				s.db.Open(
+					s.auth.Check(
+						s.handler.CheckInstanceStatus(handler))))))
 }
 
 func (s *Server) registerUserHandler() {

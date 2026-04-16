@@ -69,7 +69,7 @@ command_coverage() {
 command_bump() {
   # 定义文件路径
   MANIFEST_FILE="manifest.json"
-  VERCURR_FILE="./internal/interfaces/cli/vercurr.go"
+  VERCURR_FILE="./pkg/version/current.go"
 
   # 检查文件是否存在
   if [[ ! -f "$MANIFEST_FILE" ]]; then
@@ -99,7 +99,7 @@ command_bump() {
 
   # 更新 vercurr.go 文件的内容
   cat > "$VERCURR_FILE" << EOL
-package cli
+package version
 
 var CurrentVersion = Version{
     Major:      $major,
