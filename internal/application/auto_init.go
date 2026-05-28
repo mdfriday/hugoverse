@@ -251,16 +251,12 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 
 	// 获取配置
 	caddyAdminAPI := getEnvOrDefault("CADDY_ADMIN_API", "http://caddy:2019")
-	dnspodToken := ""
 	isLocalhost := (domain == "localhost" || domain == "127.0.0.1")
 
-	// 对于非 localhost，配置 DNSPod
-	if !isLocalhost && os.Getenv("DNSPOD_ENABLED") == "true" {
-		dnspodID := os.Getenv("DNSPOD_ID")
-		dnspodSecret := os.Getenv("DNSPOD_SECRET")
-		if dnspodID != "" && dnspodSecret != "" {
-			dnspodToken = fmt.Sprintf("%s,%s", dnspodID, dnspodSecret)
-		}
+	// 解析 DNS provider 配置（仅生产环境使用）
+	dnsProvider, dnsToken := "", ""
+	if !isLocalhost {
+		dnsProvider, dnsToken = resolveDNSProvider()
 	}
 
 	// 创建 Caddy 客户端
@@ -271,7 +267,8 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 		CoreDomain:         domain,
 		CouchDBSubdomain:   getEnvOrDefault("COUCHDB_SUBDOMAIN", "cdb"),
 		HugoverseSubdomain: getEnvOrDefault("HUGOVERSE_SUBDOMAIN", "app"),
-		DNSPodToken:        dnspodToken,
+		DNSPodToken:        dnsToken,
+		DNSProvider:        dnsProvider,
 		ServerIP:           os.Getenv("SERVER_IP"),
 		ConfigPath:         "/tmp/caddy-config.json",
 	}
@@ -324,8 +321,8 @@ func initializeCaddyRoutes(log loggers.Logger) error {
 		log.Printf("   Hugoverse API: https://%s.%s (HTTP: http://%s.%s)", config.HugoverseSubdomain, domain, config.HugoverseSubdomain, domain)
 		log.Printf("   CouchDB proxy: https://%s.%s (HTTP: http://%s.%s)", config.CouchDBSubdomain, domain, config.CouchDBSubdomain, domain)
 		log.Printf("   Enterprise static: use root domain (hugov caddy add -domain %s -path ...)", domain)
-		if dnspodToken != "" {
-			log.Printf("   Wildcard TLS: *.%s (DNSPod / tencentcloud)", domain)
+		if dnsToken != "" {
+			log.Printf("   Wildcard TLS: *.%s (DNS provider: %s)", domain, dnsProvider)
 		}
 	}
 
@@ -461,19 +458,17 @@ func configureEnterpriseSite(log loggers.Logger) error {
 
 	// 与 initializeCaddyRoutes 一致，便于 AddStaticSite 处理通配符 route（wildcard-%s 依赖 CoreDomain）
 	caddyAdminAPI := getEnvOrDefault("CADDY_ADMIN_API", "http://caddy:2019")
-	dnspodToken := ""
-	if !isLocalhost && os.Getenv("DNSPOD_ENABLED") == "true" {
-		id, sec := os.Getenv("DNSPOD_ID"), os.Getenv("DNSPOD_SECRET")
-		if id != "" && sec != "" {
-			dnspodToken = fmt.Sprintf("%s,%s", id, sec)
-		}
+	dnsProvider, dnsToken := "", ""
+	if !isLocalhost {
+		dnsProvider, dnsToken = resolveDNSProvider()
 	}
 	config := &caddy.Config{
 		AdminAPI:           caddyAdminAPI,
 		CoreDomain:         coreDomain,
 		CouchDBSubdomain:   getEnvOrDefault("COUCHDB_SUBDOMAIN", "cdb"),
 		HugoverseSubdomain: getEnvOrDefault("HUGOVERSE_SUBDOMAIN", "app"),
-		DNSPodToken:        dnspodToken,
+		DNSPodToken:        dnsToken,
+		DNSProvider:        dnsProvider,
 		DefaultBackend:     "hugoverse:1314",
 		CouchDBBackend:     "couchdb:5984",
 	}
@@ -647,6 +642,47 @@ func getEnvOrDefault(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// resolveDNSProvider 根据环境变量解析 DNS provider 名称与凭据
+//
+// 优先级（向后兼容）：
+//  1. DNS_PROVIDER=alidns → 读取 ALIDNS_ACCESS_KEY_ID / ALIDNS_ACCESS_KEY_SECRET
+//  2. DNS_PROVIDER=tencentcloud → 读取 DNSPOD_ID / DNSPOD_SECRET
+//  3. DNS_PROVIDER 未设置：
+//     - ALIDNS_ENABLED=true 且凭据齐全 → alidns
+//     - 否则若 DNSPOD_ENABLED=true 且凭据齐全 → tencentcloud（保留现有部署的行为）
+//  4. 都不满足 → 返回 ("", "")，调用方会回退到 HTTP-01 fallback
+//
+// 返回的 token 始终是 "id,secret" 拼接，由 caddy.Config.DNSPodToken 字段承载。
+func resolveDNSProvider() (provider, token string) {
+	explicit := strings.ToLower(strings.TrimSpace(os.Getenv("DNS_PROVIDER")))
+
+	switch explicit {
+	case caddy.DNSProviderAliDNS:
+		if id, sec := os.Getenv("ALIDNS_ACCESS_KEY_ID"), os.Getenv("ALIDNS_ACCESS_KEY_SECRET"); id != "" && sec != "" {
+			return caddy.DNSProviderAliDNS, fmt.Sprintf("%s,%s", id, sec)
+		}
+		return "", ""
+	case caddy.DNSProviderTencentCloud:
+		if id, sec := os.Getenv("DNSPOD_ID"), os.Getenv("DNSPOD_SECRET"); id != "" && sec != "" {
+			return caddy.DNSProviderTencentCloud, fmt.Sprintf("%s,%s", id, sec)
+		}
+		return "", ""
+	}
+
+	// 未显式设置 DNS_PROVIDER：按 *_ENABLED 标志推断（兼容现有 .env.local）
+	if os.Getenv("ALIDNS_ENABLED") == "true" {
+		if id, sec := os.Getenv("ALIDNS_ACCESS_KEY_ID"), os.Getenv("ALIDNS_ACCESS_KEY_SECRET"); id != "" && sec != "" {
+			return caddy.DNSProviderAliDNS, fmt.Sprintf("%s,%s", id, sec)
+		}
+	}
+	if os.Getenv("DNSPOD_ENABLED") == "true" {
+		if id, sec := os.Getenv("DNSPOD_ID"), os.Getenv("DNSPOD_SECRET"); id != "" && sec != "" {
+			return caddy.DNSProviderTencentCloud, fmt.Sprintf("%s,%s", id, sec)
+		}
+	}
+	return "", ""
 }
 
 // initializeLocalInstance 初始化本地实例

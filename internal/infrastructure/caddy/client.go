@@ -25,7 +25,8 @@ type Config struct {
 	HugoverseSubdomain  string `json:"hugoverse_subdomain"`   // Hugoverse 子域名 (默认 app)
 	PidFile             string `json:"pid_file"`              // PID 文件路径 (用于后台运行)
 	LogFile             string `json:"log_file"`              // 日志文件路径
-	DNSPodToken         string `json:"dnspod_token"`          // 腾讯云 DNS API Token (格式: SecretId,SecretKey，用于 DNS-01 challenge)
+	DNSPodToken         string `json:"dnspod_token"`          // DNS API Token (格式: "id,secret"，语义随 DNSProvider 而定：tencentcloud=SecretId,SecretKey；alidns=AccessKeyID,AccessKeySecret)
+	DNSProvider         string `json:"dns_provider,omitempty"` // DNS Provider 名称: "tencentcloud" | "alidns"；为空时默认 tencentcloud（向后兼容）
 	ServerIP            string `json:"server_ip"`             // 服务器公网 IP (用于域名检查)
 	// LocalDevUseAppSubdomain 为 true 时：反向代理只匹配 app.<CoreDomain>，apex 留给 AddStaticSite（与生产 app. / 根域 分工一致）
 	LocalDevUseAppSubdomain bool `json:"-"`
@@ -455,12 +456,19 @@ func (c *Client) StartServerBackground() error {
 	// 设置环境变量（继承当前进程的环境变量）
 	cmd.Env = os.Environ()
 
-	// 如果配置了 DNSPodToken，通过环境变量传递给 Caddy（用于 DNS-01 challenge）
+	// 如果配置了 DNSPodToken，根据 DNSProvider 通过环境变量传递给 Caddy（用于 DNS-01 challenge）
+	// 这里设置的环境变量是「防御性 fallback」：主路径仍是 JSON 内嵌凭据。
 	if c.config.DNSPodToken != "" {
-		secretID, secretKey := c.parseDNSPodToken()
-		if secretID != "" && secretKey != "" {
-			cmd.Env = append(cmd.Env, "TENCENTCLOUD_SECRET_ID="+secretID)
-			cmd.Env = append(cmd.Env, "TENCENTCLOUD_SECRET_KEY="+secretKey)
+		credID, credSecret := c.parseDNSPodToken()
+		if credID != "" && credSecret != "" {
+			switch c.resolvedDNSProvider() {
+			case DNSProviderAliDNS:
+				cmd.Env = append(cmd.Env, "ALIYUN_ACCESS_KEY_ID="+credID)
+				cmd.Env = append(cmd.Env, "ALIYUN_ACCESS_KEY_SECRET="+credSecret)
+			default: // tencentcloud
+				cmd.Env = append(cmd.Env, "TENCENTCLOUD_SECRET_ID="+credID)
+				cmd.Env = append(cmd.Env, "TENCENTCLOUD_SECRET_KEY="+credSecret)
+			}
 		}
 	}
 
@@ -1340,7 +1348,7 @@ func (c *Client) RemoveCustomDomain(domain string) error {
 // ==================== 平台域名 Wildcard 证书 ====================
 
 // SetupPlatformWildcard 设置平台域名的 Wildcard 证书
-// 使用 DNS-01 challenge
+// 使用 DNS-01 challenge，provider 由 Config.DNSProvider 决定（默认 tencentcloud）
 // 注意：凭据直接在配置中传递
 func (c *Client) SetupPlatformWildcard() error {
 	if c.config.DNSPodToken == "" {
@@ -1350,19 +1358,19 @@ func (c *Client) SetupPlatformWildcard() error {
 		return fmt.Errorf("valid CoreDomain is required for wildcard certificate")
 	}
 
-	secretID, secretKey := c.parseDNSPodToken()
-	if secretID == "" || secretKey == "" {
-		return fmt.Errorf("invalid DNSPodToken format, expected 'SecretId,SecretKey'")
+	credID, credSecret := c.parseDNSPodToken()
+	if credID == "" || credSecret == "" {
+		return fmt.Errorf("invalid DNSPodToken format, expected 'id,secret' (tencentcloud=SecretId,SecretKey; alidns=AccessKeyID,AccessKeySecret)")
 	}
 
-	policy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", secretID, secretKey)
+	policy := NewWildcardDNS01Policy(c.config.CoreDomain, c.resolvedDNSProvider(), credID, credSecret)
 	return c.AddTLSPolicy(policy)
 }
 
 // ==================== 配置生成辅助方法 ====================
 
 // GenerateTLSConfig 生成 TLS 配置（用于启动时）
-// 凭据直接在配置中传递
+// 凭据直接在配置中传递；provider 由 Config.DNSProvider 决定（默认 tencentcloud）
 func (c *Client) GenerateTLSConfig() *TLSConfig {
 	// 如果没有配置 DNSPodToken 或是开发环境，不生成 TLS 配置
 	isDev := c.config.CoreDomain == "localhost" || c.config.CoreDomain == "127.0.0.1"
@@ -1370,13 +1378,12 @@ func (c *Client) GenerateTLSConfig() *TLSConfig {
 		return nil
 	}
 
-	secretID, secretKey := c.parseDNSPodToken()
-	if secretID == "" || secretKey == "" {
+	credID, credSecret := c.parseDNSPodToken()
+	if credID == "" || credSecret == "" {
 		return nil
 	}
 
-	// 生成平台域名的 Wildcard 策略
-	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, "tencentcloud", secretID, secretKey)
+	wildcardPolicy := NewWildcardDNS01Policy(c.config.CoreDomain, c.resolvedDNSProvider(), credID, credSecret)
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{
@@ -1385,10 +1392,19 @@ func (c *Client) GenerateTLSConfig() *TLSConfig {
 	}
 }
 
+// resolvedDNSProvider 返回配置中的 DNS provider 名称，未配置时默认为 tencentcloud（向后兼容）
+func (c *Client) resolvedDNSProvider() string {
+	if c.config == nil || c.config.DNSProvider == "" {
+		return DNSProviderTencentCloud
+	}
+	return c.config.DNSProvider
+}
+
 // parseDNSPodToken 解析 DNSPodToken 字符串
-// DNSPodToken 格式为 "SecretId,SecretKey"（逗号分隔）
-// 返回 secretID 和 secretKey，如果格式不正确则返回空字符串
-func (c *Client) parseDNSPodToken() (secretID, secretKey string) {
+// DNSPodToken 格式为 "id,secret"（逗号分隔）
+// 语义随 DNSProvider 而定：tencentcloud=SecretId,SecretKey；alidns=AccessKeyID,AccessKeySecret
+// 返回两段凭据，如果格式不正确则返回空字符串
+func (c *Client) parseDNSPodToken() (credID, credSecret string) {
 	if c.config.DNSPodToken == "" {
 		return "", ""
 	}

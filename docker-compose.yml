@@ -48,9 +48,13 @@ services:
     environment:
       - DOMAIN=${DOMAIN:-localhost}
       - CADDY_SITE_ROOT=${CADDY_SITE_ROOT:-/srv}
-      # DNSPod 凭据（Caddy 通过环境变量使用）
+      # DNS provider 凭据（防御性 fallback，主路径由 Hugoverse 通过 Admin API 内嵌到 JSON 配置）
+      # 腾讯云 DNS (DNSPod)
       - TENCENTCLOUD_SECRET_ID=${DNSPOD_ID}
       - TENCENTCLOUD_SECRET_KEY=${DNSPOD_SECRET}
+      # 阿里云 DNS (AliDNS)
+      - ALIYUN_ACCESS_KEY_ID=${ALIDNS_ACCESS_KEY_ID}
+      - ALIYUN_ACCESS_KEY_SECRET=${ALIDNS_ACCESS_KEY_SECRET}
     networks:
       - hugoverse-network
     healthcheck:
@@ -119,10 +123,17 @@ services:
       - CADDY_HOST=caddy
       - CADDY_PORT=2019
       
-      # ---- DNSPod 配置 ----
+      # ---- DNS Provider for Wildcard TLS ----
+      # 显式选择 provider（推荐）：tencentcloud | alidns | 留空（由 *_ENABLED 兼容判断）
+      - DNS_PROVIDER=${DNS_PROVIDER:-}
+      # 腾讯云 DNS (DNSPod)
       - DNSPOD_ENABLED=${DNSPOD_ENABLED:-false}
       - DNSPOD_ID=${DNSPOD_ID}
       - DNSPOD_SECRET=${DNSPOD_SECRET}
+      # 阿里云 DNS (AliDNS)
+      - ALIDNS_ENABLED=${ALIDNS_ENABLED:-false}
+      - ALIDNS_ACCESS_KEY_ID=${ALIDNS_ACCESS_KEY_ID}
+      - ALIDNS_ACCESS_KEY_SECRET=${ALIDNS_ACCESS_KEY_SECRET}
       
     volumes:
       # 本机目录（默认 ./data/hugoverse → 容器 /data；publish/enterprise 等均在此树下）

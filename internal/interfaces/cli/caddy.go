@@ -39,7 +39,10 @@ func NewCaddyCmd(parent *flag.FlagSet) (*caddyCmd, error) {
 		fmt.Println("  hugov caddy start -domain localhost -backend 127.0.0.1:1314 -couchdb 127.0.0.1:5984")
 		fmt.Println("")
 		fmt.Println("  # Start in production mode (HTTPS with Wildcard certificate)")
-		fmt.Println("  hugov caddy start -domain mdfriday.site -dnspod-token $DNSPOD_API_TOKEN -server-ip 1.2.3.4")
+		fmt.Println("  # Tencent Cloud DNS (DNSPod):")
+		fmt.Println("  hugov caddy start -domain mdfriday.site -dns-provider tencentcloud -dnspod-token \"$DNSPOD_SECRET_ID,$DNSPOD_SECRET_KEY\" -server-ip 1.2.3.4")
+		fmt.Println("  # Alibaba Cloud DNS (AliDNS):")
+		fmt.Println("  hugov caddy start -domain mdfriday.site -dns-provider alidns -dnspod-token \"$ALIYUN_ACCESS_KEY_ID,$ALIYUN_ACCESS_KEY_SECRET\" -server-ip 1.2.3.4")
 		fmt.Println("")
 		fmt.Println("  # Add a subdomain static site")
 		fmt.Println("  hugov caddy add -domain user123.mdfriday.site -path /web/sites/user123")
@@ -123,7 +126,8 @@ func (c *caddyCmd) runStart(args []string) error {
 	configPath := startCmd.String("config", "/tmp/caddy-config.json", "Caddy config file path")
 	pidFile := startCmd.String("pid", "/tmp/caddy.pid", "PID file path")
 	logFile := startCmd.String("log", "/tmp/caddy.log", "Log file path")
-	dnspodToken := startCmd.String("dnspod-token", "", "腾讯云 DNS API token (格式: SecretId,SecretKey) for wildcard certificate")
+	dnspodToken := startCmd.String("dnspod-token", "", "DNS API token (格式: id,secret) for wildcard certificate; 语义随 -dns-provider 而定")
+	dnsProvider := startCmd.String("dns-provider", "", "DNS provider for wildcard cert: tencentcloud | alidns (默认 tencentcloud)")
 	serverIP := startCmd.String("server-ip", "", "Server public IP for domain verification")
 
 	if err := startCmd.Parse(args); err != nil {
@@ -141,8 +145,13 @@ func (c *caddyCmd) runStart(args []string) error {
 	if *serverIP != "" {
 		fmt.Printf("   Server IP: %s\n", *serverIP)
 	}
+	// DNS provider 默认值：未指定时默认 tencentcloud（保持旧用法）
+	effectiveDNSProvider := *dnsProvider
+	if effectiveDNSProvider == "" && *dnspodToken != "" {
+		effectiveDNSProvider = caddy.DNSProviderTencentCloud
+	}
 	if *dnspodToken != "" {
-		fmt.Println("   DNSPod Token: ***configured***")
+		fmt.Printf("   DNS Provider: %s (token: ***configured***)\n", effectiveDNSProvider)
 	}
 
 	// 判断是否为开发环境
@@ -168,6 +177,7 @@ func (c *caddyCmd) runStart(args []string) error {
 		PidFile:        *pidFile,
 		LogFile:        *logFile,
 		DNSPodToken:    *dnspodToken,
+		DNSProvider:    effectiveDNSProvider,
 		ServerIP:       *serverIP,
 	}
 

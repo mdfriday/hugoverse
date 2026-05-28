@@ -205,13 +205,29 @@ All configuration is done via `.env` file. See `.env.example` for full options.
 - `COUCHDB_PASSWORD`: CouchDB admin password (required)
 - `COUCHDB_DB_PREFIX`: User database prefix (default: `userdb-`)
 
-#### DNSPod (Wildcard SSL)
+#### DNS Provider (Wildcard SSL via DNS-01)
+
+The Caddy image bundles both Tencent Cloud DNS (DNSPod) and Alibaba Cloud DNS (AliDNS) plugins. Configure **one** provider whose nameservers actually serve your domain.
+
+- `DNS_PROVIDER`: Explicit selector (recommended). Allowed values: `tencentcloud` | `alidns` | empty (legacy auto-detect)
+
+Tencent Cloud DNS (DNSPod):
 
 - `DNSPOD_ENABLED`: Enable DNSPod for wildcard certs (default: `false`)
-- `DNSPOD_ID`: DNSPod API ID
-- `DNSPOD_SECRET`: DNSPod API Secret
+- `DNSPOD_ID`: DNSPod Secret ID
+- `DNSPOD_SECRET`: DNSPod Secret Key
 
 Get DNSPod credentials: [console.dnspod.cn](https://console.dnspod.cn/account/token/apikey)
+
+Alibaba Cloud DNS (AliDNS):
+
+- `ALIDNS_ENABLED`: Enable AliDNS for wildcard certs (default: `false`)
+- `ALIDNS_ACCESS_KEY_ID`: Aliyun AccessKey ID
+- `ALIDNS_ACCESS_KEY_SECRET`: Aliyun AccessKey Secret
+
+Get Aliyun credentials: [ram.console.aliyun.com/manage/ak](https://ram.console.aliyun.com/manage/ak)
+
+> Backward compatibility: if `DNS_PROVIDER` is empty, the app falls back to `DNSPOD_ENABLED=true` → `tencentcloud`, matching pre-existing deployments.
 
 #### Master License
 

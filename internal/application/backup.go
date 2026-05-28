@@ -92,9 +92,11 @@ type CompressionInfo struct {
 }
 
 // CaddyStartParams Caddy 启动参数
+// 注意：旧备份可能没有 dns_provider 字段，restore 时按 tencentcloud 兼容处理。
 type CaddyStartParams struct {
 	Domain      string `json:"domain"`
 	DNSPodToken string `json:"dnspod_token"`
+	DNSProvider string `json:"dns_provider,omitempty"`
 	ServerIP    string `json:"server_ip"`
 	Backend     string `json:"backend"`
 	CouchDB     string `json:"couchdb"`
@@ -465,6 +467,7 @@ func (bs *BackupScheduler) backupCaddy(tempDir string, info *CaddyBackupInfo) er
 	params := CaddyStartParams{
 		Domain:      bs.caddyClient.GetConfigObject().CoreDomain,
 		DNSPodToken: bs.caddyClient.GetConfigObject().DNSPodToken,
+		DNSProvider: bs.caddyClient.GetConfigObject().DNSProvider,
 		ServerIP:    bs.caddyClient.GetConfigObject().ServerIP,
 		Backend:     bs.caddyClient.GetConfigObject().DefaultBackend,
 		CouchDB:     bs.caddyClient.GetConfigObject().CouchDBBackend,

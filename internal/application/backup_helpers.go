@@ -478,20 +478,24 @@ restore_caddy() {
     if [ -f "start-params.json" ]; then
         DOMAIN=$(jq -r '.domain' start-params.json)
         DNSPOD_TOKEN=$(jq -r '.dnspod_token' start-params.json)
+        # 旧备份可能没有 dns_provider，默认按 tencentcloud 兼容
+        DNS_PROVIDER=$(jq -r '.dns_provider // "tencentcloud"' start-params.json)
         SERVER_IP=$(jq -r '.server_ip' start-params.json)
-        
+
         log_info "  Domain: $DOMAIN"
         log_info "  Server IP: $SERVER_IP"
-        log_info "  DNSPod Token: ***configured***"
-        
+        log_info "  DNS Provider: $DNS_PROVIDER"
+        log_info "  DNS Token: ***configured***"
+
         # 停止旧的 Caddy
         pkill -f caddy || true
         sleep 2
-        
+
         # 使用备份的参数启动
         log_info "  Starting Caddy..."
         go/bin/hugoverse caddy start \
             -domain "$DOMAIN" \
+            -dns-provider "$DNS_PROVIDER" \
             -dnspod-token "$DNSPOD_TOKEN" \
             -server-ip "$SERVER_IP" > /dev/null 2>&1 &
         

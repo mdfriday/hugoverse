@@ -35,15 +35,53 @@ type DNSChallenge struct {
 }
 
 // DNSProvider DNS 提供商配置
-// 腾讯云 DNS (tencentcloud) 凭据直接在配置中指定
-// 注意：环境变量方式在某些 Caddy 版本中不工作，因此直接在配置中传递凭据
-// JSON 字段名必须使用 PascalCase（与 caddy-dns/tencentcloud 插件保持一致）
+// 同时支持腾讯云 DNS (tencentcloud) 与阿里云 DNS (alidns)
+// 凭据直接在配置中传递（环境变量方式在某些 Caddy 版本中不工作）
+// 字段命名规则因插件而异：
+//   - tencentcloud: PascalCase（SecretId / SecretKey）
+//   - alidns:       snake_case（access_key_id / access_key_secret）
+//
+// 通过 BuildDNSProvider 工厂按 provider 名称填充对应字段，其它字段保持 omitempty。
 type DNSProvider struct {
-	Name         string `json:"name"`
+	Name string `json:"name"`
+
+	// tencentcloud (DNSPod)
 	SecretId     string `json:"SecretId,omitempty"`
 	SecretKey    string `json:"SecretKey,omitempty"`
 	Region       string `json:"Region,omitempty"`
 	SessionToken string `json:"SessionToken,omitempty"`
+
+	// alidns (Alibaba Cloud DNS)
+	AccessKeyID     string `json:"access_key_id,omitempty"`
+	AccessKeySecret string `json:"access_key_secret,omitempty"`
+	SecurityToken   string `json:"security_token,omitempty"`
+}
+
+// DNS Provider 名称常量
+const (
+	DNSProviderTencentCloud = "tencentcloud"
+	DNSProviderAliDNS       = "alidns"
+)
+
+// BuildDNSProvider 根据 provider 名称把通用 (id, secret) 翻译成对应插件需要的字段
+// 未识别的 provider 名称会回退到 tencentcloud，保持向后兼容。
+func BuildDNSProvider(providerName, id, secret string) *DNSProvider {
+	switch providerName {
+	case DNSProviderAliDNS:
+		return &DNSProvider{
+			Name:            DNSProviderAliDNS,
+			AccessKeyID:     id,
+			AccessKeySecret: secret,
+		}
+	case DNSProviderTencentCloud, "":
+		fallthrough
+	default:
+		return &DNSProvider{
+			Name:      DNSProviderTencentCloud,
+			SecretId:  id,
+			SecretKey: secret,
+		}
+	}
 }
 
 // HTTPChallenge HTTP-01 Challenge 配置
@@ -55,22 +93,19 @@ type HTTPChallenge struct {
 //
 // 前提条件：
 // 使用 DNS-01 challenge 需要 Caddy 在构建时包含对应的 DNS provider 插件。
-// 对于腾讯云 DNS（DNSPod），需要使用 xcaddy 构建包含 caddy-dns/tencentcloud 插件的 Caddy 实例：
+// 当前 docker/caddy/Dockerfile 同时编入了：
 //
-//	# 在 Ubuntu 上安装 xcaddy
-//	go install github.com/caddyserver/xcaddy/cmd/xcaddy@latest
+//	xcaddy build --with github.com/caddy-dns/tencentcloud \
+//	             --with github.com/caddy-dns/alidns
 //
-//	# 构建包含腾讯云 DNS 插件的 Caddy
-//	xcaddy build --with github.com/caddy-dns/tencentcloud
+// 因此 provider name 可以是 "tencentcloud" 或 "alidns"。
 //
-//	# 构建后的 caddy 二进制文件将支持 tencentcloud DNS-01 challenge
-//
-// 注意：DNSPod 已被腾讯云收购，原 github.com/caddy-dns/dnspod 已过时且不兼容新版 libdns。
-// 请使用 github.com/caddy-dns/tencentcloud，provider name 为 "tencentcloud"。
-// 凭据直接在配置中传递（环境变量方式在某些版本不工作）
-//
-// 如果使用官方预编译的 Caddy 二进制文件，DNS-01 challenge 将无法工作。
-func NewDNS01Policy(id string, subjects []string, providerName, secretID, secretKey string) AutomationPolicy {
+// 注意：
+//   - 凭据语义随 provider 变化：tencentcloud 是 (SecretId, SecretKey)，alidns 是 (AccessKeyID, AccessKeySecret)。
+//   - 字段如何序列化到 JSON 由 BuildDNSProvider 决定，调用方只需提供通用 (id, secret) 即可。
+//   - DNSPod 已被腾讯云收购，原 github.com/caddy-dns/dnspod 已过时；统一使用 caddy-dns/tencentcloud。
+//   - 如果使用官方预编译的 Caddy 二进制文件，DNS-01 challenge 将无法工作。
+func NewDNS01Policy(id string, subjects []string, providerName, credID, credSecret string) AutomationPolicy {
 	return AutomationPolicy{
 		ID:       id,
 		Subjects: subjects,
@@ -79,11 +114,7 @@ func NewDNS01Policy(id string, subjects []string, providerName, secretID, secret
 				Module: "acme",
 				Challenges: &ChallengeConfig{
 					DNS: &DNSChallenge{
-						Provider: &DNSProvider{
-							Name:      providerName,
-							SecretId:  secretID,
-							SecretKey: secretKey,
-						},
+						Provider: BuildDNSProvider(providerName, credID, credSecret),
 					},
 				},
 			},
@@ -118,10 +149,10 @@ func NewSingleDomainHTTP01Policy(domain string) AutomationPolicy {
 // 用于平台域名（如 mdfriday.com 和 *.mdfriday.com）
 //
 // 前提条件：需要构建包含 DNS provider 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
-// 凭据直接在配置中传递
-func NewWildcardDNS01Policy(coreDomain, providerName, secretID, secretKey string) AutomationPolicy {
+// 凭据直接在配置中传递，credID/credSecret 的语义随 providerName 而定。
+func NewWildcardDNS01Policy(coreDomain, providerName, credID, credSecret string) AutomationPolicy {
 	subjects := []string{coreDomain, "*." + coreDomain}
-	return NewDNS01Policy("platform-wildcard", subjects, providerName, secretID, secretKey)
+	return NewDNS01Policy("platform-wildcard", subjects, providerName, credID, credSecret)
 }
 
 // ==================== TLS 配置生成函数 ====================
@@ -131,16 +162,17 @@ func NewWildcardDNS01Policy(coreDomain, providerName, secretID, secretKey string
 // 所有 subdomain 将自动使用此 Wildcard 证书，无需单独申请
 //
 // 前提条件：
-// 1. 需要构建包含腾讯云 DNS 插件的 Caddy 实例（参见 NewDNS01Policy 注释）
-// 2. 凭据直接在配置中传递（secretID 和 secretKey）
-func GeneratePlatformTLSConfig(coreDomain, secretID, secretKey string) *TLSConfig {
-	if coreDomain == "" || secretID == "" || secretKey == "" {
+//  1. 需要构建包含对应 DNS 插件（tencentcloud 或 alidns）的 Caddy 实例（参见 NewDNS01Policy 注释）
+//  2. 凭据直接在配置中传递；providerName 为空时默认走 tencentcloud（向后兼容）
+func GeneratePlatformTLSConfig(coreDomain, providerName, credID, credSecret string) *TLSConfig {
+	if coreDomain == "" || credID == "" || credSecret == "" {
 		return nil
 	}
+	if providerName == "" {
+		providerName = DNSProviderTencentCloud
+	}
 
-	// 创建平台域名的 Wildcard 策略（使用 tencentcloud provider）
-	// 凭据直接在配置中指定
-	wildcardPolicy := NewWildcardDNS01Policy(coreDomain, "tencentcloud", secretID, secretKey)
+	wildcardPolicy := NewWildcardDNS01Policy(coreDomain, providerName, credID, credSecret)
 
 	return &TLSConfig{
 		Automation: &AutomationConfig{

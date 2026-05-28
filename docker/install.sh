@@ -318,24 +318,51 @@ collect_configuration() {
     CADDY_PORT="2019"
     
     echo ""
-    print_info "配置 DNS 服务（用于 HTTPS 证书自动签发）"
-    echo "如果您使用 DNSPod 作为 DNS 服务商，可以配置自动证书签发"
-    echo "如果暂时不配置，可以直接回车跳过，后续可在 .env.local 中添加"
+    print_info "配置 DNS 服务（用于通配符 HTTPS 证书 DNS-01 验证）"
+    echo "选择您的域名 DNS 服务商，将自动签发 *.${DOMAIN} 通配符证书"
+    echo "如果暂时不配置，可以直接回车跳过（仅 HTTP-01 单域名证书），后续可在 .env.local 中添加"
     echo ""
-    
-    # DNSPOD_ENABLED
-    read_input "是否启用 DNSPod？(y/n)" "n" DNSPOD_ENABLED_INPUT
-    if [[ "$DNSPOD_ENABLED_INPUT" =~ ^[Yy]$ ]]; then
-        DNSPOD_ENABLED="true"
-        
-        read_input "DNSPod Secret ID" "" DNSPOD_ID
-        read_input "DNSPod Secret Key" "" DNSPOD_SECRET "true"
-        echo ""
-    else
-        DNSPOD_ENABLED="false"
-        DNSPOD_ID=""
-        DNSPOD_SECRET=""
-    fi
+    echo "  0) 不启用（HTTP-01 单域名证书，无通配符）"
+    echo "  1) 腾讯云 DNS (DNSPod)  —— 凭据获取: https://console.dnspod.cn/account/token/apikey"
+    echo "  2) 阿里云 DNS (AliDNS)  —— 凭据获取: https://ram.console.aliyun.com/manage/ak"
+    echo ""
+
+    # 默认初始化所有 DNS 相关变量，避免后续模板渲染出现空引用
+    DNS_PROVIDER=""
+    DNSPOD_ENABLED="false"
+    DNSPOD_ID=""
+    DNSPOD_SECRET=""
+    ALIDNS_ENABLED="false"
+    ALIDNS_ACCESS_KEY_ID=""
+    ALIDNS_ACCESS_KEY_SECRET=""
+
+    while true; do
+        read_input "请选择 DNS 服务商 [0-2]" "0" DNS_CHOICE
+        case "$DNS_CHOICE" in
+            1)
+                DNS_PROVIDER="tencentcloud"
+                DNSPOD_ENABLED="true"
+                read_input "DNSPod Secret ID" "" DNSPOD_ID
+                read_input "DNSPod Secret Key" "" DNSPOD_SECRET "true"
+                echo ""
+                break
+                ;;
+            2)
+                DNS_PROVIDER="alidns"
+                ALIDNS_ENABLED="true"
+                read_input "Aliyun AccessKey ID" "" ALIDNS_ACCESS_KEY_ID
+                read_input "Aliyun AccessKey Secret" "" ALIDNS_ACCESS_KEY_SECRET "true"
+                echo ""
+                break
+                ;;
+            0)
+                break
+                ;;
+            *)
+                print_error "无效选择，请输入 0、1 或 2"
+                ;;
+        esac
+    done
     
     echo ""
     print_info "选择 Docker 镜像源"
@@ -408,10 +435,19 @@ COUCHDB_PASSWORD=$COUCHDB_PASSWORD
 CADDY_HOST=$CADDY_HOST
 CADDY_PORT=$CADDY_PORT
 
-# DNSPod
+# DNS Provider for Wildcard TLS
+# DNS_PROVIDER: 显式选择（推荐）；可选值 tencentcloud | alidns | 留空（按 *_ENABLED 兼容判断）
+DNS_PROVIDER=$DNS_PROVIDER
+
+# 腾讯云 DNS (DNSPod)
 DNSPOD_ENABLED=$DNSPOD_ENABLED
 DNSPOD_ID=$DNSPOD_ID
 DNSPOD_SECRET=$DNSPOD_SECRET
+
+# 阿里云 DNS (AliDNS)
+ALIDNS_ENABLED=$ALIDNS_ENABLED
+ALIDNS_ACCESS_KEY_ID=$ALIDNS_ACCESS_KEY_ID
+ALIDNS_ACCESS_KEY_SECRET=$ALIDNS_ACCESS_KEY_SECRET
 EOF
 
     print_success "配置文件已生成: $env_file"
@@ -428,7 +464,11 @@ show_configuration_summary() {
     echo "HTTPS 端口:     $HTTPS_PORT"
     echo "管理员邮箱:     $ADMIN_EMAIL"
     echo "CouchDB 用户:   $COUCHDB_USER"
-    echo "DNSPod 启用:    $DNSPOD_ENABLED"
+    case "$DNS_PROVIDER" in
+        tencentcloud) echo "DNS 服务商:     腾讯云 DNS (DNSPod)" ;;
+        alidns)       echo "DNS 服务商:     阿里云 DNS (AliDNS)" ;;
+        *)            echo "DNS 服务商:     未启用 (HTTP-01 单域名证书)" ;;
+    esac
     if [ "$USE_ALIYUN" = "true" ]; then
         echo "镜像源:         阿里云镜像源 (registry.cn-hangzhou.aliyuncs.com)"
     else
@@ -528,15 +568,15 @@ show_access_info() {
     echo "访问信息："
     echo "-----------------------------------"
     
-    if [ "$DNSPOD_ENABLED" = "true" ]; then
+    if [ -n "$DNS_PROVIDER" ]; then
         echo "🌐 应用地址:    https://app.${DOMAIN}"
         echo "🗄️  CouchDB:     https://cdb.${DOMAIN}/_utils"
     else
         echo "🌐 应用地址:    http://${DOMAIN}:${HTTP_PORT}"
         echo "🗄️  CouchDB:     http://cdb.${DOMAIN}:${HTTP_PORT}/_utils"
         echo ""
-        echo "⚠️  注意: 您未启用 DNSPod，无法自动签发 HTTPS 证书"
-        echo "   如需启用 HTTPS，请配置 DNS 服务并重新运行安装"
+        echo "⚠️  注意: 您未配置 DNS 服务商，无法自动签发通配符 HTTPS 证书"
+        echo "   如需启用通配符 HTTPS，请配置 DNS 服务（DNSPod 或 AliDNS）并重新运行安装"
     fi
     
     echo ""
@@ -566,7 +606,7 @@ show_access_info() {
     echo "配置文件位置:   $(pwd)/.env.local"
     echo ""
     
-    if [ "$DNSPOD_ENABLED" != "true" ]; then
+    if [ -z "$DNS_PROVIDER" ]; then
         print_warning "DNS 配置提示："
         echo "请确保将以下 DNS 记录添加到您的域名服务商："
         echo "  类型  主机记录  记录值"
